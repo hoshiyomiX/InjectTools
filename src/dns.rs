@@ -8,12 +8,12 @@ pub struct DnsResolver {
 }
 
 impl DnsResolver {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Self {
         let resolver = TokioAsyncResolver::tokio(
             ResolverConfig::cloudflare(),
             ResolverOpts::default(),
-        )?;
-        Ok(Self { resolver })
+        );
+        Self { resolver }
     }
 
     pub async fn resolve(&self, domain: &str) -> Result<Option<IpAddr>> {

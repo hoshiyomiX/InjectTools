@@ -19,7 +19,7 @@ pub struct TestResult {
 }
 
 pub async fn test_subdomain(config: &Config, subdomain: &str) -> Result<TestResult> {
-    let resolver = DnsResolver::new()?;
+    let resolver = DnsResolver::new();
     
     // Resolve DNS
     let ip = match resolver.resolve(subdomain).await? {
@@ -146,7 +146,7 @@ pub async fn full_scan(config: &Config) -> Result<()> {
             .progress_chars("#>-"),
     );
     
-    let resolver = Arc::new(DnsResolver::new()?);
+    let resolver = Arc::new(DnsResolver::new());
     let mut work_bugs = Vec::new();
     let mut fail_bugs = Vec::new();
     let mut skipped = 0;

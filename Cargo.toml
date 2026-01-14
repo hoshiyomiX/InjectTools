@@ -1,0 +1,29 @@
+[package]
+name = "injecttools"
+version = "1.1.0"
+edition = "2021"
+authors = ["hoshiyomiX <katahiranaruse.daydream@gmail.com>"]
+description = "Bug Inject Scanner for Cloudflare Subdomains"
+license = "MIT"
+repository = "https://github.com/hoshiyomiX/InjectTools"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+reqwest = { version = "0.11", features = ["rustls-tls"], default-features = false }
+trust-dns-resolver = "0.23"
+colored = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4.4", features = ["derive"] }
+anyhow = "1.0"
+ipnetwork = "0.20"
+dialoguer = { version = "0.11", features = ["fuzzy-select"] }
+indicatif = "0.17"
+dirs = "5.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

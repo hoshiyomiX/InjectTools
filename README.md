@@ -1,11 +1,24 @@
 # InjectTools
 
 [![Build and Release](https://github.com/hoshiyomiX/InjectTools/actions/workflows/release.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/release.yml)
+[![Termux Build](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Bug Inject Scanner for Cloudflare Subdomains** - High-performance Rust implementation
 
-Sebuah tool untuk mencari bug inject pada subdomain Cloudflare dengan fitur lengkap dan performa tinggi.
+## 🚀 Quick Install (Termux)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
+```
+
+**Features:**
+- ✅ Auto-detect architecture (ARM64/ARMv7)
+- ✅ Download & verify checksum
+- ✅ Install ke `$PREFIX/bin`
+- ✅ Auto backup & cleanup
+
+---
 
 ## Features
 
@@ -27,19 +40,38 @@ Sebuah tool untuk mencari bug inject pada subdomain Cloudflare dengan fitur leng
 
 ## Installation
 
-### Android (Termux)
+### Android/Termux
+
+**Method 1: One-Liner (Recommended)**
 
 ```bash
-# Download binary dari GitHub Releases
-wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-android-aarch64.tar.gz
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
+```
+
+**Method 2: Manual One-Liner**
+
+```bash
+# Check architecture first
+uname -m  # aarch64=ARM64, armv7l/armv8l=ARMv7
+
+# ARM64 (Modern devices - Snapdragon 845+, Exynos 9810+)
+wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-arm64.tar.gz && tar xzf injecttools-termux-arm64.tar.gz && mv injecttools $PREFIX/bin/ && chmod +x $PREFIX/bin/injecttools && injecttools --version
+
+# ARMv7 (Older devices - Snapdragon 660-, Exynos 8895-)
+wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-armv7.tar.gz && tar xzf injecttools-termux-armv7.tar.gz && mv injecttools $PREFIX/bin/ && chmod +x $PREFIX/bin/injecttools && injecttools --version
+```
+
+**Method 3: Step-by-Step**
+
+```bash
+# Download binary
+wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-arm64.tar.gz
 
 # Extract
-tar xzf injecttools-android-aarch64.tar.gz
+tar xzf injecttools-termux-arm64.tar.gz
 
-# Move ke system bin
+# Install
 mv injecttools $PREFIX/bin/
-
-# Make executable
 chmod +x $PREFIX/bin/injecttools
 
 # Run
@@ -147,16 +179,16 @@ Wordlists disimpan di `~/bug-wordlists/`
 ## Output Example
 
 ```
-════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════
                     HASIL SCAN
-════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════
 
 ✅ Working Bugs (3):
   🟢 cdn.example.com (104.16.1.1)
   🟢 api.example.com (104.16.2.2)
   🟢 static.example.com (104.16.3.3)
 
-────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────
 Statistik:
   Scanned: 110000/110000 (100%)
   CF Found: 3 | Non-CF: 250
@@ -192,40 +224,43 @@ InjectTools/
 │   └── embedded.txt  # Default wordlist
 ├── .github/
 │   └── workflows/
-│       └── release.yml  # CI/CD pipeline
+│       ├── release.yml        # Full multi-platform build
+│       └── termux-release.yml # Termux-only build (faster)
+├── install.sh        # One-liner installer
 ├── Cargo.toml
 └── README.md
 ```
 
-### Run Tests
+### Build Your Own Release
 
+**Termux Build (Fast - ~5-8 min):**
 ```bash
-cargo test
+# Via GitHub UI
+# 1. Go to: https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml
+# 2. Click "Run workflow"
+# 3. Input: termux-v1.1.0
+
+# Or via Git Tag
+git tag termux-v1.1.0
+git push origin termux-v1.1.0
 ```
+See [TERMUX_BUILD.md](TERMUX_BUILD.md) for detailed guide.
 
-### Build Optimized Binary
-
+**Full Release (All Platforms - ~15-20 min):**
 ```bash
-# Release build (optimized for size)
-cargo build --release
-
-# Build for specific target
-cargo build --release --target aarch64-linux-android
+git tag v1.1.0
+git push origin v1.1.0
 ```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+See [RELEASE.md](RELEASE.md) for detailed guide.
 
 ## Troubleshooting
 
-### Android/Termux Issues
+### Termux Issues
+
+**Error: curl not found**
+```bash
+pkg install curl
+```
 
 **Error: Permission denied**
 ```bash
@@ -234,36 +269,46 @@ chmod +x $PREFIX/bin/injecttools
 
 **Error: DNS resolution failed**
 ```bash
-# Install dnsutils
 pkg install dnsutils
 ```
 
 **Error: TLS/SSL errors**
 ```bash
-# Update CA certificates
-pkg install ca-certificates
+pkg install ca-certificates openssl
+```
+
+**Error: Binary tidak jalan (Exec format error)**
+```bash
+# Check architecture
+uname -m
+
+# Download binary yang sesuai:
+# aarch64 -> use arm64 binary
+# armv7l/armv8l -> use armv7 binary
 ```
 
 ### Build Issues
 
-**Missing dependencies**
+**Missing dependencies (Termux)**
 ```bash
-# Termux
-pkg install rust binutils
+pkg install rust binutils clang
+```
 
-# Debian/Ubuntu
+**Missing dependencies (Debian/Ubuntu)**
+```bash
 sudo apt install build-essential pkg-config libssl-dev
 ```
 
-## Roadmap
+## Contributing
 
-- [ ] Web UI dashboard
-- [ ] Auto-update checker
-- [ ] Proxy support (SOCKS5/HTTP)
-- [ ] Multi-threading optimization
-- [ ] Custom DNS server selection
-- [ ] Export ke JSON/CSV format
-- [ ] Integration dengan other tools (masscan, nmap)
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Documentation
+
+- 📖 [README.md](README.md) - Main documentation (this file)
+- 📱 [TERMUX_BUILD.md](TERMUX_BUILD.md) - Termux build guide
+- 🚀 [RELEASE.md](RELEASE.md) - Full release guide
+- 💾 [install.sh](install.sh) - One-liner installer script
 
 ## License
 
@@ -282,10 +327,10 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## Disclaimer
 
-Tool ini dibuat untuk **educational purposes** dan **authorized testing only**. Penggunaan untuk aktivitas illegal adalah tanggung jawab user. Always get permission before testing on systems you don't own.
+Tool ini dibuat untuk **educational purposes** dan **authorized testing only**.
 
 ---
 
-**Star** ⭐ repository ini jika kamu merasa terbantu!
+**⭐ Star** repository ini jika kamu merasa terbantu!
 
 Report bugs atau request features di [Issues](https://github.com/hoshiyomiX/InjectTools/issues)

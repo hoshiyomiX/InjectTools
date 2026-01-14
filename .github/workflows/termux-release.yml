@@ -1,0 +1,340 @@
+name: Termux Build & Release
+
+on:
+  push:
+    tags:
+      - 'termux-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., termux-v1.1.0)'
+        required: true
+        default: 'termux-v1.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-termux:
+    name: Build for Termux (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            arch: aarch64
+            api: 30
+            asset_name: injecttools-termux-arm64
+          
+          - target: armv7-linux-androideabi
+            arch: armv7a
+            api: 30
+            asset_name: injecttools-termux-armv7
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: termux-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Download & Setup Android NDK
+        run: |
+          echo "📦 Downloading Android NDK r26d..."
+          wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
+          unzip -q android-ndk-r26d-linux.zip
+          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
+          echo "✅ NDK installed at: $PWD/android-ndk-r26d"
+
+      - name: Configure Cargo for Android
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << EOF
+          [target.aarch64-linux-android]
+          ar = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          linker = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ matrix.api }}-clang"
+          
+          [target.armv7-linux-androideabi]
+          ar = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          linker = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi${{ matrix.api }}-clang"
+          EOF
+          echo "✅ Cargo configured for Android cross-compilation"
+
+      - name: Build release binary
+        run: |
+          echo "🔨 Building for ${{ matrix.target }}..."
+          cargo build --release --target ${{ matrix.target }}
+          ls -lh target/${{ matrix.target }}/release/
+
+      - name: Strip binary
+        run: |
+          echo "✂️ Stripping debug symbols..."
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+            target/${{ matrix.target }}/release/injecttools
+          
+          SIZE_BEFORE=$(stat -f%z target/${{ matrix.target }}/release/injecttools 2>/dev/null || stat -c%s target/${{ matrix.target }}/release/injecttools)
+          echo "📊 Final binary size: $(numfmt --to=iec-i --suffix=B $SIZE_BEFORE)"
+
+      - name: Test binary (smoke test)
+        run: |
+          echo "🧪 Testing binary validity..."
+          file target/${{ matrix.target }}/release/injecttools
+          ls -lh target/${{ matrix.target }}/release/injecttools
+
+      - name: Compress binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.asset_name }}.tar.gz injecttools
+          cd ../../..
+          
+          echo "📦 Compressed archive created"
+          ls -lh ${{ matrix.asset_name }}.tar.gz
+
+      - name: Generate SHA256 checksum
+        run: |
+          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+          cat ${{ matrix.asset_name }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            ${{ matrix.asset_name }}.tar.gz
+            ${{ matrix.asset_name }}.tar.gz.sha256
+          retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-termux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -name "*.tar.gz" -exec cp {} release-assets/ \;
+          find artifacts -type f -name "*.sha256" -exec cp {} release-assets/ \;
+          
+          cd release-assets
+          ls -lh
+          
+          echo "📝 Generating combined checksums..."
+          cat *.sha256 > checksums.txt
+          cat checksums.txt
+
+      - name: Get version tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+          
+          VERSION=$(echo "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref }}" | sed 's|refs/tags/||')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Release version: $VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: InjectTools ${{ steps.version.outputs.version }} (Termux)
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            # InjectTools ${{ steps.version.outputs.version }} - Termux Edition
+            
+            🤖 **Bug Inject Scanner for Cloudflare Subdomains** - Optimized for Android/Termux
+            
+            ## 📥 Downloads
+            
+            ### Termux (Android)
+            
+            Pilih sesuai arsitektur device kamu:
+            
+            | Device Type | Architecture | Download |
+            |-------------|--------------|----------|
+            | **Most Modern Android** (2018+) | ARM64 (aarch64) | `injecttools-termux-arm64.tar.gz` |
+            | **Older Android** (2015-2018) | ARMv7 | `injecttools-termux-armv7.tar.gz` |
+            
+            **Cara cek architecture:**
+            ```bash
+            uname -m
+            # Output: aarch64 = ARM64, armv7l/armv8l = ARMv7
+            ```
+            
+            ## 🚀 Installation (Termux)
+            
+            ### ARM64 (Recommended - Most Devices)
+            
+            ```bash
+            # Download
+            wget https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz
+            
+            # Verify checksum (optional)
+            wget https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz.sha256
+            sha256sum -c injecttools-termux-arm64.tar.gz.sha256
+            
+            # Extract
+            tar xzf injecttools-termux-arm64.tar.gz
+            
+            # Install to system
+            mv injecttools $PREFIX/bin/
+            chmod +x $PREFIX/bin/injecttools
+            
+            # Run
+            injecttools --help
+            injecttools
+            ```
+            
+            ### ARMv7 (Older Devices)
+            
+            ```bash
+            # Download
+            wget https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-armv7.tar.gz
+            
+            # Extract & Install
+            tar xzf injecttools-termux-armv7.tar.gz
+            mv injecttools $PREFIX/bin/
+            chmod +x $PREFIX/bin/injecttools
+            
+            # Run
+            injecttools
+            ```
+            
+            ## 🔧 Dependencies
+            
+            InjectTools binary sudah statically linked, tapi untuk optimal performance:
+            
+            ```bash
+            # Update packages
+            pkg update && pkg upgrade
+            
+            # Install optional dependencies
+            pkg install dnsutils ca-certificates
+            ```
+            
+            ## ✨ Features
+            
+            - ⚡ High-performance async scanning
+            - 🔍 Auto Cloudflare IP detection
+            - 📊 Real-time progress bar
+            - 💾 Config persistence
+            - 📥 SecLists wordlist integration (5K-110K patterns)
+            - 📄 Export hasil ke file
+            - 🎨 Colorful TUI
+            - 🚀 CLI & Interactive mode
+            
+            ## 📖 Usage
+            
+            ```bash
+            # Interactive mode (guided setup)
+            injecttools
+            
+            # Test single subdomain
+            injecttools -t tunnel.com -s cdn.cloudflare.com
+            
+            # Full scan
+            injecttools -t tunnel.com -d cloudflare.com
+            
+            # With custom wordlist
+            injecttools -t tunnel.com -d cloudflare.com -w wordlist.txt
+            
+            # Help
+            injecttools --help
+            ```
+            
+            ## 🔐 Checksums
+            
+            ```
+            $(cat release-assets/checksums.txt)
+            ```
+            
+            ## 📝 Changelog
+            
+            - Initial Rust implementation
+            - Async concurrent scanning with Tokio
+            - Native Termux binary (no shell scripts)
+            - Optimized binary size (~5-8 MB)
+            - Interactive & CLI modes
+            - Built-in wordlist + SecLists download
+            
+            ## 🐛 Troubleshooting
+            
+            **Permission denied:**
+            ```bash
+            chmod +x $PREFIX/bin/injecttools
+            ```
+            
+            **DNS errors:**
+            ```bash
+            pkg install dnsutils
+            ```
+            
+            **SSL/TLS errors:**
+            ```bash
+            pkg install ca-certificates openssl
+            ```
+            
+            ---
+            
+            **Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)  
+            **Platform:** Android/Termux  
+            **Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')  
+            
+            Report issues: [GitHub Issues](https://github.com/hoshiyomiX/InjectTools/issues)
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Targets:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ ARM64 (aarch64) - Modern Android devices" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ ARMv7 - Older Android devices" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Downloads:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 [injecttools-termux-arm64.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 [injecttools-termux-armv7.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-armv7.tar.gz)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Asset Sizes:**" >> $GITHUB_STEP_SUMMARY
+          cd release-assets
+          ls -lh *.tar.gz | awk '{print "- "$9": "$5}' >> $GITHUB_STEP_SUMMARY

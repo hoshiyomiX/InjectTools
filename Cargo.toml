@@ -2,30 +2,43 @@
 name = "injecttools"
 version = "1.1.0"
 edition = "2021"
-authors = ["hoshiyomiX <katahiranaruse.daydream@gmail.com>"]
+authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
 description = "Bug Inject Scanner for Cloudflare Subdomains"
 license = "MIT"
-repository = "https://github.com/hoshiyomiX/InjectTools"
 
 [dependencies]
-tokio = { version = "1.35", features = ["full"] }
-reqwest = { version = "0.11", features = ["rustls-tls"], default-features = false }
+# HTTP client dengan DNS resolver custom
+reqwest = { version = "0.11", features = ["blocking", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+
+# DNS resolution
 trust-dns-resolver = "0.23"
+
+# CLI & TUI
+clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
+indicatif = "0.17"
+dialoguer = "0.11"
+
+# Networking
+ipnetwork = "0.20"
+
+# File I/O & Config
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-clap = { version = "4.4", features = ["derive"] }
-anyhow = "1.0"
-ipnetwork = "0.20"
-dialoguer = { version = "0.11", features = ["fuzzy-select"] }
-indicatif = "0.17"
+toml = "0.8"
 dirs = "5.0"
-ctrlc = "3.4"
-chrono = "0.4"
+
+# Async runtime
+futures = "0.3"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
 
 [profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
+opt-level = "z"     # Optimize for size
+lto = true          # Link-time optimization
+codegen-units = 1   # Better optimization
+strip = true        # Strip symbols
+panic = "abort"     # Smaller binary

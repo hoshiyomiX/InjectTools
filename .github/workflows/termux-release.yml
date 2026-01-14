@@ -67,19 +67,24 @@ jobs:
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
           echo "✅ NDK installed at: $PWD/android-ndk-r26d"
 
-      - name: Configure Cargo for Android
+      - name: Setup Android Build Environment
         run: |
-          mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml << EOF
-          [target.aarch64-linux-android]
-          ar = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          linker = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ matrix.api }}-clang"
+          NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           
-          [target.armv7-linux-androideabi]
-          ar = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          linker = "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi${{ matrix.api }}-clang"
-          EOF
-          echo "✅ Cargo configured for Android cross-compilation"
+          # Set environment variables for cc-rs crate
+          echo "CC_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CXX_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang++" >> $GITHUB_ENV
+          echo "AR_aarch64_linux_android=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
+          
+          echo "CC_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CXX_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang++" >> $GITHUB_ENV
+          echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
+          
+          # Cargo linker configuration
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
+          
+          echo "✅ Environment variables configured for Android build"
 
       - name: Build release binary
         run: |
@@ -93,7 +98,7 @@ jobs:
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             target/${{ matrix.target }}/release/injecttools
           
-          SIZE_BEFORE=$(stat -f%z target/${{ matrix.target }}/release/injecttools 2>/dev/null || stat -c%s target/${{ matrix.target }}/release/injecttools)
+          SIZE_BEFORE=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
           echo "📊 Final binary size: $(numfmt --to=iec-i --suffix=B $SIZE_BEFORE)"
 
       - name: Test binary (smoke test)

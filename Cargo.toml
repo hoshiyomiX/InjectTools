@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
 description = "Bug Inject Scanner for Cloudflare Subdomains"
 license = "MIT"
+repository = "https://github.com/hoshiyomiX/InjectTools"
 
 [dependencies]
 # HTTP client dengan DNS resolver custom
@@ -19,6 +20,7 @@ clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
 dialoguer = "0.11"
+terminal_size = "0.3"
 
 # Networking
 ipnetwork = "0.20"
@@ -31,6 +33,9 @@ dirs = "5.0"
 
 # Async runtime
 futures = "0.3"
+
+# Date/Time
+chrono = "0.4"
 
 # Error handling
 anyhow = "1.0"

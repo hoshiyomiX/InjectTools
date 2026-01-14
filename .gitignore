@@ -1,0 +1,39 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Config & Data
+*.toml.backup
+bug-wordlists/
+*.txt.download
+
+# Build artifacts
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# Test outputs
+bug-*.txt
+scan-results-*.txt
+
+# OS specific
+Thumbs.db
+.Trashes
+
+# Logs
+*.log
+
+# Distribution
+dist/
+*.AppImage

@@ -1,66 +1,21 @@
-Build started at 2026-01-15 06:26:46 UTC
+Build started at 2026-01-15 09:56:14 UTC
 Target: armv7-linux-androideabi
-Runner OS: Linux
+Git commit: 489a8c7079e187e3e5b4c48ea357d6be54f586ed
 ========================================
-
-📦 Rust Toolchain
-========================================
-rustc 1.92.0 (ded5c06cf 2025-12-08)
-cargo 1.92.0 (344c4567c 2025-10-21)
-armv7-linux-androideabi
-x86_64-unknown-linux-gnu
-
-📥 Downloading Android NDK
-========================================
-Downloading NDK r26d...
-Extracting NDK...
-NDK location: /home/runner/work/InjectTools/InjectTools/android-ndk-r26d
+📥 Downloading Android NDK r26d...
+📦 Extracting NDK...
 ✅ NDK ready
-
-🔧 Configuring Toolchain
-========================================
-NDK Binary Path: /home/runner/work/InjectTools/InjectTools/android-ndk-r26d/toolchains/llvm/prebuilt/linux-x86_64/bin
-API Level: 30
-✅ Toolchain configured
-
-🔨 Building Binary
-========================================
-Target: armv7-linux-androideabi
-Build started: 2026-01-15 06:27:11 UTC
-
+🔧 Toolchain configured
+🔨 Building...
+Cargo.toml version:
+version = "2.3.1"
 [1m[92m    Updating[0m crates.io index
-[1m[92m     Locking[0m 251 packages to latest compatible versions
-[1m[92m      Adding[0m colored v2.2.0 [1m[33m(available: v3.0.0)[0m
-[1m[92m      Adding[0m dialoguer v0.11.0 [1m[33m(available: v0.12.0)[0m
-[1m[92m      Adding[0m dirs v5.0.1 [1m[33m(available: v6.0.0)[0m
-[1m[92m      Adding[0m indicatif v0.17.11 [1m[33m(available: v0.18.3)[0m
-[1m[92m      Adding[0m ipnetwork v0.20.0 [1m[33m(available: v0.21.1)[0m
-[1m[92m      Adding[0m reqwest v0.11.27 [1m[33m(available: v0.13.1)[0m
-[1m[92m      Adding[0m terminal_size v0.3.0 [1m[33m(available: v0.4.3)[0m
-[1m[92m      Adding[0m thiserror v1.0.69 [1m[33m(available: v2.0.17)[0m
-[1m[92m      Adding[0m toml v0.8.23 [1m[33m(available: v0.9.11+spec-1.1.0)[0m
-[1m[92m   Compiling[0m injecttools v2.3.0 (/home/runner/work/InjectTools/InjectTools)
-[1m[92m    Finished[0m `release` profile [optimized] target(s) in 21.93s
-
+[1m[91merror[0m: no matching package named `dialoger` found
+location searched: crates.io index
+required by package `injecttools v2.3.1 (/home/runner/work/InjectTools/InjectTools)`
 ✅ Build successful
-Build finished: 2026-01-15 06:27:33 UTC
-
-📊 Binary Info:
--rwxr-xr-x 2 runner runner 2.0M Jan 15 06:27 target/armv7-linux-androideabi/release/injecttools
-target/armv7-linux-androideabi/release/injecttools: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /system/bin/linker, stripped
-
-✂️  Stripping Debug Symbols
-========================================
-Before strip: 2.0MiB
-After strip:  2.0MiB
-Saved:        304B (0%)
-✅ Strip complete
-
-📦 Packaging
-========================================
-3120131a16ebc531beab8b441f1a118bdeb1ec12572a51a7a081c3d4fce21a62  injecttools-termux-armv7.tar.gz
-Package size: 1.2MiB
-✅ Packaging complete
-
-========================================
-Build finished at 2026-01-15 06:27:33 UTC
+-rwxr-xr-x 1 runner runner 2.0M Jan 15 06:52 target/armv7-linux-androideabi/release/injecttools
+Before: 2.0MiB
+After: 2.0MiB
+65605b6f461cd9571d771de68a30356d04bcc63b7178464542345429f9111950  injecttools-termux-armv7.tar.gz
+Finished: 2026-01-15 09:56:41 UTC

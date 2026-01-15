@@ -6,48 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [v2.3.1] - 2026-01-15 (Hotfix)
 
-### Added
-- **🔄 crt.sh Retry Mechanism**
-  - Auto-retry 3x dengan progressive timeout (30s → 45s → 60s)
-  - Better error messages (timeout, connect, parse)
-  - Connection timeout 10s untuk early failure detection
-  - Improved User-Agent header untuk compatibility
+### Fixed
+- 🐛 **Android Networking Issues**
+  - Fixed: "Cannot connect to internet" error di Termux
+  - Switched dari `rustls-tls` ke `native-tls` untuk better Android support
+  - Enabled `default-features = true` untuk reqwest (include necessary components)
+  - Tool sekarang properly menggunakan system OpenSSL
 
-- **💡 DNS Brute Force Fallback**
-  - Menu baru: "4. DNS Brute Force Scan"
-  - Auto-offer fallback saat crt.sh gagal
-  - Interactive prompt untuk switch ke brute force
-  - Integrated dengan built-in wordlist
+- 🐛 **Scanner Error Handling**
+  - Added detailed error logging untuk debugging
+  - HTTP client build status visibility
+  - Error type detection (timeout vs connect vs request)
+  - User-friendly troubleshooting hints
 
 ### Changed
-- **📡 crt.sh Error Handling**
-  - Distinguish error types: timeout vs network vs parse
-  - User-friendly error messages dengan tips
-  - Automatic fallback suggestion
-  
-- **🎨 UI Improvements**
-  - Added helpful tips saat crt.sh down
-  - Better progress feedback dengan attempt counter
-  - Clearer menu layout (7 options)
+- 🔧 **Dependencies** (`Cargo.toml`)
+  - `reqwest`: `rustls-tls` → `native-tls`
+  - `reqwest`: `default-features = false` → `default-features = true`
+  - Better Android/Termux compatibility
 
-### Fixed
-- 🐛 **crt.sh Connection Errors**
-  - Fix "unexpected end of file" error
-  - Better TLS handshake handling
-  - Proper timeout configuration
-  - Retry mechanism untuk unstable API
+- 📊 **Scanner Module** (`src/scanner.rs`)
+  - Enhanced error messages dengan specific failure types
+  - Show timeout settings di test output
+  - Display HTTP client build status
+  - Debug hints untuk connection failures
 
 ### Technical Details
-- **crt.sh Module** (`src/crtsh.rs`)
-  - Added `fetch_with_timeout()` helper
-  - Progressive retry delays (1s, 2s, 3s)
-  - Better validation untuk empty results
-  - Improved subdomain filtering logic
+**Root Cause:** rustls di Android/Termux kadang tidak bisa establish TLS connections
 
-- **Main Module** (`src/main.rs`)
-  - Integrated wordlist module
-  - Added fallback prompt logic
-  - Version bump: 2.3.0 → 2.3.1
+**Solution:** native-tls menggunakan system OpenSSL (available di Termux via `pkg install openssl`)
+
+**Impact:** 
+- ✅ Basic HTTP requests working
+- ✅ crt.sh API accessible
+- ✅ DNS resolution stable
+- ✅ Test target host functional
 
 ---
 
@@ -165,6 +158,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## Menu Structure History
+
+| Version | Menu Options | Features |
+|---------|--------------|----------|
+| **v2.3.1** | 6 | Test Target, Single Test, crt.sh, Results, Settings, Exit |
+| v2.3.0 | 6 | Same as v2.3.1 |
+| v2.0.0 | 8 | Included Full Scan + Batch Test |
+| v1.1.0 | 8 | Bash version with all features |
+
+**Note:** "Full Scan" dan "DNS Brute Force" dihapus di v2.3.0 untuk fokus ke crt.sh-based discovery.
+
+---
+
 ## Platform Support History
 
 | Version | Android/Termux | Linux | macOS | Windows |
@@ -178,21 +184,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## Troubleshooting crt.sh Issues (v2.3.1+)
+## Troubleshooting v2.3.1
 
-### Issue: "connection error: unexpected end of file"
+### Issue: "Cannot connect to internet" / Network errors
 
-**Cause:** crt.sh API sering down/slow atau network timeout
+**Cause:** Missing OpenSSL atau TLS configuration issue
 
-**Solutions:**
-1. ✅ **Auto-Retry**: Tool akan retry 3x otomatis
-2. ✅ **Fallback**: Gunakan "DNS Brute Force Scan" sebagai alternatif
-3. ✅ **Manual**: Coba lagi beberapa menit kemudian
-
-**Alternative Method:**
+**Solution:**
 ```bash
-# Gunakan menu option 4 untuk DNS brute force
-4. 🚀 DNS Brute Force Scan
+# Install OpenSSL di Termux
+pkg install openssl openssl-tool
+
+# Rebuild binary
+cd InjectTools
+cargo clean
+cargo build --release
+```
+
+### Issue: "Failed to build HTTP client"
+
+**Cause:** Missing system dependencies
+
+**Solution:**
+```bash
+# Install required packages
+pkg update && pkg upgrade
+pkg install rust binutils openssl
+
+# Verify installation
+openssl version
 ```
 
 ---

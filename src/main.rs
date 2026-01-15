@@ -13,7 +13,7 @@ use std::sync::Arc;
 #[derive(Parser, Debug)]
 #[command(name = "InjectTools")]
 #[command(author = "hoshiyomi_id <t.me/hoshiyomi_id>")]
-#[command(version = "2.3.1")]
+#[command(version = "2.3.2")]
 #[command(about = "Bug Inject Scanner for Cloudflare Subdomains", long_about = None)]
 struct Args {
     /// Target host (tunnel/proxy domain)
@@ -74,6 +74,13 @@ async fn main() -> anyhow::Result<()> {
             config.target_host = target;
             config.save()?;
 
+            // Allow test target without subdomain/crtsh
+            if args.subdomain.is_none() && !args.crtsh && args.domain.is_none() {
+                // Just test target host
+                scanner::test_target(&config.target_host, args.timeout).await?;
+                return Ok(());
+            }
+
             if args.crtsh {
                 if let Some(domain) = args.domain {
                     // Fetch from crt.sh and test
@@ -96,14 +103,15 @@ async fn main() -> anyhow::Result<()> {
             } else if let Some(subdomain) = args.subdomain {
                 // Single test
                 scanner::test_single(&config.target_host, &subdomain, args.timeout).await?;
-            } else {
-                eprintln!("{}", "Error: Gunakan --subdomain atau --crtsh --domain".red());
-                std::process::exit(1);
             }
             
             return Ok(());
         } else {
             eprintln!("{}", "Error: --target required untuk non-interactive mode".red());
+            eprintln!("\n{}", "Usage:".cyan());
+            eprintln!("  injecttools -t host.com --non-interactive              # Test target only");
+            eprintln!("  injecttools -t host.com -s subdomain.com --non-interactive");
+            eprintln!("  injecttools -t host.com --crtsh -d domain.com --non-interactive");
             std::process::exit(1);
         }
     }
@@ -111,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
     // Interactive mode
     loop {
         ui::clear_screen();
-        ui::print_header("INJECTTOOLS v2.3.1");
+        ui::print_header("INJECTTOOLS v2.3.2");
         
         println!("\n{}", "MAIN MENU".bold());
         println!("{}" , "━".repeat(50).cyan());

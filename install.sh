@@ -41,9 +41,29 @@ if [[ -z "$PREFIX" ]]; then
     exit 1
 fi
 
-# Version
-VERSION="${1:-termux-v1.1.0}"
-echo -e "${BLUE}📦 Installing version: ${GREEN}$VERSION${NC}"
+# Auto-detect latest release or use provided version
+if [[ -z "$1" ]]; then
+    echo -e "${CYAN}🔍 Fetching latest release...${NC}"
+    LATEST_TAG=$(curl -fsSL https://api.github.com/repos/hoshiyomiX/InjectTools/releases | grep -m1 '"tag_name"' | cut -d'"' -f4)
+    
+    if [[ -z "$LATEST_TAG" ]]; then
+        echo -e "${YELLOW}⚠ Could not fetch latest release, using default: termux-v2.3.0${NC}"
+        VERSION="termux-v2.3.0"
+    else
+        # Prefer termux-specific tags
+        if echo "$LATEST_TAG" | grep -q "termux-"; then
+            VERSION="$LATEST_TAG"
+        else
+            # Fallback to manual version
+            VERSION="termux-v2.3.0"
+        fi
+        echo -e "${GREEN}✓ Using version: $VERSION${NC}"
+    fi
+else
+    VERSION="$1"
+    echo -e "${BLUE}📦 Using provided version: ${GREEN}$VERSION${NC}"
+fi
+
 echo ""
 
 # Download URL
@@ -59,7 +79,11 @@ cd "$TMP_DIR"
 echo -e "${CYAN}📥 Downloading binary...${NC}"
 if ! curl -fsSL -o "$TARBALL" "$DOWNLOAD_URL"; then
     echo -e "${RED}✗ Download failed!${NC}"
-    echo -e "${YELLOW}  Check if release exists: https://github.com/hoshiyomiX/InjectTools/releases/tag/$VERSION${NC}"
+    echo -e "${YELLOW}  Release might not exist yet. Try building from source:${NC}"
+    echo -e "  ${CYAN}git clone https://github.com/hoshiyomiX/InjectTools.git${NC}"
+    echo -e "  ${CYAN}cd InjectTools && cargo build --release${NC}"
+    echo ""
+    echo -e "${YELLOW}  Or check releases: https://github.com/hoshiyomiX/InjectTools/releases${NC}"
     rm -rf "$TMP_DIR"
     exit 1
 fi
@@ -117,7 +141,9 @@ echo -e "${GREEN}✅ Installation complete!${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BLUE}📍 Binary location: ${GREEN}$PREFIX/bin/injecttools${NC}"
-echo -e "${BLUE}📊 Binary size: ${GREEN}$(du -h $PREFIX/bin/injecttools | cut -f1)${NC}"
+if [[ -f "$PREFIX/bin/injecttools" ]]; then
+    echo -e "${BLUE}📊 Binary size: ${GREEN}$(du -h $PREFIX/bin/injecttools | cut -f1)${NC}"
+fi
 echo ""
 echo -e "${YELLOW}🚀 Run the tool:${NC}"
 echo -e "   ${CYAN}injecttools${NC}"
@@ -130,7 +156,8 @@ echo ""
 
 # Test binary
 if injecttools --version &>/dev/null; then
-    echo -e "${GREEN}✓ Installation verified successfully!${NC}"
+    VERSION_OUTPUT=$(injecttools --version 2>&1)
+    echo -e "${GREEN}✓ Installation verified: $VERSION_OUTPUT${NC}"
 else
     echo -e "${YELLOW}⚠ Binary installed but verification failed${NC}"
     echo -e "${YELLOW}  Try running: ${CYAN}injecttools --version${NC}"

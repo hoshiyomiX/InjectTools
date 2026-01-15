@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., termux-v1.1.0)'
+        description: 'Release version (e.g., termux-v2.3.0)'
         required: true
-        default: 'termux-v1.1.0'
+        default: 'termux-v2.3.0'
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -59,69 +61,262 @@ jobs:
           path: target
           key: termux-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Setup build logging
+        run: |
+          mkdir -p .github/build-logs
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          BUILD_LOG=".github/build-logs/build-${{ matrix.arch }}-${TIMESTAMP}.log"
+          echo "BUILD_LOG=$BUILD_LOG" >> $GITHUB_ENV
+          echo "BUILD_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          
+          # Create log header
+          cat > $BUILD_LOG << 'EOFLOG'
+          ╔══════════════════════════════════════════════════════════════╗
+          ║          InjectTools Termux Build Log                        ║
+          ╚══════════════════════════════════════════════════════════════╝
+          EOFLOG
+          
+          cat >> $BUILD_LOG << EOF
+          
+          Build Information:
+          ------------------
+          Target: ${{ matrix.target }}
+          Architecture: ${{ matrix.arch }}
+          Android API: ${{ matrix.api }}
+          Runner OS: ubuntu-latest
+          Rust Version: $(rustc --version)
+          Cargo Version: $(cargo --version)
+          
+          Triggered by: ${{ github.event_name }}
+          Commit SHA: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Actor: ${{ github.actor }}
+          
+          Started at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          
+          ══════════════════════════════════════════════════════════════
+          
+          EOF
+
       - name: Download & Setup Android NDK
         run: |
-          echo "📦 Downloading Android NDK r26d..."
-          wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
-          unzip -q android-ndk-r26d-linux.zip
-          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
-          echo "✅ NDK installed at: $PWD/android-ndk-r26d"
+          {
+            echo "[$(date +'%H:%M:%S')] 📦 Downloading Android NDK r26d..."
+            
+            if ! wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip; then
+              echo "[$(date +'%H:%M:%S')] ❌ ERROR: Failed to download NDK"
+              exit 1
+            fi
+            
+            echo "[$(date +'%H:%M:%S')] 📂 Extracting NDK..."
+            if ! unzip -q android-ndk-r26d-linux.zip; then
+              echo "[$(date +'%H:%M:%S')] ❌ ERROR: Failed to extract NDK"
+              exit 1
+            fi
+            
+            echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
+            echo "[$(date +'%H:%M:%S')] ✅ NDK installed at: $PWD/android-ndk-r26d"
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
       - name: Setup Android Build Environment
         run: |
-          NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          
-          # Set environment variables for cc-rs crate
-          echo "CC_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "CXX_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang++" >> $GITHUB_ENV
-          echo "AR_aarch64_linux_android=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
-          
-          echo "CC_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "CXX_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang++" >> $GITHUB_ENV
-          echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
-          
-          # Cargo linker configuration
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
-          
-          echo "✅ Environment variables configured for Android build"
+          {
+            echo "[$(date +'%H:%M:%S')] ⚙️ Configuring Android build environment..."
+            
+            NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            
+            # Set environment variables for cc-rs crate
+            echo "CC_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
+            echo "CXX_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang++" >> $GITHUB_ENV
+            echo "AR_aarch64_linux_android=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
+            
+            echo "CC_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
+            echo "CXX_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang++" >> $GITHUB_ENV
+            echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
+            
+            # Cargo linker configuration
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
+            echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
+            
+            echo "[$(date +'%H:%M:%S')] ✅ Environment variables configured"
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
       - name: Build release binary
+        id: build
+        continue-on-error: true
         run: |
-          echo "🔨 Building for ${{ matrix.target }}..."
-          cargo build --release --target ${{ matrix.target }}
-          ls -lh target/${{ matrix.target }}/release/
+          {
+            echo "[$(date +'%H:%M:%S')] 🔨 Starting cargo build for ${{ matrix.target }}..."
+            echo ""
+            
+            if cargo build --release --target ${{ matrix.target }} 2>&1; then
+              echo ""
+              echo "[$(date +'%H:%M:%S')] ✅ Build completed successfully"
+              echo "BUILD_STATUS=success" >> $GITHUB_OUTPUT
+            else
+              BUILD_EXIT_CODE=$?
+              echo ""
+              echo "[$(date +'%H:%M:%S')] ❌ Build failed with exit code: $BUILD_EXIT_CODE"
+              echo "BUILD_STATUS=failed" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            
+            echo ""
+            echo "Build artifacts:"
+            ls -lh target/${{ matrix.target }}/release/ | grep injecttools || echo "Binary not found!"
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
       - name: Strip binary
+        if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
-          echo "✂️ Stripping debug symbols..."
-          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
-            target/${{ matrix.target }}/release/injecttools
-          
-          SIZE_BEFORE=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
-          echo "📊 Final binary size: $(numfmt --to=iec-i --suffix=B $SIZE_BEFORE)"
+          {
+            echo "[$(date +'%H:%M:%S')] ✂️ Stripping debug symbols..."
+            
+            SIZE_BEFORE=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
+            echo "Binary size before strip: $(numfmt --to=iec-i --suffix=B $SIZE_BEFORE)"
+            
+            $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+              target/${{ matrix.target }}/release/injecttools
+            
+            SIZE_AFTER=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
+            echo "Binary size after strip: $(numfmt --to=iec-i --suffix=B $SIZE_AFTER)"
+            
+            SAVED=$((SIZE_BEFORE - SIZE_AFTER))
+            echo "Space saved: $(numfmt --to=iec-i --suffix=B $SAVED)"
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
-      - name: Test binary (smoke test)
+      - name: Test binary
+        if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
-          echo "🧪 Testing binary validity..."
-          file target/${{ matrix.target }}/release/injecttools
-          ls -lh target/${{ matrix.target }}/release/injecttools
+          {
+            echo "[$(date +'%H:%M:%S')] 🧪 Testing binary validity..."
+            echo ""
+            file target/${{ matrix.target }}/release/injecttools
+            echo ""
+            ls -lh target/${{ matrix.target }}/release/injecttools
+            echo ""
+            echo "[$(date +'%H:%M:%S')] ✅ Binary is valid"
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
       - name: Compress binary
+        if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.asset_name }}.tar.gz injecttools
-          cd ../../..
-          
-          echo "📦 Compressed archive created"
-          ls -lh ${{ matrix.asset_name }}.tar.gz
+          {
+            echo "[$(date +'%H:%M:%S')] 📦 Compressing binary..."
+            
+            cd target/${{ matrix.target }}/release
+            tar czf ../../../${{ matrix.asset_name }}.tar.gz injecttools
+            cd ../../..
+            
+            SIZE=$(stat -c%s ${{ matrix.asset_name }}.tar.gz)
+            echo "Compressed size: $(numfmt --to=iec-i --suffix=B $SIZE)"
+            ls -lh ${{ matrix.asset_name }}.tar.gz
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
       - name: Generate SHA256 checksum
+        if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
-          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
-          cat ${{ matrix.asset_name }}.tar.gz.sha256
+          {
+            echo "[$(date +'%H:%M:%S')] 🔐 Generating SHA256 checksum..."
+            sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+            cat ${{ matrix.asset_name }}.tar.gz.sha256
+            
+          } 2>&1 | tee -a $BUILD_LOG
 
-      - name: Upload artifact
+      - name: Finalize build log
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "══════════════════════════════════════════════════════════════"
+            echo ""
+            echo "Build Summary:"
+            echo "--------------"
+            echo "Status: ${{ steps.build.outputs.BUILD_STATUS || 'failed' }}"
+            echo "Finished at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "Duration: $SECONDS seconds"
+            echo ""
+            
+            if [ "${{ steps.build.outputs.BUILD_STATUS }}" = "success" ]; then
+              echo "✅ Build completed successfully!"
+              echo ""
+              echo "Artifacts:"
+              echo "  - ${{ matrix.asset_name }}.tar.gz"
+              echo "  - ${{ matrix.asset_name }}.tar.gz.sha256"
+            else
+              echo "❌ Build failed. Check logs above for errors."
+              echo ""
+              echo "Common issues:"
+              echo "  - Dependency compilation errors"
+              echo "  - Linker errors (check NDK configuration)"
+              echo "  - Out of memory"
+            fi
+            
+            echo ""
+            echo "╔══════════════════════════════════════════════════════════════╗"
+            echo "║                    End of Build Log                          ║"
+            echo "╚══════════════════════════════════════════════════════════════╝"
+            
+          } 2>&1 | tee -a $BUILD_LOG
+
+      - name: Push build log to repository
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Rename log with status prefix
+          STATUS="${{ steps.build.outputs.BUILD_STATUS || 'failed' }}"
+          FINAL_LOG=".github/build-logs/${STATUS}-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
+          mv $BUILD_LOG $FINAL_LOG
+          
+          # Keep only last 10 logs per architecture
+          cd .github/build-logs
+          ls -t *-${{ matrix.arch }}-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
+          cd ../..
+          
+          # Commit and push
+          git add .github/build-logs/
+          
+          if git diff --staged --quiet; then
+            echo "No build log changes to commit"
+          else
+            git commit -m "ci: Add build log [$STATUS] for ${{ matrix.arch }} - ${BUILD_TIMESTAMP}"
+            
+            # Retry push up to 3 times
+            for i in {1..3}; do
+              if git push origin HEAD:main; then
+                echo "✅ Build log pushed successfully"
+                break
+              else
+                echo "⚠️ Push attempt $i failed, retrying..."
+                git pull --rebase origin main
+                sleep 2
+              fi
+              
+              if [ $i -eq 3 ]; then
+                echo "❌ Failed to push build log after 3 attempts"
+                echo "Log will be available as artifact only"
+              fi
+            done
+          fi
+
+      - name: Upload build log as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.arch }}-${{ env.BUILD_TIMESTAMP }}
+          path: .github/build-logs/*-${{ matrix.arch }}-${{ env.BUILD_TIMESTAMP }}.log
+          retention-days: 30
+
+      - name: Upload build artifacts
+        if: steps.build.outputs.BUILD_STATUS == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
@@ -129,6 +324,13 @@ jobs:
             ${{ matrix.asset_name }}.tar.gz
             ${{ matrix.asset_name }}.tar.gz.sha256
           retention-days: 7
+
+      - name: Fail job if build failed
+        if: steps.build.outputs.BUILD_STATUS != 'success'
+        run: |
+          echo "::error::Build failed for ${{ matrix.target }}"
+          echo "::error::Check build log at .github/build-logs/failed-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
+          exit 1
 
   create-release:
     name: Create GitHub Release
@@ -184,103 +386,32 @@ jobs:
             
             🤖 **Bug Inject Scanner for Cloudflare Subdomains** - Optimized for Android/Termux
             
-            ## 📥 Downloads
+            ## 📥 Quick Install
             
-            ### Termux (Android)
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
+            ```
             
-            Pilih sesuai arsitektur device kamu:
+            ## 📦 Manual Downloads
             
             | Device Type | Architecture | Download |
             |-------------|--------------|----------|
-            | **Most Modern Android** (2018+) | ARM64 (aarch64) | `injecttools-termux-arm64.tar.gz` |
+            | **Modern Android** (2018+) | ARM64 (aarch64) | `injecttools-termux-arm64.tar.gz` |
             | **Older Android** (2015-2018) | ARMv7 | `injecttools-termux-armv7.tar.gz` |
             
-            **Cara cek architecture:**
-            ```bash
-            uname -m
-            # Output: aarch64 = ARM64, armv7l/armv8l = ARMv7
-            ```
+            **Check architecture:** `uname -m`
             
-            ## 🚀 Installation (Termux)
+            ## ✨ Features v2.3
             
-            ### ARM64 (Recommended - Most Devices)
-            
-            ```bash
-            # Download
-            wget https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz
-            
-            # Verify checksum (optional)
-            wget https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz.sha256
-            sha256sum -c injecttools-termux-arm64.tar.gz.sha256
-            
-            # Extract
-            tar xzf injecttools-termux-arm64.tar.gz
-            
-            # Install to system
-            mv injecttools $PREFIX/bin/
-            chmod +x $PREFIX/bin/injecttools
-            
-            # Run
-            injecttools --help
-            injecttools
-            ```
-            
-            ### ARMv7 (Older Devices)
-            
-            ```bash
-            # Download
-            wget https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-armv7.tar.gz
-            
-            # Extract & Install
-            tar xzf injecttools-termux-armv7.tar.gz
-            mv injecttools $PREFIX/bin/
-            chmod +x $PREFIX/bin/injecttools
-            
-            # Run
-            injecttools
-            ```
-            
-            ## 🔧 Dependencies
-            
-            InjectTools binary sudah statically linked, tapi untuk optimal performance:
-            
-            ```bash
-            # Update packages
-            pkg update && pkg upgrade
-            
-            # Install optional dependencies
-            pkg install dnsutils ca-certificates
-            ```
-            
-            ## ✨ Features
-            
-            - ⚡ High-performance async scanning
-            - 🔍 Auto Cloudflare IP detection
+            - ⚡ Async concurrent scanning
+            - 🔍 Auto Cloudflare detection
             - 📊 Real-time progress bar
-            - 💾 Config persistence
-            - 📥 SecLists wordlist integration (5K-110K patterns)
-            - 📄 Export hasil ke file
+            - 🌐 crt.sh subdomain scanner
+            - 📋 Batch testing (manual/file)
+            - 📁 Results viewer & export
+            - 📡 Ping test support
             - 🎨 Colorful TUI
-            - 🚀 CLI & Interactive mode
-            
-            ## 📖 Usage
-            
-            ```bash
-            # Interactive mode (guided setup)
-            injecttools
-            
-            # Test single subdomain
-            injecttools -t tunnel.com -s cdn.cloudflare.com
-            
-            # Full scan
-            injecttools -t tunnel.com -d cloudflare.com
-            
-            # With custom wordlist
-            injecttools -t tunnel.com -d cloudflare.com -w wordlist.txt
-            
-            # Help
-            injecttools --help
-            ```
+            - 💾 Config persistence
             
             ## 🔐 Checksums
             
@@ -288,36 +419,19 @@ jobs:
             $(cat release-assets/checksums.txt)
             ```
             
-            ## 📝 Changelog
+            ## 📝 Build Logs
             
-            - Initial Rust implementation
-            - Async concurrent scanning with Tokio
-            - Native Termux binary (no shell scripts)
-            - Optimized binary size (~5-8 MB)
-            - Interactive & CLI modes
-            - Built-in wordlist + SecLists download
+            Detailed build logs tersedia di:
+            - [View Build Logs](https://github.com/hoshiyomiX/InjectTools/tree/main/.github/build-logs)
             
-            ## 🐛 Troubleshooting
+            ## 📖 Documentation
             
-            **Permission denied:**
-            ```bash
-            chmod +x $PREFIX/bin/injecttools
-            ```
-            
-            **DNS errors:**
-            ```bash
-            pkg install dnsutils
-            ```
-            
-            **SSL/TLS errors:**
-            ```bash
-            pkg install ca-certificates openssl
-            ```
+            - [README.md](https://github.com/hoshiyomiX/InjectTools#readme)
+            - [Termux Build Guide](https://github.com/hoshiyomiX/InjectTools/blob/main/TERMUX_BUILD.md)
             
             ---
             
             **Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)  
-            **Platform:** Android/Termux  
             **Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')  
             
             Report issues: [GitHub Issues](https://github.com/hoshiyomiX/InjectTools/issues)
@@ -333,13 +447,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Targets:**" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ ARM64 (aarch64) - Modern Android devices" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ ARMv7 - Older Android devices" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ ARM64 (aarch64)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ ARMv7" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Downloads:**" >> $GITHUB_STEP_SUMMARY
           echo "- 📦 [injecttools-termux-arm64.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz)" >> $GITHUB_STEP_SUMMARY
           echo "- 📦 [injecttools-termux-armv7.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-armv7.tar.gz)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Asset Sizes:**" >> $GITHUB_STEP_SUMMARY
-          cd release-assets
-          ls -lh *.tar.gz | awk '{print "- "$9": "$5}' >> $GITHUB_STEP_SUMMARY
+          echo "**Build Logs:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 [View Logs](.github/build-logs/)" >> $GITHUB_STEP_SUMMARY

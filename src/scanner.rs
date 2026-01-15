@@ -85,17 +85,13 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
         }
     };
     
-    // Build client with proper settings
-    println!("\n{} Building HTTP client...", "🔧".bright_black());
+    // Try HTTP/HTTPS silently
     let client = Client::builder()
         .timeout(Duration::from_secs(timeout))
         .connect_timeout(Duration::from_secs(5))
         .danger_accept_invalid_certs(true)
         .build()
-        .map_err(|e| {
-            eprintln!("{} Failed to build client: {}", "✗".red(), e);
-            e
-        })?;
+        .map_err(|e| anyhow::anyhow!("Failed to build client: {}", e))?;
     
     // Try HTTPS first (modern default), then HTTP
     let protocols = vec![
@@ -104,12 +100,9 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     ];
     
     let mut last_error = None;
-    let mut http_success = false;
     
     for (protocol, port) in &protocols {
         let url = format!("{}://{}", protocol, target);
-        println!("\n{} Testing: {}", "📡".cyan(), url.bright_black());
-        println!("{} Timeout: {}s", "⏱️".bright_black(), timeout);
         
         match client.get(&url).send().await {
             Ok(response) => {
@@ -119,16 +112,12 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
                 if status == 400 && protocol == &"http" {
                     if let Ok(body) = response.text().await {
                         if body.contains("HTTPS port") || body.contains("SSL") {
-                            println!("{} 400 Bad Request: Server requires HTTPS", "⚠️".yellow());
                             continue; // Skip to HTTPS
                         }
                     }
                 }
                 
-                println!("{} Status: {} via {}", "✓".green(), 
-                         status.to_string().green(), 
-                         protocol.to_uppercase());
-                
+                // HTTP success - show result
                 println!("\n{}", "═".repeat(50).green());
                 println!("{}", "✅ SERVER ONLINE (HTTP Responding)".green().bold());
                 println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
@@ -136,23 +125,17 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
                 println!("{} {}", "Port:".bright_black(), port.to_string().green());
                 println!("{}", "═".repeat(50).green());
                 
-                http_success = true;
-                break; // Success!
+                return Ok(()); // Success!
             }
             Err(e) => {
-                println!("{} Failed via {}", "✗".yellow(), protocol.to_uppercase());
                 last_error = Some(e);
-                // Continue to next protocol
+                // Continue silently to next protocol
             }
         }
     }
     
-    if http_success {
-        return Ok(());
-    }
-    
     // HTTP/HTTPS failed - measure TCP latency as fallback
-    println!("\n{} HTTP tidak respond, checking TCP latency...", "🔌".cyan());
+    println!("\n{} Checking TCP port availability...", "🔌".cyan());
     
     let tcp_ports = vec![
         (443, "HTTPS"),

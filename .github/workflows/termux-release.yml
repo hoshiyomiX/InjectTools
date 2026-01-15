@@ -41,6 +41,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create build log directory
         run: |
@@ -176,11 +178,25 @@ jobs:
           echo "========================================" | tee -a build-logs/build-${{ matrix.target }}.log
           echo "Build finished at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-${{ matrix.target }}.log
           
-          # Compress log
-          gzip -9 build-logs/build-${{ matrix.target }}.log
-          
-          echo "📄 Build log created: build-${{ matrix.target }}.log.gz"
+          echo "📄 Build log created: build-${{ matrix.target }}.log"
           ls -lh build-logs/
+
+      - name: Commit build log to repo
+        if: always()
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Add build log
+          git add build-logs/build-${{ matrix.target }}.log
+          
+          # Commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add build log for ${{ matrix.target }}"
+            git push
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -189,7 +205,6 @@ jobs:
           path: |
             ${{ matrix.asset_name }}.tar.gz
             ${{ matrix.asset_name }}.tar.gz.sha256
-            build-logs/build-${{ matrix.target }}.log.gz
 
   create-release:
     name: Create Release
@@ -200,6 +215,8 @@ jobs:
       
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main  # Ensure we pull latest with build logs
       
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -211,7 +228,6 @@ jobs:
           mkdir -p release-assets
           find artifacts -name "*.tar.gz" -exec cp {} release-assets/ \;
           find artifacts -name "*.sha256" -exec cp {} release-assets/ \;
-          find artifacts -name "*.log.gz" -exec cp {} release-assets/ \;
           
           cd release-assets
           cat *.sha256 > checksums.txt
@@ -304,9 +320,9 @@ jobs:
             
             ## 📝 Build Logs
             
-            Detailed build logs included:
-            - `build-aarch64-linux-android.log.gz` - ARM64 build log
-            - `build-armv7-linux-androideabi.log.gz` - ARMv7 build log
+            Build logs committed to repository in `build-logs/` directory:
+            - [build-aarch64-linux-android.log](https://github.com/hoshiyomiX/InjectTools/blob/main/build-logs/build-aarch64-linux-android.log)
+            - [build-armv7-linux-androideabi.log](https://github.com/hoshiyomiX/InjectTools/blob/main/build-logs/build-armv7-linux-androideabi.log)
             
             ## 🐛 Troubleshooting
             
@@ -362,9 +378,8 @@ jobs:
             echo "- 📦 [$file](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/$file) ($(numfmt --to=iec-i --suffix=B $SIZE))" >> $GITHUB_STEP_SUMMARY
           done
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📄 Build Logs" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Build Logs" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          for log in *.log.gz; do
-            SIZE=$(stat -c%s "$log")
-            echo "- 📝 [$log](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/$log) ($(numfmt --to=iec-i --suffix=B $SIZE))" >> $GITHUB_STEP_SUMMARY
-          done
+          echo "Build logs are committed to the repository:" >> $GITHUB_STEP_SUMMARY
+          echo "- 📄 [build-aarch64-linux-android.log](https://github.com/hoshiyomiX/InjectTools/blob/main/build-logs/build-aarch64-linux-android.log)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📄 [build-armv7-linux-androideabi.log](https://github.com/hoshiyomiX/InjectTools/blob/main/build-logs/build-armv7-linux-androideabi.log)" >> $GITHUB_STEP_SUMMARY

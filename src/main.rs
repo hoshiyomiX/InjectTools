@@ -32,10 +32,6 @@ struct Args {
     #[arg(long)]
     crtsh: bool,
 
-    /// Batch test file (one subdomain per line)
-    #[arg(short, long)]
-    batch: Option<String>,
-
     /// Timeout in seconds
     #[arg(long, default_value = "10")]
     timeout: u64,
@@ -74,46 +70,40 @@ async fn main() -> anyhow::Result<()> {
 
     // Non-interactive mode
     if args.non_interactive {
-        if let (Some(target), Some(domain)) = (args.target, args.domain) {
+        if let Some(target) = args.target {
             config.target_host = target;
             config.save()?;
 
             if args.crtsh {
-                // Fetch from crt.sh and test
-                ui::print_header("CRTSH SUBDOMAIN DISCOVERY");
-                let subdomains = crtsh::fetch_subdomains(&domain).await?;
-                println!("\n{} subdomains dari crt.sh\n", subdomains.len());
-                
-                let results = scanner::batch_test(
-                    &config.target_host,
-                    &subdomains,
-                    args.timeout,
-                    running.clone(),
-                ).await?;
-                
-                results::export_results(&results, &domain)?;
-            } else if let Some(batch_file) = args.batch {
-                // Batch test
-                let subdomains = scanner::load_batch_file(&batch_file)?;
-                let results = scanner::batch_test(
-                    &config.target_host,
-                    &subdomains,
-                    args.timeout,
-                    running.clone(),
-                ).await?;
-                
-                results::export_results(&results, "batch")?;
+                if let Some(domain) = args.domain {
+                    // Fetch from crt.sh and test
+                    ui::print_header("CRTSH SUBDOMAIN DISCOVERY");
+                    let subdomains = crtsh::fetch_subdomains(&domain).await?;
+                    println!("\n{} subdomains dari crt.sh\n", subdomains.len());
+                    
+                    let results = scanner::batch_test(
+                        &config.target_host,
+                        &subdomains,
+                        args.timeout,
+                        running.clone(),
+                    ).await?;
+                    
+                    results::export_results(&results, &domain)?;
+                } else {
+                    eprintln!("{}", "Error: --domain required untuk --crtsh".red());
+                    std::process::exit(1);
+                }
             } else if let Some(subdomain) = args.subdomain {
                 // Single test
                 scanner::test_single(&config.target_host, &subdomain, args.timeout).await?;
             } else {
-                // Full scan
-                scanner::full_scan(&config.target_host, &domain, args.timeout, running).await?;
+                eprintln!("{}", "Error: Gunakan --subdomain atau --crtsh --domain".red());
+                std::process::exit(1);
             }
             
             return Ok(());
         } else {
-            eprintln!("{}", "Error: --target dan --domain required untuk non-interactive mode".red());
+            eprintln!("{}", "Error: --target required untuk non-interactive mode".red());
             std::process::exit(1);
         }
     }
@@ -128,11 +118,9 @@ async fn main() -> anyhow::Result<()> {
         println!("\n1. {} Test Target Host", "🎯".cyan());
         println!("2. {} Test Single Subdomain", "🔍".cyan());
         println!("3. {} Fetch & Test dari crt.sh", "🌐".cyan());
-        println!("4. {} Batch Test dari File", "📦".cyan());
-        println!("5. {} Full Domain Scan", "🚀".cyan());
-        println!("6. {} View Exported Results", "📊".cyan());
-        println!("7. {} Settings", "⚙️".cyan());
-        println!("8. {} Exit", "🚪".red());
+        println!("4. {} View Exported Results", "📊".cyan());
+        println!("5. {} Settings", "⚙️".cyan());
+        println!("6. {} Exit", "🚪".red());
         println!("\n{}", "━".repeat(50).cyan());
         
         if !config.target_host.is_empty() {
@@ -207,58 +195,13 @@ async fn main() -> anyhow::Result<()> {
                 ui::pause();
             }
             "4" => {
-                if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
-                    ui::pause();
-                    continue;
-                }
-                
-                ui::print_header("BATCH TEST");
-                print!("\nPath ke file (satu subdomain per line): ");
-                let file_path = ui::read_line();
-                if !file_path.is_empty() {
-                    match scanner::load_batch_file(&file_path) {
-                        Ok(subdomains) => {
-                            println!("\n{} {} subdomains dari file\n", "✓".green(), subdomains.len());
-                            let results = scanner::batch_test(
-                                &config.target_host,
-                                &subdomains,
-                                args.timeout,
-                                running.clone(),
-                            ).await?;
-                            
-                            results::export_results(&results, "batch")?;
-                        }
-                        Err(e) => {
-                            println!("{} {}", "✗".red(), format!("Gagal load file: {}", e).red());
-                        }
-                    }
-                }
-                ui::pause();
-            }
-            "5" => {
-                if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
-                    ui::pause();
-                    continue;
-                }
-                
-                ui::print_header("FULL DOMAIN SCAN");
-                print!("\nMasukkan domain: ");
-                let domain = ui::read_line();
-                if !domain.is_empty() {
-                    scanner::full_scan(&config.target_host, &domain, args.timeout, running.clone()).await?;
-                }
-                ui::pause();
-            }
-            "6" => {
                 results::view_results()?;
                 ui::pause();
             }
-            "7" => {
+            "5" => {
                 settings_menu(&mut config, args.timeout)?;
             }
-            "8" => {
+            "6" => {
                 println!("\n{}", "👋 Terima kasih telah menggunakan InjectTools!".green());
                 break;
             }

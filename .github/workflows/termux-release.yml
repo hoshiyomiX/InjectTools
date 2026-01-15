@@ -88,6 +88,8 @@ jobs:
 
       - name: Build binary
         run: |
+          set -o pipefail  # Enable pipefail untuk proper error detection
+          
           echo "🔨 Building..." | tee -a build-logs/build-aarch64-linux-android.log
           
           # Show version being built
@@ -98,13 +100,16 @@ jobs:
           echo "Main menu options:" | tee -a build-logs/build-aarch64-linux-android.log
           grep -c 'println!("[0-9]' src/main.rs | tee -a build-logs/build-aarch64-linux-android.log || echo "Could not count menu items" | tee -a build-logs/build-aarch64-linux-android.log
           
-          if cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log; then
-            echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
-          else
-            echo "❌ Build failed" | tee -a build-logs/build-aarch64-linux-android.log
+          # Build with proper error handling
+          cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log
+          
+          # Verify binary exists
+          if [ ! -f target/aarch64-linux-android/release/injecttools ]; then
+            echo "❌ Build failed - binary not found" | tee -a build-logs/build-aarch64-linux-android.log
             exit 1
           fi
           
+          echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
           ls -lh target/aarch64-linux-android/release/injecttools | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Strip binary
@@ -216,6 +221,8 @@ jobs:
 
       - name: Build binary
         run: |
+          set -o pipefail  # Enable pipefail untuk proper error detection
+          
           echo "🔨 Building..." | tee -a build-logs/build-armv7-linux-androideabi.log
           
           # Show version being built
@@ -226,13 +233,16 @@ jobs:
           echo "Main menu options:" | tee -a build-logs/build-armv7-linux-androideabi.log
           grep -c 'println!("[0-9]' src/main.rs | tee -a build-logs/build-armv7-linux-androideabi.log || echo "Could not count menu items" | tee -a build-logs/build-armv7-linux-androideabi.log
           
-          if cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log; then
-            echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
-          else
-            echo "❌ Build failed" | tee -a build-logs/build-armv7-linux-androideabi.log
+          # Build with proper error handling
+          cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          # Verify binary exists
+          if [ ! -f target/armv7-linux-androideabi/release/injecttools ]; then
+            echo "❌ Build failed - binary not found" | tee -a build-logs/build-armv7-linux-androideabi.log
             exit 1
           fi
           
+          echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
           ls -lh target/armv7-linux-androideabi/release/injecttools | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Strip binary

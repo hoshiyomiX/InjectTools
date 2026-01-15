@@ -21,44 +21,117 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "Testing target host...".cyan());
     println!("{}", "━".repeat(50).bright_black());
     
-    // Debug info
+    // DNS check first
+    println!("\n{} Checking DNS resolution...", "🔍".cyan());
+    match dns::resolve_domain_first(target).await {
+        Ok(ip) => {
+            println!("{} {} → {}", "✓".green(), target.green(), ip.bright_black());
+            
+            // Check if Cloudflare IP
+            if dns::is_cloudflare_ip(&ip) {
+                println!("{} Cloudflare IP detected", "☁️".cyan());
+            }
+        }
+        Err(e) => {
+            println!("{} DNS resolution failed: {}", "✗".red(), e.to_string().red());
+            println!("\n{}", "Possible causes:".yellow());
+            println!("  - Domain tidak exist atau typo");
+            println!("  - DNS server bermasalah (coba: pkg install dnsutils)");
+            println!("  - Tidak ada koneksi internet");
+            return Err(e);
+        }
+    }
+    
+    // Build client with proper settings
     println!("\n{} Building HTTP client...", "🔧".bright_black());
     let client = Client::builder()
         .timeout(Duration::from_secs(timeout))
+        .connect_timeout(Duration::from_secs(5))
         .danger_accept_invalid_certs(true)
         .build()
         .map_err(|e| {
-            eprintln!("{} Failed to build HTTP client: {}", "✗".red(), e);
+            eprintln!("{} Failed to build client: {}", "✗".red(), e);
             e
         })?;
-
-    let url = format!("http://{}", target);
-    println!("{} {}", "URL:".bright_black(), url);
-    println!("{} Timeout: {}s", "⏱️".bright_black(), timeout);
     
-    println!("\n{} Sending request...", "📡".cyan());
-    match client.get(&url).send().await {
-        Ok(response) => {
-            let status = response.status().as_u16();
-            println!("{} Status: {}", "✓".green(), status.to_string().green());
-            println!("{} Target host is reachable", "✓".green());
-        }
-        Err(e) => {
-            println!("{} {}", "✗".red(), format!("Error: {}", e).red());
-            
-            // Detailed error breakdown
-            if e.is_timeout() {
-                println!("{}", "⚠️  Timeout: Request exceeded timeout limit".yellow());
-            } else if e.is_connect() {
-                println!("{}", "⚠️  Connection failed: Cannot reach target host".yellow());
-                println!("{}", "   - Check if target host is valid".bright_black());
-                println!("{}", "   - Verify internet connection".bright_black());
-            } else if e.is_request() {
-                println!("{}", "⚠️  Request error: Invalid request format".yellow());
-            } else {
-                println!("{}", "⚠️  Unknown error type".yellow());
+    // Try HTTPS first (modern default), then HTTP
+    let protocols = vec![
+        ("https", 443),
+        ("http", 80),
+    ];
+    
+    let mut last_error = None;
+    
+    for (protocol, port) in protocols {
+        let url = format!("{}://{}", protocol, target);
+        println!("\n{} Testing: {}", "📡".cyan(), url.bright_black());
+        println!("{} Timeout: {}s", "⏱️".bright_black(), timeout);
+        
+        match client.get(&url).send().await {
+            Ok(response) => {
+                let status = response.status().as_u16();
+                
+                // Check if 400 with HTTPS error message
+                if status == 400 && protocol == "http" {
+                    if let Ok(body) = response.text().await {
+                        if body.contains("HTTPS port") || body.contains("SSL") {
+                            println!("{} 400 Bad Request: Server requires HTTPS", "⚠️".yellow());
+                            continue; // Skip to HTTPS
+                        }
+                    }
+                }
+                
+                println!("{} Status: {} via {}", "✓".green(), 
+                         status.to_string().green(), 
+                         protocol.to_uppercase());
+                
+                println!("\n{}", "═".repeat(50).green());
+                println!("{}", "✅ TARGET HOST IS REACHABLE".green().bold());
+                println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
+                println!("{} {}", "Status Code:".bright_black(), status.to_string().green());
+                println!("{} {}", "Port:".bright_black(), port.to_string().green());
+                println!("{}", "═".repeat(50).green());
+                
+                return Ok(()); // Success!
+            }
+            Err(e) => {
+                println!("{} Failed via {}: {}", "✗".yellow(), protocol.to_uppercase(), e.to_string().dimmed());
+                last_error = Some(e);
+                // Continue to next protocol
             }
         }
+    }
+    
+    // All protocols failed - detailed error
+    if let Some(e) = last_error {
+        println!("\n{}", "═".repeat(50).red());
+        println!("{}", "❌ CONNECTION FAILED".red().bold());
+        println!("{}", "═".repeat(50).red());
+        
+        if e.is_timeout() {
+            println!("\n{}", "⏱️  Timeout Error".yellow().bold());
+            println!("Request exceeded {}s limit", timeout);
+            println!("\n{}", "Possible solutions:".cyan());
+            println!("  1. Increase timeout: Settings → Change Timeout");
+            println!("  2. Check internet connection stability");
+            println!("  3. Try using VPN or different network");
+            println!("  4. Verify target host is online");
+        } else if e.is_connect() {
+            println!("\n{}", "🔌 Connection Error".yellow().bold());
+            println!("Cannot establish connection to host");
+            println!("\n{}", "Possible solutions:".cyan());
+            println!("  1. Verify target format: example.com or ip:port");
+            println!("  2. Check if host requires authentication");
+            println!("  3. Confirm host is accessible from your location");
+        } else if e.is_request() {
+            println!("\n{}", "📡 Request Error".yellow().bold());
+            println!("Invalid request format or parameters");
+        } else {
+            println!("\n{}", "❓ Unknown Error".yellow().bold());
+            println!("{}", e);
+        }
+        
+        return Err(anyhow::anyhow!("Target host unreachable"));
     }
     
     Ok(())
@@ -87,40 +160,71 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
             print!("\n{} Testing connection...", "🔌".cyan());
             let client = Client::builder()
                 .timeout(Duration::from_secs(timeout))
+                .connect_timeout(Duration::from_secs(5))
                 .danger_accept_invalid_certs(true)
                 .build()?;
 
-            let url = format!("http://{}", target);
-            let request = client
-                .get(&url)
-                .header("Host", subdomain)
-                .build()?;
+            // Try HTTPS first, then HTTP
+            let protocols = vec!["https", "http"];
+            let mut success = false;
 
-            match client.execute(request).await {
-                Ok(response) => {
-                    let status = response.status().as_u16();
-                    println!(" {} Status: {}", "✓".green(), status.to_string().green());
-                    
-                    if is_cf {
-                        println!("\n{}", "═".repeat(50).green());
-                        println!("{}", "✅ WORKING BUG!".green().bold());
-                        println!("{} {}", "Subdomain:".bright_black(), subdomain.green());
-                        println!("{} {}", "IP:".bright_black(), ip.green());
-                        println!("{} {}", "Status:".bright_black(), status.to_string().green());
-                        println!("{}", "═".repeat(50).green());
-                    } else {
-                        println!("\n{}", "⚠️  Not a Cloudflare IP".yellow());
+            for protocol in protocols {
+                let url = format!("{}://{}", protocol, target);
+                let request = client
+                    .get(&url)
+                    .header("Host", subdomain)
+                    .build()?;
+
+                match client.execute(request).await {
+                    Ok(response) => {
+                        let status = response.status().as_u16();
+                        
+                        // Skip HTTP 400 if server wants HTTPS
+                        if status == 400 && protocol == "http" {
+                            if let Ok(body) = response.text().await {
+                                if body.contains("HTTPS port") {
+                                    continue; // Try HTTPS next
+                                }
+                            }
+                        }
+                        
+                        println!(" {} Status: {} via {}", "✓".green(), 
+                                 status.to_string().green(),
+                                 protocol.to_uppercase());
+                        
+                        if is_cf {
+                            println!("\n{}", "═".repeat(50).green());
+                            println!("{}", "✅ WORKING BUG!".green().bold());
+                            println!("{} {}", "Subdomain:".bright_black(), subdomain.green());
+                            println!("{} {}", "IP:".bright_black(), ip.green());
+                            println!("{} {}", "Status:".bright_black(), status.to_string().green());
+                            println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
+                            println!("{}", "═".repeat(50).green());
+                        } else {
+                            println!("\n{}", "⚠️  Not a Cloudflare IP".yellow());
+                        }
+                        
+                        success = true;
+                        break; // Success, exit loop
+                    }
+                    Err(e) => {
+                        if protocol == "http" {
+                            // Don't print error for HTTP, will try HTTPS
+                            continue;
+                        }
+                        println!(" {} {}", "✗".red(), format!("Error: {}", e).red());
+                        
+                        if e.is_timeout() {
+                            println!("{}", "   Timeout: Request took too long".yellow());
+                        } else if e.is_connect() {
+                            println!("{}", "   Connection failed to target".yellow());
+                        }
                     }
                 }
-                Err(e) => {
-                    println!(" {} {}", "✗".red(), format!("Error: {}", e).red());
-                    
-                    if e.is_timeout() {
-                        println!("{}", "   Timeout: Request took too long".yellow());
-                    } else if e.is_connect() {
-                        println!("{}", "   Connection failed to target".yellow());
-                    }
-                }
+            }
+
+            if !success {
+                println!("{}", "   Both HTTP and HTTPS failed".red());
             }
         }
         Err(e) => {
@@ -153,6 +257,7 @@ pub async fn batch_test(
 
     let client = Client::builder()
         .timeout(Duration::from_secs(timeout))
+        .connect_timeout(Duration::from_secs(5))
         .danger_accept_invalid_certs(true)
         .build()?;
 
@@ -168,24 +273,35 @@ pub async fn batch_test(
         if let Ok(ip) = dns::resolve_domain_first(subdomain).await {
             let is_cf = dns::is_cloudflare_ip(&ip);
             
-            // HTTP test
-            let url = format!("http://{}", target);
-            let request = client
-                .get(&url)
-                .header("Host", subdomain)
-                .build();
+            // Try HTTPS first, then HTTP for batch testing
+            let protocols = vec!["https", "http"];
+            
+            for protocol in protocols {
+                let url = format!("{}://{}", protocol, target);
+                let request = client
+                    .get(&url)
+                    .header("Host", subdomain)
+                    .build();
 
-            if let Ok(req) = request {
-                if let Ok(response) = client.execute(req).await {
-                    let status = response.status().as_u16();
-                    
-                    results.push(ScanResult {
-                        subdomain: subdomain.clone(),
-                        ip: ip.clone(),
-                        is_cloudflare: is_cf,
-                        is_working: is_cf && status < 500,
-                        status_code: Some(status),
-                    });
+                if let Ok(req) = request {
+                    if let Ok(response) = client.execute(req).await {
+                        let status = response.status().as_u16();
+                        
+                        // Skip HTTP 400 for HTTPS-only servers
+                        if status == 400 && protocol == "http" {
+                            continue;
+                        }
+                        
+                        results.push(ScanResult {
+                            subdomain: subdomain.clone(),
+                            ip: ip.clone(),
+                            is_cloudflare: is_cf,
+                            is_working: is_cf && status < 500,
+                            status_code: Some(status),
+                        });
+                        
+                        break; // Success with this protocol
+                    }
                 }
             }
         }

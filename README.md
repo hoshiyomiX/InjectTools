@@ -39,7 +39,6 @@ curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.
 - 📊 **Real-time Progress** - Live progress bars & statistics
 - 💾 **Config Persistence** - TOML-based configuration
 - 🌐 **crt.sh Integration** - Automatic subdomain discovery
-- 📦 **Batch Testing** - Test from file (one subdomain per line)
 - 📝 **Export Results** - Save scan results with timestamps
 - 📂 **View Results** - Browse previous scan results
 - ⏸️ **Signal Handling** - Graceful interrupt (Ctrl+C)
@@ -48,11 +47,9 @@ curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.
 1. 🎯 **Test Target Host** - Verify target reachability
 2. 🔍 **Test Single Subdomain** - Quick single test
 3. 🌐 **Fetch & Test dari crt.sh** - Auto-discover subdomains
-4. 📦 **Batch Test dari File** - Bulk testing
-5. 🚀 **Full Domain Scan** - Scan common subdomains
-6. 📊 **View Exported Results** - Browse past scans
-7. ⚙️ **Settings** - Configure target & timeout
-8. 🚪 **Exit**
+4. 📊 **View Exported Results** - Browse past scans
+5. ⚙️ **Settings** - Configure target & timeout
+6. 🚪 **Exit**
 
 ### Platform Support
 - 📱 Android/Termux (ARM64, ARMv7)
@@ -138,16 +135,6 @@ injecttools -t tunnel.example.com -s cdn.cloudflare.com
 injecttools -t tunnel.example.com -d cloudflare.com --crtsh
 ```
 
-**Batch Test:**
-```bash
-injecttools -t tunnel.example.com -b subdomains.txt
-```
-
-**Full Scan:**
-```bash
-injecttools -t tunnel.example.com -d cloudflare.com
-```
-
 **View Results:**
 ```bash
 injecttools --view-results
@@ -157,9 +144,8 @@ injecttools --view-results
 ```
 Options:
   -t, --target <TARGET>      Target host (tunnel/proxy)
-  -d, --domain <DOMAIN>      Domain to scan
+  -d, --domain <DOMAIN>      Domain to scan (with --crtsh)
   -s, --subdomain <SUB>      Test single subdomain
-  -b, --batch <FILE>         Batch test file
       --crtsh                Fetch from crt.sh
       --timeout <SECS>       Timeout [default: 10]
       --non-interactive      CLI mode only
@@ -213,17 +199,29 @@ Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
 
 ---
 
-## What's New in v2.3
+## What's New
 
-✅ **crt.sh Integration** - Automatic subdomain discovery  
-✅ **Batch Testing** - Test from file input  
-✅ **Export Results** - Save scans with timestamps  
-✅ **View Results** - Browse past scan results  
-✅ **Signal Handling** - Graceful Ctrl+C interrupt  
-✅ **Improved UI** - Better progress tracking  
-✅ **Settings Menu** - Configure target & timeout  
-✅ **Android Path Support** - `/sdcard/InjectTools` storage  
-✅ **Smart Installer** - Auto-build fallback, version management  
+### v2.3.1 (2026-01-15)
+- ❌ **Removed**: Batch test dari file (useless feature)
+- ❌ **Removed**: Full domain scan (useless feature)
+- 🚀 **Improved**: Simplified menu (6 options)
+- 🚀 **Improved**: Cleaner codebase
+
+### v2.3.0 (2026-01-15)
+- ✨ NEW: crt.sh integration for subdomain discovery
+- ✨ NEW: Export results to file with timestamps
+- ✨ NEW: View exported results
+- ✨ NEW: Signal handling (Ctrl+C graceful exit)
+- ✨ NEW: Settings menu
+- ✨ NEW: Smart installer with version management
+- 🐛 FIX: Android /sdcard path support
+- 🚀 IMPROVE: Better progress tracking
+- 🚀 IMPROVE: Enhanced UI/UX
+
+### v1.1.0 (2026-01-14)
+- Initial Rust implementation
+- Basic scanning features
+- Config persistence
 
 ---
 
@@ -244,9 +242,9 @@ Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
 ```
 InjectTools/
 ├── src/
-│   ├── main.rs        # Entry point & menu
+│   ├── main.rs        # Entry point & menu (6 options)
 │   ├── config.rs      # Config management
-│   ├── scanner.rs     # Scan engine
+│   ├── scanner.rs     # Scan engine (3 functions)
 │   ├── dns.rs         # DNS + CF detection
 │   ├── crtsh.rs       # crt.sh integration
 │   ├── results.rs     # Export & view results
@@ -268,12 +266,12 @@ InjectTools/
 **Via GitHub UI:**
 1. Go to [Termux Workflow](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml)
 2. Click "Run workflow"
-3. Version: `termux-v2.3.0`
+3. Version: `termux-v2.3.1`
 
 **Via Git Tag:**
 ```bash
-git tag termux-v2.3.0
-git push origin termux-v2.3.0
+git tag termux-v2.3.1
+git push origin termux-v2.3.1
 ```
 
 See [TERMUX_BUILD.md](TERMUX_BUILD.md) for details.
@@ -331,27 +329,6 @@ uname -m  # Check your arch
 - 📱 [TERMUX_BUILD.md](TERMUX_BUILD.md) - Build guide
 - 🚀 [RELEASE.md](RELEASE.md) - Multi-platform release
 - 💾 [install.sh](install.sh) - Installer script
-
----
-
-## Changelog
-
-### v2.3.0 (2026-01-15)
-- ✨ NEW: crt.sh integration for subdomain discovery
-- ✨ NEW: Batch testing from file
-- ✨ NEW: Export results to file with timestamps
-- ✨ NEW: View exported results
-- ✨ NEW: Signal handling (Ctrl+C graceful exit)
-- ✨ NEW: Settings menu
-- ✨ NEW: Smart installer with version management
-- 🐛 FIX: Android /sdcard path support
-- 🚀 IMPROVE: Better progress tracking
-- 🚀 IMPROVE: Enhanced UI/UX
-
-### v1.1.0 (2026-01-14)
-- Initial Rust implementation
-- Basic scanning features
-- Config persistence
 
 ---
 

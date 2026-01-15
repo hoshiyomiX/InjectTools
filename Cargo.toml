@@ -1,15 +1,15 @@
 [package]
 name = "injecttools"
-version = "1.1.0"
+version = "2.3.0"
 edition = "2021"
 authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
-description = "Bug Inject Scanner for Cloudflare Subdomains"
+description = "Bug Inject Scanner for Cloudflare Subdomains v2.3"
 license = "MIT"
 repository = "https://github.com/hoshiyomiX/InjectTools"
 
 [dependencies]
-# HTTP client dengan DNS resolver custom
-reqwest = { version = "0.11", features = ["blocking", "rustls-tls"], default-features = false }
+# HTTP client
+reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features = false }
 tokio = { version = "1", features = ["full"] }
 
 # DNS resolution
@@ -31,7 +31,7 @@ serde_json = "1.0"
 toml = "0.8"
 dirs = "5.0"
 
-# Async runtime
+# Async
 futures = "0.3"
 
 # Date/Time
@@ -41,9 +41,12 @@ chrono = "0.4"
 anyhow = "1.0"
 thiserror = "1.0"
 
+# Ping
+surge-ping = "0.8"
+
 [profile.release]
-opt-level = "z"     # Optimize for size
-lto = true          # Link-time optimization
-codegen-units = 1   # Better optimization
-strip = true        # Strip symbols
-panic = "abort"     # Smaller binary
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

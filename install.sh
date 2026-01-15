@@ -1,7 +1,7 @@
 #!/bin/bash
 # InjectTools - Smart Installer for Termux
 # Usage: curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
-# Or with version: curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
+# Or with version: curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.1
 
 set -e
 
@@ -45,6 +45,64 @@ fi
 
 echo ""
 
+# Function to safely install binary with verification
+safe_install_binary() {
+    local source_binary="$1"
+    local target_path="$PREFIX/bin/injecttools"
+    
+    # Verify source exists and is executable
+    if [[ ! -f "$source_binary" ]]; then
+        echo -e "${RED}✗ Source binary not found: $source_binary${NC}"
+        return 1
+    fi
+    
+    # Check if it's a valid ELF binary
+    if ! file "$source_binary" | grep -q "ELF"; then
+        echo -e "${RED}✗ Invalid binary format${NC}"
+        return 1
+    fi
+    
+    # Get version from new binary
+    chmod +x "$source_binary"
+    local new_version=$("$source_binary" --version 2>/dev/null || echo "unknown")
+    echo -e "${BLUE}  New version: ${GREEN}$new_version${NC}"
+    
+    # Backup existing if present
+    if [[ -f "$target_path" ]]; then
+        local old_version=$("$target_path" --version 2>/dev/null || echo "unknown")
+        echo -e "${YELLOW}  Old version: $old_version${NC}"
+        
+        local backup="$target_path.backup.$(date +%s)"
+        echo -e "${YELLOW}  📦 Backing up to: ${backup##*/}${NC}"
+        cp "$target_path" "$backup"
+        
+        # Force remove old binary
+        echo -e "${CYAN}  🗑️ Removing old binary...${NC}"
+        rm -f "$target_path"
+    fi
+    
+    # Install new binary
+    echo -e "${CYAN}  📥 Installing new binary...${NC}"
+    cp "$source_binary" "$target_path"
+    chmod +x "$target_path"
+    
+    # Verify installation
+    if [[ ! -f "$target_path" ]]; then
+        echo -e "${RED}✗ Installation failed: binary not found after copy${NC}"
+        return 1
+    fi
+    
+    if ! "$target_path" --version &>/dev/null; then
+        echo -e "${RED}✗ Installation failed: binary not executable${NC}"
+        return 1
+    fi
+    
+    local installed_version=$("$target_path" --version 2>&1)
+    echo -e "${GREEN}✓ Installed: $installed_version${NC}"
+    
+    return 0
+}
+
 # Function to try download from GitHub releases
 try_download_release() {
     local version="$1"
@@ -59,21 +117,13 @@ try_download_release() {
     
     if curl -fsSL -o "$tarball" "$download_url" 2>/dev/null; then
         if tar xzf "$tarball" 2>/dev/null && [[ -f "injecttools" ]]; then
-            # Success!
-            if [[ -f "$PREFIX/bin/injecttools" ]]; then
-                local backup="$PREFIX/bin/injecttools.backup.$(date +%s)"
-                echo -e "${YELLOW}  ⚠ Backing up: ${backup##*/}${NC}"
-                mv "$PREFIX/bin/injecttools" "$backup"
+            # Use safe install
+            if safe_install_binary "$PWD/injecttools"; then
+                cd ~
+                rm -rf "$tmp_dir"
+                echo -e "${GREEN}✓ Installed from release: $version${NC}"
+                return 0
             fi
-            
-            mv injecttools "$PREFIX/bin/"
-            chmod +x "$PREFIX/bin/injecttools"
-            
-            cd ~
-            rm -rf "$tmp_dir"
-            
-            echo -e "${GREEN}✓ Installed from release: $version${NC}"
-            return 0
         fi
     fi
     
@@ -167,22 +217,13 @@ build_from_source() {
         local binary_path="target/$RUST_TARGET/release/injecttools"
         
         if [[ -f "$binary_path" ]]; then
-            # Backup existing
-            if [[ -f "$PREFIX/bin/injecttools" ]]; then
-                local backup="$PREFIX/bin/injecttools.backup.$(date +%s)"
-                echo -e "${YELLOW}⚠ Backing up: ${backup##*/}${NC}"
-                mv "$PREFIX/bin/injecttools" "$backup"
+            # Use safe install
+            if safe_install_binary "$binary_path"; then
+                cd ~
+                rm -rf "$build_dir"
+                echo -e "${GREEN}✓ Built and installed from source${NC}"
+                return 0
             fi
-            
-            # Install
-            cp "$binary_path" "$PREFIX/bin/injecttools"
-            chmod +x "$PREFIX/bin/injecttools"
-            
-            cd ~
-            rm -rf "$build_dir"
-            
-            echo -e "${GREEN}✓ Built and installed from source${NC}"
-            return 0
         else
             echo -e "${RED}✗ Build succeeded but binary not found${NC}"
             cd ~
@@ -237,7 +278,7 @@ if [[ "$INSTALLED" == "false" ]]; then
     echo -e "${YELLOW}⚠ No latest release found, trying fallback versions...${NC}"
     echo ""
     
-    FALLBACK_VERSIONS=("termux-v2.3.0" "v2.3.0" "termux-v1.1.0" "v1.1.0")
+    FALLBACK_VERSIONS=("termux-v2.3.1" "termux-v2.3.0" "v2.3.1" "v2.3.0" "termux-v1.1.0" "v1.1.0")
     
     for version in "${FALLBACK_VERSIONS[@]}"; do
         if try_download_release "$version"; then
@@ -274,6 +315,9 @@ if [[ -f "$PREFIX/bin/injecttools" ]]; then
     if VERSION_OUT=$(injecttools --version 2>&1); then
         echo -e "${BLUE}🔖 Version: ${GREEN}$VERSION_OUT${NC}"
     fi
+    
+    # Show SHA256 for verification
+    echo -e "${BLUE}🔐 SHA256: ${GREEN}$(sha256sum $PREFIX/bin/injecttools | cut -d' ' -f1 | head -c16)...${NC}"
 fi
 
 echo ""

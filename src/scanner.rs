@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::process::Command;
 
 use crate::dns;
 use crate::ui;
@@ -40,6 +41,41 @@ fn tcp_latency_check(host: &str, port: u16, timeout_secs: u64) -> Option<u128> {
         Ok(_) => Some(start.elapsed().as_millis()),
         Err(_) => None,
     }
+}
+
+// ICMP ping test
+// Returns response time in ms if successful
+fn ping_test(host: &str, timeout_secs: u64) -> Option<u128> {
+    // Try ping command (works on Android/Termux)
+    let output = Command::new("ping")
+        .arg("-c")
+        .arg("1")  // 1 packet
+        .arg("-W")
+        .arg(timeout_secs.to_string())  // timeout
+        .arg(host)
+        .output();
+    
+    if let Ok(result) = output {
+        if result.status.success() {
+            // Parse output untuk dapat response time
+            if let Ok(stdout) = String::from_utf8(result.stdout) {
+                // Cari pattern "time=XXms" atau "time=XX.XX ms"
+                if let Some(time_start) = stdout.find("time=") {
+                    let time_str = &stdout[time_start + 5..];
+                    if let Some(space_pos) = time_str.find(" ") {
+                        let time_value = &time_str[..space_pos];
+                        if let Ok(ms) = time_value.parse::<f64>() {
+                            return Some(ms as u128);
+                        }
+                    }
+                }
+                // Ping sukses tapi gak bisa parse time, return 0 (success indicator)
+                return Some(0);
+            }
+        }
+    }
+    
+    None
 }
 
 // Format latency with color coding
@@ -136,16 +172,31 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "Testing target host...".cyan());
     println!("{}", "━".repeat(50).bright_black());
     
-    // Silent DNS check (no logging)
-    let _resolved_ip = match dns::resolve_domain_first(target).await {
+    // Mechanism dari bash script:
+    // 1. DNS resolution test
+    // 2. Ping test
+    // 3. (Fallback) HTTP/HTTPS test
+    // 4. (Last resort) TCP port check
+    
+    // Step 1: DNS Resolution Test
+    let resolved_ip = match dns::resolve_domain_first(target).await {
         Ok(ip) => ip,
         Err(_) => {
-            // DNS failed, will try HTTP anyway via Cloudflare IPs
-            String::new()
+            // DNS failed - target DOWN
+            println!("\n{}", "❌ TARGET OFFLINE".red().bold());
+            println!("{}", "Reason: DNS resolution failed".bright_black());
+            return Ok(());
         }
     };
     
-    // Build client
+    // Step 2: Ping Test
+    if let Some(_ping_time) = ping_test(target, 3) {
+        // Ping successful - target UP
+        println!("\n{}", "✅ TARGET ONLINE".green().bold());
+        return Ok(());
+    }
+    
+    // Step 3: HTTP/HTTPS Test (fallback untuk host yang block ICMP)
     let client = Client::builder()
         .timeout(Duration::from_secs(timeout))
         .connect_timeout(Duration::from_secs(timeout.saturating_sub(2)))
@@ -154,7 +205,6 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
         .build()
         .map_err(|e| anyhow::anyhow!("Failed to build client: {}", e))?;
     
-    // Try HTTP first (most common), then HTTPS
     let protocols = vec![("http", 80), ("https", 443)];
     
     for (protocol, _port) in &protocols {
@@ -177,7 +227,7 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
         }
     }
     
-    // HTTP/HTTPS failed - try TCP check (silent)
+    // Step 4: TCP Port Check (last resort)
     let tcp_ports = vec![443, 80, 8080];
     
     for port in &tcp_ports {
@@ -189,6 +239,7 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     
     // All checks failed
     println!("\n{}", "❌ TARGET OFFLINE".red().bold());
+    println!("{}", "Reason: All connection attempts failed".bright_black());
     Ok(())
 }
 

@@ -1,0 +1,27 @@
+Build started at 2026-01-15 06:39:52 UTC
+Target: aarch64-linux-android
+========================================
+📥 Downloading Android NDK r26d...
+📦 Extracting NDK...
+✅ NDK ready
+🔧 Toolchain configured
+🔨 Building...
+[1m[92m    Updating[0m crates.io index
+[1m[92m     Locking[0m 251 packages to latest compatible versions
+[1m[92m      Adding[0m colored v2.2.0 [1m[33m(available: v3.0.0)[0m
+[1m[92m      Adding[0m dialoguer v0.11.0 [1m[33m(available: v0.12.0)[0m
+[1m[92m      Adding[0m dirs v5.0.1 [1m[33m(available: v6.0.0)[0m
+[1m[92m      Adding[0m indicatif v0.17.11 [1m[33m(available: v0.18.3)[0m
+[1m[92m      Adding[0m ipnetwork v0.20.0 [1m[33m(available: v0.21.1)[0m
+[1m[92m      Adding[0m reqwest v0.11.27 [1m[33m(available: v0.13.1)[0m
+[1m[92m      Adding[0m terminal_size v0.3.0 [1m[33m(available: v0.4.3)[0m
+[1m[92m      Adding[0m thiserror v1.0.69 [1m[33m(available: v2.0.17)[0m
+[1m[92m      Adding[0m toml v0.8.23 [1m[33m(available: v0.9.11+spec-1.1.0)[0m
+[1m[92m   Compiling[0m injecttools v2.3.0 (/home/runner/work/InjectTools/InjectTools)
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 31.19s
+✅ Build successful
+-rwxr-xr-x 2 runner runner 2.9M Jan 15 06:41 target/aarch64-linux-android/release/injecttools
+Before: 2.9MiB
+After: 2.9MiB
+98540540de0163a8094cbbe1dc110060956c34ad9b2747746f1b5c2514fd83a5  injecttools-termux-arm64.tar.gz
+Finished: 2026-01-15 06:41:23 UTC

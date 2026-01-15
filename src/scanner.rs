@@ -129,28 +129,22 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
     println!("\n{} {}", "Subdomain:".bright_black(), subdomain);
     println!("{} {}", "Target:".bright_black(), target);
     
-    // DNS resolution
-    print!("\n{} Resolving DNS...", "📡".cyan());
-    let ip = match dns::resolve_domain_first(subdomain).await {
+    // DNS resolution (silent, no output)
+    let (ip, is_cf) = match dns::resolve_domain_first(subdomain).await {
         Ok(ip) => {
-            println!(" {} {}", "✓".green(), ip.green());
-            
             let is_cf = dns::is_cloudflare_ip(&ip);
-            if is_cf {
-                println!("{} {} {}", "☁️".cyan(), "Cloudflare IP detected".cyan(), ip.bright_black());
-            } else {
-                println!("{} {} {}", "🌐".yellow(), "Non-Cloudflare IP".yellow(), ip.bright_black());
-            }
-            
-            ip
+            (ip, is_cf)
         }
         Err(e) => {
-            println!(" {} {}", "✗".red(), format!("DNS resolution failed: {}", e).red());
+            // DNS failed - show error and exit
+            println!("\n{}", "═".repeat(50).red());
+            println!("{}", "❌ DNS RESOLUTION FAILED".red().bold());
+            println!("\n{} {}", "Subdomain:".bright_black(), subdomain.red());
+            println!("{} {}", "Error:".bright_black(), e.to_string().red());
+            println!("{}", "═".repeat(50).red());
             return Ok(());
         }
     };
-    
-    let is_cf = dns::is_cloudflare_ip(&ip);
     
     // Build client
     print!("\n{} Testing connection...", "🔌".cyan());

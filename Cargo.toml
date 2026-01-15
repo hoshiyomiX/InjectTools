@@ -1,6 +1,6 @@
 [package]
 name = "injecttools"
-version = "2.3.0"
+version = "2.3.1"
 edition = "2021"
 authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
 description = "Bug Inject Scanner for Cloudflare Subdomains - Android/Termux Only"
@@ -10,7 +10,7 @@ keywords = ["android", "termux", "cloudflare", "scanner", "networking"]
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
-# HTTP client - with both native-tls and rustls for compatibility
+# HTTP client - with native-tls for Android compatibility
 reqwest = { version = "0.11", features = ["blocking", "json", "native-tls"], default-features = true }
 tokio = { version = "1", features = ["full"] }
 

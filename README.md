@@ -5,10 +5,27 @@
 
 **Bug Inject Scanner for Cloudflare Subdomains** - High-performance Rust implementation
 
-## 🚀 Quick Install (Termux)
+## 🚀 Quick Install
+
+### Termux (One-Liner)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
+```
+
+**Features:**
+- ✅ Auto-detect latest release
+- ✅ Fallback to build from source
+- ✅ Auto-install dependencies
+- ✅ Backup existing installation
+
+**Install Specific Version:**
+```bash
+# Install specific release
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
+
+# Or any other version
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s v1.1.0
 ```
 
 ---
@@ -49,26 +66,42 @@ curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.
 
 ### Termux (Recommended)
 
-**Method 1: One-Liner (Auto-install)**
+**Method 1: Auto-Install (Latest)**
 ```bash
 curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
 ```
 
-**Method 2: Manual**
+**Method 2: Specific Version**
+```bash
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
+```
+
+**Method 3: Manual Download**
 ```bash
 # Check architecture
 uname -m  # aarch64=ARM64, armv7l=ARMv7
 
-# ARM64 (Modern devices)
-wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-arm64.tar.gz
-tar xzf injecttools-termux-arm64.tar.gz && mv injecttools $PREFIX/bin/ && chmod +x $PREFIX/bin/injecttools
+# ARM64
+wget https://github.com/hoshiyomiX/InjectTools/releases/download/termux-v2.3.0/injecttools-termux-arm64.tar.gz
+tar xzf injecttools-termux-arm64.tar.gz
+mv injecttools $PREFIX/bin/
+chmod +x $PREFIX/bin/injecttools
 
-# ARMv7 (Older devices)
-wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-armv7.tar.gz
-tar xzf injecttools-termux-armv7.tar.gz && mv injecttools $PREFIX/bin/ && chmod +x $PREFIX/bin/injecttools
+# ARMv7
+wget https://github.com/hoshiyomiX/InjectTools/releases/download/termux-v2.3.0/injecttools-termux-armv7.tar.gz
+tar xzf injecttools-termux-armv7.tar.gz
+mv injecttools $PREFIX/bin/
+chmod +x $PREFIX/bin/injecttools
+```
 
-# Run
-injecttools
+**Method 4: Build from Source**
+```bash
+pkg install rust git binutils -y
+git clone https://github.com/hoshiyomiX/InjectTools.git
+cd InjectTools
+cargo build --release --target aarch64-linux-android
+cp target/aarch64-linux-android/release/injecttools $PREFIX/bin/
+injecttools --version
 ```
 
 ### Linux
@@ -77,14 +110,6 @@ wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injectto
 tar xzf injecttools-linux-x86_64.tar.gz
 sudo mv injecttools /usr/local/bin/
 injecttools
-```
-
-### Build from Source
-```bash
-git clone https://github.com/hoshiyomiX/InjectTools.git
-cd InjectTools
-cargo build --release
-./target/release/injecttools
 ```
 
 ---
@@ -198,6 +223,7 @@ Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
 ✅ **Improved UI** - Better progress tracking  
 ✅ **Settings Menu** - Configure target & timeout  
 ✅ **Android Path Support** - `/sdcard/InjectTools` storage  
+✅ **Smart Installer** - Auto-build fallback, version management  
 
 ---
 
@@ -228,7 +254,7 @@ InjectTools/
 ├── .github/workflows/
 │   ├── release.yml        # Multi-platform build
 │   └── termux-release.yml # Termux-only (fast)
-├── install.sh        # One-liner installer
+├── install.sh        # Smart installer
 ├── Cargo.toml        # Dependencies
 └── README.md
 ```
@@ -256,12 +282,25 @@ See [TERMUX_BUILD.md](TERMUX_BUILD.md) for details.
 
 ## Troubleshooting
 
-### Termux Issues
+### Installation Issues
 
-**curl not found:**
+**No release available:**
 ```bash
-pkg install curl
+# Installer will auto-build from source
+# Or manually:
+pkg install rust git binutils
+git clone https://github.com/hoshiyomiX/InjectTools.git
+cd InjectTools
+cargo build --release --target aarch64-linux-android
 ```
+
+**Wrong version:**
+```bash
+# Install specific version
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v1.1.0
+```
+
+### Runtime Issues
 
 **Permission denied:**
 ```bash
@@ -284,17 +323,6 @@ uname -m  # Check your arch
 # Download matching binary (arm64 or armv7)
 ```
 
-### Build from Source
-
-**Missing Rust:**
-```bash
-# Termux
-pkg install rust
-
-# Linux
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
 ---
 
 ## Documentation
@@ -315,6 +343,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 - ✨ NEW: View exported results
 - ✨ NEW: Signal handling (Ctrl+C graceful exit)
 - ✨ NEW: Settings menu
+- ✨ NEW: Smart installer with version management
 - 🐛 FIX: Android /sdcard path support
 - 🚀 IMPROVE: Better progress tracking
 - 🚀 IMPROVE: Enhanced UI/UX

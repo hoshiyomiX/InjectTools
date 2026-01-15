@@ -10,8 +10,8 @@ keywords = ["android", "termux", "cloudflare", "scanner", "networking"]
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
-# HTTP client - with native-tls for Android compatibility
-reqwest = { version = "0.11", features = ["blocking", "json", "native-tls"], default-features = true }
+# HTTP client - native-tls with vendored OpenSSL for Android
+reqwest = { version = "0.11", features = ["blocking", "json", "native-tls-vendored"], default-features = false }
 tokio = { version = "1", features = ["full"] }
 
 # DNS resolution
@@ -21,7 +21,7 @@ trust-dns-resolver = "0.23"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialoger = "0.11"
 terminal_size = "0.3"
 
 # Networking

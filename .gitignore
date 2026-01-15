@@ -1,39 +1,43 @@
-# Rust
+# Rust build artifacts
 /target/
-**/*.rs.bk
 Cargo.lock
+
+# Release artifacts (exclude from repo, only in GitHub Releases)
+*.tar.gz
+*.tar.gz.sha256
+*.zip
+
+# Build logs are INCLUDED (tracked in build-logs/)
+# Don't ignore: build-logs/*.log
+
+# Rust debug
+**/*.rs.bk
 *.pdb
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
 .DS_Store
 
-# Config & Data
-*.toml.backup
-bug-wordlists/
-*.txt.download
+# Temporary files
+*.tmp
+*.temp
 
-# Build artifacts
-*.tar.gz
-*.zip
-*.deb
-*.rpm
+# Android NDK (CI only)
+android-ndk-*/
 
-# Test outputs
-bug-*.txt
-scan-results-*.txt
+# Config (user-specific)
+config.toml
+*.local
 
-# OS specific
-Thumbs.db
-.Trashes
+# Results (user data)
+results/
+*.txt
+!README*.txt
 
-# Logs
-*.log
-
-# Distribution
-dist/
-*.AppImage
+# Cache
+cache/
+.cargo/

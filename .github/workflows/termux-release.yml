@@ -7,24 +7,24 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., termux-v2.3.0)'
+        description: 'Release version (e.g., termux-v2.3.1)'
         required: true
-        default: 'termux-v2.3.0'
+        default: 'termux-v2.3.1'
 
 env:
   CARGO_TERM_COLOR: always
 
-# Add global permissions for all jobs
 permissions:
   contents: write
-  actions: read
 
 jobs:
   build-termux:
     name: Build for Termux (${{ matrix.target }})
     runs-on: ubuntu-latest
+    
     permissions:
-      contents: write  # Required for pushing logs
+      contents: write
+    
     strategy:
       fail-fast: false
       matrix:
@@ -44,285 +44,232 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # Fetch all history for git operations
+          fetch-depth: 0
+
+      - name: Setup build logging
+        run: |
+          # Logs di root repo biar jelas
+          mkdir -p build-logs
+          
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          BUILD_LOG="build-logs/build-${{ matrix.arch }}-${TIMESTAMP}.log"
+          
+          echo "BUILD_LOG=$BUILD_LOG" >> $GITHUB_ENV
+          echo "BUILD_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          
+          # Create header
+          cat > "$BUILD_LOG" << 'EOFLOG'
+╔══════════════════════════════════════════════════════════════╗
+║          InjectTools Termux Build Log                        ║
+╚══════════════════════════════════════════════════════════════╝
+EOFLOG
+          
+          cat >> "$BUILD_LOG" << EOF
+
+Build Information:
+══════════════════
+Target: ${{ matrix.target }}
+Architecture: ${{ matrix.arch }}
+Android API: ${{ matrix.api }}
+Runner: ubuntu-latest
+Rust: $(rustc --version 2>&1 || echo 'installing...')
+Cargo: $(cargo --version 2>&1 || echo 'installing...')
+
+Trigger: ${{ github.event_name }}
+Commit: ${{ github.sha }}
+Ref: ${{ github.ref }}
+Actor: ${{ github.actor }}
+
+Started: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+══════════════════════════════════════════════════════════════
+
+EOF
+          
+          echo "✅ Log initialized: $BUILD_LOG"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Cache cargo registry
+      - name: Cache cargo
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: termux-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Setup build logging
-        run: |
-          mkdir -p .github/build-logs
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          BUILD_LOG=".github/build-logs/build-${{ matrix.arch }}-${TIMESTAMP}.log"
-          echo "BUILD_LOG=$BUILD_LOG" >> $GITHUB_ENV
-          echo "BUILD_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
-          
-          # Create log header
-          cat > $BUILD_LOG << 'EOFLOG'
-          ╔══════════════════════════════════════════════════════════════╗
-          ║          InjectTools Termux Build Log                        ║
-          ╚══════════════════════════════════════════════════════════════╝
-          EOFLOG
-          
-          cat >> $BUILD_LOG << EOF
-          
-          Build Information:
-          ------------------
-          Target: ${{ matrix.target }}
-          Architecture: ${{ matrix.arch }}
-          Android API: ${{ matrix.api }}
-          Runner OS: ubuntu-latest
-          Rust Version: $(rustc --version)
-          Cargo Version: $(cargo --version)
-          
-          Triggered by: ${{ github.event_name }}
-          Commit SHA: ${{ github.sha }}
-          Ref: ${{ github.ref }}
-          Actor: ${{ github.actor }}
-          
-          Started at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          
-          ══════════════════════════════════════════════════════════════
-          
-          EOF
-
-      - name: Download & Setup Android NDK
+      - name: Download Android NDK
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] 📦 Downloading Android NDK r26d..."
+            echo "[$(date +'%H:%M:%S')] 📦 Downloading NDK r26d..."
+            wget -q --show-progress https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
             
-            if ! wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip; then
-              echo "[$(date +'%H:%M:%S')] ❌ ERROR: Failed to download NDK"
-              exit 1
-            fi
-            
-            echo "[$(date +'%H:%M:%S')] 📂 Extracting NDK..."
-            if ! unzip -q android-ndk-r26d-linux.zip; then
-              echo "[$(date +'%H:%M:%S')] ❌ ERROR: Failed to extract NDK"
-              exit 1
-            fi
+            echo "[$(date +'%H:%M:%S')] 📂 Extracting..."
+            unzip -q android-ndk-r26d-linux.zip
             
             echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
-            echo "[$(date +'%H:%M:%S')] ✅ NDK installed at: $PWD/android-ndk-r26d"
-            
-          } 2>&1 | tee -a $BUILD_LOG
+            echo "[$(date +'%H:%M:%S')] ✅ NDK ready"
+            echo ""
+          } 2>&1 | tee -a "$BUILD_LOG"
 
-      - name: Setup Android Build Environment
+      - name: Configure Android toolchain
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] ⚙️ Configuring Android build environment..."
+            echo "[$(date +'%H:%M:%S')] ⚙️ Configuring toolchain..."
             
             NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
             
-            # Set environment variables for cc-rs crate
+            # aarch64
             echo "CC_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
-            echo "CXX_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang++" >> $GITHUB_ENV
             echo "AR_aarch64_linux_android=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
-            
-            echo "CC_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
-            echo "CXX_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang++" >> $GITHUB_ENV
-            echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
-            
-            # Cargo linker configuration
             echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
+            
+            # armv7
+            echo "CC_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
+            echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
             echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
             
-            echo "[$(date +'%H:%M:%S')] ✅ Environment variables configured"
-            
-          } 2>&1 | tee -a $BUILD_LOG
+            echo "[$(date +'%H:%M:%S')] ✅ Toolchain configured"
+            echo ""
+          } 2>&1 | tee -a "$BUILD_LOG"
 
-      - name: Build release binary
+      - name: Build binary
         id: build
         continue-on-error: true
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] 🔨 Starting cargo build for ${{ matrix.target }}..."
+            echo "[$(date +'%H:%M:%S')] 🔨 Building for ${{ matrix.target }}..."
             echo ""
             
             if cargo build --release --target ${{ matrix.target }} 2>&1; then
               echo ""
-              echo "[$(date +'%H:%M:%S')] ✅ Build completed successfully"
+              echo "[$(date +'%H:%M:%S')] ✅ BUILD SUCCESS"
               echo "BUILD_STATUS=success" >> $GITHUB_OUTPUT
             else
-              BUILD_EXIT_CODE=$?
               echo ""
-              echo "[$(date +'%H:%M:%S')] ❌ Build failed with exit code: $BUILD_EXIT_CODE"
+              echo "[$(date +'%H:%M:%S')] ❌ BUILD FAILED (exit: $?)"
               echo "BUILD_STATUS=failed" >> $GITHUB_OUTPUT
               exit 1
             fi
             
             echo ""
-            echo "Build artifacts:"
-            ls -lh target/${{ matrix.target }}/release/ | grep injecttools || echo "Binary not found!"
-            
-          } 2>&1 | tee -a $BUILD_LOG
+            ls -lh target/${{ matrix.target }}/release/injecttools 2>&1 || echo "⚠️ Binary not found"
+            echo ""
+          } 2>&1 | tee -a "$BUILD_LOG"
 
       - name: Strip binary
         if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] ✂️ Stripping debug symbols..."
+            echo "[$(date +'%H:%M:%S')] ✂️ Stripping..."
             
-            SIZE_BEFORE=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
-            echo "Binary size before strip: $(numfmt --to=iec-i --suffix=B $SIZE_BEFORE)"
+            BEFORE=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
             
             $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
               target/${{ matrix.target }}/release/injecttools
             
-            SIZE_AFTER=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
-            echo "Binary size after strip: $(numfmt --to=iec-i --suffix=B $SIZE_AFTER)"
+            AFTER=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
+            SAVED=$((BEFORE - AFTER))
             
-            SAVED=$((SIZE_BEFORE - SIZE_AFTER))
-            echo "Space saved: $(numfmt --to=iec-i --suffix=B $SAVED)"
-            
-          } 2>&1 | tee -a $BUILD_LOG
+            echo "  Before: $(numfmt --to=iec-i --suffix=B $BEFORE)"
+            echo "  After:  $(numfmt --to=iec-i --suffix=B $AFTER)"
+            echo "  Saved:  $(numfmt --to=iec-i --suffix=B $SAVED)"
+            echo ""
+          } 2>&1 | tee -a "$BUILD_LOG"
 
-      - name: Test binary
+      - name: Package binary
         if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] 🧪 Testing binary validity..."
-            echo ""
-            file target/${{ matrix.target }}/release/injecttools
-            echo ""
-            ls -lh target/${{ matrix.target }}/release/injecttools
-            echo ""
-            echo "[$(date +'%H:%M:%S')] ✅ Binary is valid"
-            
-          } 2>&1 | tee -a $BUILD_LOG
-
-      - name: Compress binary
-        if: steps.build.outputs.BUILD_STATUS == 'success'
-        run: |
-          {
-            echo "[$(date +'%H:%M:%S')] 📦 Compressing binary..."
+            echo "[$(date +'%H:%M:%S')] 📦 Packaging..."
             
             cd target/${{ matrix.target }}/release
             tar czf ../../../${{ matrix.asset_name }}.tar.gz injecttools
             cd ../../..
             
-            SIZE=$(stat -c%s ${{ matrix.asset_name }}.tar.gz)
-            echo "Compressed size: $(numfmt --to=iec-i --suffix=B $SIZE)"
+            sha256sum ${{ matrix.asset_name }}.tar.gz | tee ${{ matrix.asset_name }}.tar.gz.sha256
+            
             ls -lh ${{ matrix.asset_name }}.tar.gz
-            
-          } 2>&1 | tee -a $BUILD_LOG
+            echo ""
+          } 2>&1 | tee -a "$BUILD_LOG"
 
-      - name: Generate SHA256 checksum
-        if: steps.build.outputs.BUILD_STATUS == 'success'
-        run: |
-          {
-            echo "[$(date +'%H:%M:%S')] 🔐 Generating SHA256 checksum..."
-            sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
-            cat ${{ matrix.asset_name }}.tar.gz.sha256
-            
-          } 2>&1 | tee -a $BUILD_LOG
-
-      - name: Finalize build log
+      - name: Finalize log
         if: always()
         run: |
           {
-            echo ""
             echo "══════════════════════════════════════════════════════════════"
             echo ""
-            echo "Build Summary:"
-            echo "--------------"
-            echo "Status: ${{ steps.build.outputs.BUILD_STATUS || 'failed' }}"
-            echo "Finished at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-            echo "Duration: $SECONDS seconds"
+            echo "Build Summary"
+            echo "═════════════"
+            echo "Status:   ${{ steps.build.outputs.BUILD_STATUS || 'FAILED' }}"
+            echo "Finished: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "Duration: ${SECONDS}s"
             echo ""
             
             if [ "${{ steps.build.outputs.BUILD_STATUS }}" = "success" ]; then
-              echo "✅ Build completed successfully!"
-              echo ""
-              echo "Artifacts:"
-              echo "  - ${{ matrix.asset_name }}.tar.gz"
-              echo "  - ${{ matrix.asset_name }}.tar.gz.sha256"
+              echo "✅ SUCCESS - Artifacts ready"
             else
-              echo "❌ Build failed. Check logs above for errors."
-              echo ""
-              echo "Common issues:"
-              echo "  - Dependency compilation errors"
-              echo "  - Linker errors (check NDK configuration)"
-              echo "  - Out of memory"
+              echo "❌ FAILED - Check logs above"
             fi
             
             echo ""
             echo "╔══════════════════════════════════════════════════════════════╗"
             echo "║                    End of Build Log                          ║"
             echo "╚══════════════════════════════════════════════════════════════╝"
-            
-          } 2>&1 | tee -a $BUILD_LOG
+          } 2>&1 | tee -a "$BUILD_LOG"
+          
+          echo ""
+          echo "📝 Log file: $BUILD_LOG"
+          ls -lh "$BUILD_LOG"
 
-      - name: Push build log to repository
+      - name: Push log to repo
         if: always()
-        continue-on-error: true  # Don't fail build if log push fails
+        continue-on-error: true
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # Git setup
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # Rename log with status prefix
+          # Rename with status
           STATUS="${{ steps.build.outputs.BUILD_STATUS || 'failed' }}"
-          FINAL_LOG=".github/build-logs/${STATUS}-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
-          mv $BUILD_LOG $FINAL_LOG
+          FINAL_LOG="build-logs/${STATUS}-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
           
-          # Keep only last 10 logs per architecture
-          cd .github/build-logs
+          mv "$BUILD_LOG" "$FINAL_LOG"
+          echo "✅ Renamed: $FINAL_LOG"
+          
+          # Cleanup old logs (keep last 10)
+          cd build-logs
           ls -t *-${{ matrix.arch }}-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
-          cd ../..
+          cd ..
           
-          # Commit and push
-          git add .github/build-logs/
+          # Commit
+          git add build-logs/
+          git commit -m "ci: Build log [$STATUS] ${{ matrix.arch }} - ${BUILD_TIMESTAMP}" || exit 0
           
-          if git diff --staged --quiet; then
-            echo "ℹ️ No build log changes to commit"
-          else
-            git commit -m "ci: Add build log [$STATUS] for ${{ matrix.arch }} - ${BUILD_TIMESTAMP}"
-            
-            # Retry push up to 3 times
-            for i in {1..3}; do
-              if git push origin HEAD:main; then
-                echo "✅ Build log pushed successfully"
-                break
-              else
-                echo "⚠️ Push attempt $i failed, retrying..."
-                git pull --rebase origin main || true
-                sleep 2
-              fi
-              
-              if [ $i -eq 3 ]; then
-                echo "⚠️ Failed to push build log after 3 attempts"
-                echo "Log will be available as artifact only"
-              fi
-            done
-          fi
+          # Push with retry
+          for i in {1..3}; do
+            if git push; then
+              echo "✅ Log pushed to repo"
+              break
+            else
+              echo "⚠️ Retry $i/3..."
+              git pull --rebase || true
+              sleep 2
+            fi
+          done
 
-      - name: Upload build log as artifact
+      - name: Upload log artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log-${{ matrix.arch }}-${{ env.BUILD_TIMESTAMP }}
-          path: .github/build-logs/*-${{ matrix.arch }}-${{ env.BUILD_TIMESTAMP }}.log
+          path: build-logs/*-${{ matrix.arch }}-*.log
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Upload build artifacts
         if: steps.build.outputs.BUILD_STATUS == 'success'
@@ -332,137 +279,90 @@ jobs:
           path: |
             ${{ matrix.asset_name }}.tar.gz
             ${{ matrix.asset_name }}.tar.gz.sha256
-          retention-days: 7
 
-      - name: Fail job if build failed
+      - name: Fail if build failed
         if: steps.build.outputs.BUILD_STATUS != 'success'
         run: |
           echo "::error::Build failed for ${{ matrix.target }}"
-          echo "::error::Check build log at .github/build-logs/failed-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
-          echo "::error::Or download artifact: build-log-${{ matrix.arch }}-${BUILD_TIMESTAMP}"
           exit 1
 
   create-release:
-    name: Create GitHub Release
+    name: Create Release
     needs: build-termux
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
+      - uses: actions/checkout@v4
+      
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Prepare release assets
+      
+      - name: Prepare release
         run: |
           mkdir -p release-assets
-          find artifacts -type f -name "*.tar.gz" -exec cp {} release-assets/ \;
-          find artifacts -type f -name "*.sha256" -exec cp {} release-assets/ \;
+          find artifacts -name "*.tar.gz" -exec cp {} release-assets/ \;
+          find artifacts -name "*.sha256" -exec cp {} release-assets/ \;
           
           cd release-assets
-          ls -lh
-          
-          echo "📝 Generating combined checksums..."
           cat *.sha256 > checksums.txt
-          cat checksums.txt
-
-      - name: Get version tag
+          ls -lh
+      
+      - name: Get version
         id: version
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
-          
-          VERSION=$(echo "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref }}" | sed 's|refs/tags/||')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📌 Release version: $VERSION"
-
-      - name: Create GitHub Release
+      
+      - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: InjectTools ${{ steps.version.outputs.version }} (Termux)
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          name: InjectTools ${{ steps.version.outputs.version }}
           body: |
-            # InjectTools ${{ steps.version.outputs.version }} - Termux Edition
+            # InjectTools ${{ steps.version.outputs.version }} - Termux
             
-            🤖 **Bug Inject Scanner for Cloudflare Subdomains** - Optimized for Android/Termux
+            🤖 Bug Inject Scanner for Cloudflare - Rust Edition
             
             ## 📥 Quick Install
-            
             ```bash
             curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
             ```
             
-            ## 📦 Manual Downloads
+            ## 📦 Manual Install
             
-            | Device Type | Architecture | Download |
-            |-------------|--------------|----------|
-            | **Modern Android** (2018+) | ARM64 (aarch64) | `injecttools-termux-arm64.tar.gz` |
-            | **Older Android** (2015-2018) | ARMv7 | `injecttools-termux-armv7.tar.gz` |
+            | Device | Arch | File |
+            |--------|------|------|
+            | Modern Android | ARM64 | `injecttools-termux-arm64.tar.gz` |
+            | Older Android | ARMv7 | `injecttools-termux-armv7.tar.gz` |
             
-            **Check architecture:** `uname -m`
+            Check: `uname -m`
             
-            ## ✨ Features v2.3
-            
-            - ⚡ Async concurrent scanning
-            - 🔍 Auto Cloudflare detection
-            - 📊 Real-time progress bar
-            - 🌐 crt.sh subdomain scanner
-            - 📋 Batch testing (manual/file)
-            - 📁 Results viewer & export
-            - 📡 Ping test support
+            ## ✨ Features
+            - ⚡ Async scanning
+            - 🔍 Cloudflare detection  
+            - 📊 Progress bars
+            - 🌐 crt.sh scanner
+            - 📋 Batch testing
+            - 📁 Results viewer
+            - 📡 Ping test
             - 🎨 Colorful TUI
-            - 💾 Config persistence
             
             ## 🔐 Checksums
-            
             ```
             $(cat release-assets/checksums.txt)
             ```
             
             ## 📝 Build Logs
+            - [View Logs](https://github.com/hoshiyomiX/InjectTools/tree/main/build-logs)
             
-            Detailed build logs tersedia di:
-            - [View Build Logs](https://github.com/hoshiyomiX/InjectTools/tree/main/.github/build-logs)
-            
-            ## 📖 Documentation
-            
-            - [README.md](https://github.com/hoshiyomiX/InjectTools#readme)
-            - [CHANGELOG.md](https://github.com/hoshiyomiX/InjectTools/blob/main/CHANGELOG.md)
-            
-            ---
-            
-            **Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)  
-            **Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')  
-            
-            Report issues: [GitHub Issues](https://github.com/hoshiyomiX/InjectTools/issues)
-          files: |
-            release-assets/*
+            **Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Release Summary
-        run: |
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Targets:**" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ ARM64 (aarch64)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ ARMv7" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Downloads:**" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 [injecttools-termux-arm64.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-arm64.tar.gz)" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 [injecttools-termux-armv7.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-armv7.tar.gz)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Logs:**" >> $GITHUB_STEP_SUMMARY
-          echo "- 📋 [View Logs](https://github.com/hoshiyomiX/InjectTools/tree/main/.github/build-logs)" >> $GITHUB_STEP_SUMMARY

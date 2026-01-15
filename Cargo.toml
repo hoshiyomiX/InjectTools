@@ -1,6 +1,6 @@
 [package]
 name = "injecttools"
-version = "2.3.0"
+version = "2.3.1"
 edition = "2021"
 authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
 description = "Bug Inject Scanner for Cloudflare Subdomains v2.3"
@@ -19,7 +19,7 @@ trust-dns-resolver = "0.23"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialoquer = "0.11"
 terminal_size = "0.3"
 
 # Networking
@@ -44,10 +44,8 @@ thiserror = "1.0"
 # Signal handling
 ctrlc = "3.4"
 
-# Ping support - DISABLED for Android due to raw socket limitations
-# Android requires root/privileged access for ICMP ping
-# Fallback: HTTP response time check is used instead
-[target.'cfg(not(target_os = "android"))']
+# Ping support - only for non-Android platforms
+# Android requires root access for ICMP, so we use HTTP fallback
 [target.'cfg(not(target_os = "android"))'.dependencies]
 surge-ping = "0.8"
 

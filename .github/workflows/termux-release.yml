@@ -87,6 +87,8 @@ jobs:
           echo "✅ Clean complete" | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Build binary
+        id: build
+        continue-on-error: true
         run: |
           set -o pipefail  # Enable pipefail untuk proper error detection
           
@@ -101,18 +103,22 @@ jobs:
           grep -c 'println!("[0-9]' src/main.rs | tee -a build-logs/build-aarch64-linux-android.log || echo "Could not count menu items" | tee -a build-logs/build-aarch64-linux-android.log
           
           # Build with proper error handling
-          cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log
-          
-          # Verify binary exists
-          if [ ! -f target/aarch64-linux-android/release/injecttools ]; then
-            echo "❌ Build failed - binary not found" | tee -a build-logs/build-aarch64-linux-android.log
+          if cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log; then
+            # Verify binary exists
+            if [ ! -f target/aarch64-linux-android/release/injecttools ]; then
+              echo "❌ Build failed - binary not found" | tee -a build-logs/build-aarch64-linux-android.log
+              exit 1
+            fi
+            
+            echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
+            ls -lh target/aarch64-linux-android/release/injecttools | tee -a build-logs/build-aarch64-linux-android.log
+          else
+            echo "❌ Cargo build failed" | tee -a build-logs/build-aarch64-linux-android.log
             exit 1
           fi
-          
-          echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
-          ls -lh target/aarch64-linux-android/release/injecttools | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Strip binary
+        if: steps.build.outcome == 'success'
         run: |
           BEFORE=$(stat -c%s target/aarch64-linux-android/release/injecttools)
           echo "Before: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-aarch64-linux-android.log
@@ -124,6 +130,7 @@ jobs:
           echo "After: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Package
+        if: steps.build.outcome == 'success'
         run: |
           cd target/aarch64-linux-android/release
           tar czf ../../../injecttools-termux-arm64.tar.gz injecttools
@@ -132,7 +139,15 @@ jobs:
           sha256sum injecttools-termux-arm64.tar.gz | tee injecttools-termux-arm64.tar.gz.sha256 | tee -a build-logs/build-aarch64-linux-android.log
           echo "Finished: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-aarch64-linux-android.log
 
+      - name: Finalize build log
+        if: always()
+        run: |
+          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Build status: ${{ steps.build.outcome }}" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-aarch64-linux-android.log
+
       - name: Commit build log
+        if: always()
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -140,17 +155,26 @@ jobs:
           git add build-logs/build-aarch64-linux-android.log
           
           if ! git diff --staged --quiet; then
-            git commit -m "Update ARM64 build log [skip ci]"
+            git commit -m "Update ARM64 build log - Status: ${{ steps.build.outcome }} [skip ci]"
             git push origin main
+          else
+            echo "No changes to commit"
           fi
 
       - name: Upload artifacts
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: injecttools-termux-arm64
           path: |
             injecttools-termux-arm64.tar.gz
             injecttools-termux-arm64.tar.gz.sha256
+
+      - name: Fail job if build failed
+        if: steps.build.outcome != 'success'
+        run: |
+          echo "❌ Build failed - check build logs for details"
+          exit 1
 
   build-armv7:
     name: Build ARMv7
@@ -220,6 +244,8 @@ jobs:
           echo "✅ Clean complete" | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Build binary
+        id: build
+        continue-on-error: true
         run: |
           set -o pipefail  # Enable pipefail untuk proper error detection
           
@@ -234,18 +260,22 @@ jobs:
           grep -c 'println!("[0-9]' src/main.rs | tee -a build-logs/build-armv7-linux-androideabi.log || echo "Could not count menu items" | tee -a build-logs/build-armv7-linux-androideabi.log
           
           # Build with proper error handling
-          cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log
-          
-          # Verify binary exists
-          if [ ! -f target/armv7-linux-androideabi/release/injecttools ]; then
-            echo "❌ Build failed - binary not found" | tee -a build-logs/build-armv7-linux-androideabi.log
+          if cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log; then
+            # Verify binary exists
+            if [ ! -f target/armv7-linux-androideabi/release/injecttools ]; then
+              echo "❌ Build failed - binary not found" | tee -a build-logs/build-armv7-linux-androideabi.log
+              exit 1
+            fi
+            
+            echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
+            ls -lh target/armv7-linux-androideabi/release/injecttools | tee -a build-logs/build-armv7-linux-androideabi.log
+          else
+            echo "❌ Cargo build failed" | tee -a build-logs/build-armv7-linux-androideabi.log
             exit 1
           fi
-          
-          echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
-          ls -lh target/armv7-linux-androideabi/release/injecttools | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Strip binary
+        if: steps.build.outcome == 'success'
         run: |
           BEFORE=$(stat -c%s target/armv7-linux-androideabi/release/injecttools)
           echo "Before: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-armv7-linux-androideabi.log
@@ -257,6 +287,7 @@ jobs:
           echo "After: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Package
+        if: steps.build.outcome == 'success'
         run: |
           cd target/armv7-linux-androideabi/release
           tar czf ../../../injecttools-termux-armv7.tar.gz injecttools
@@ -265,7 +296,15 @@ jobs:
           sha256sum injecttools-termux-armv7.tar.gz | tee injecttools-termux-armv7.tar.gz.sha256 | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "Finished: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-armv7-linux-androideabi.log
 
+      - name: Finalize build log
+        if: always()
+        run: |
+          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Build status: ${{ steps.build.outcome }}" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-armv7-linux-androideabi.log
+
       - name: Commit build log
+        if: always()
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -273,17 +312,26 @@ jobs:
           git add build-logs/build-armv7-linux-androideabi.log
           
           if ! git diff --staged --quiet; then
-            git commit -m "Update ARMv7 build log [skip ci]"
+            git commit -m "Update ARMv7 build log - Status: ${{ steps.build.outcome }} [skip ci]"
             git push origin main
+          else
+            echo "No changes to commit"
           fi
 
       - name: Upload artifacts
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: injecttools-termux-armv7
           path: |
             injecttools-termux-armv7.tar.gz
             injecttools-termux-armv7.tar.gz.sha256
+
+      - name: Fail job if build failed
+        if: steps.build.outcome != 'success'
+        run: |
+          echo "❌ Build failed - check build logs for details"
+          exit 1
 
   create-release:
     name: Create Release

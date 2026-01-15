@@ -51,13 +51,17 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Cache cargo registry
+      - name: Cache cargo dependencies (improved strategy)
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/**/*.rs') }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-
 
       - name: Download Android NDK
         run: |
@@ -82,34 +86,79 @@ jobs:
 
       - name: Force clean build
         run: |
-          echo "🧹 Cleaning previous builds..." | tee -a build-logs/build-aarch64-linux-android.log
+          echo "🧹 Forcing complete clean build..." | tee -a build-logs/build-aarch64-linux-android.log
+          
+          # Clean target directory
           cargo clean 2>&1 | tee -a build-logs/build-aarch64-linux-android.log
-          echo "✅ Clean complete" | tee -a build-logs/build-aarch64-linux-android.log
+          
+          # Clean cargo cache untuk project ini specifically
+          rm -rf ~/.cargo/registry/cache
+          rm -rf ~/.cargo/git/db
+          
+          # Ensure no leftover target artifacts
+          rm -rf target/
+          
+          echo "✅ Clean complete - guaranteed fresh build" | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Build binary
         id: build
         continue-on-error: true
         run: |
-          set -o pipefail  # Enable pipefail untuk proper error detection
+          set -o pipefail
           
-          echo "🔨 Building..." | tee -a build-logs/build-aarch64-linux-android.log
+          echo "🔨 Building from source..." | tee -a build-logs/build-aarch64-linux-android.log
+          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
           
-          # Show version being built
-          echo "Cargo.toml version:" | tee -a build-logs/build-aarch64-linux-android.log
-          grep '^version' Cargo.toml | tee -a build-logs/build-aarch64-linux-android.log
+          # Log source state untuk traceability
+          echo "📋 Build Context:" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Git commit short: $(git rev-parse --short HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
           
-          # Show main.rs menu count for verification
-          echo "Main menu options:" | tee -a build-logs/build-aarch64-linux-android.log
-          grep -c 'println!("[0-9]' src/main.rs | tee -a build-logs/build-aarch64-linux-android.log || echo "Could not count menu items" | tee -a build-logs/build-aarch64-linux-android.log
+          CARGO_VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "Cargo.toml version: $CARGO_VERSION" | tee -a build-logs/build-aarch64-linux-android.log
           
-          # Build with proper error handling
+          # Hash all source files untuk verification
+          SOURCES_HASH=$(find src -type f -name '*.rs' -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
+          echo "Source files hash: $SOURCES_HASH" | tee -a build-logs/build-aarch64-linux-android.log
+          
+          echo "Main menu options count: $(grep -c 'println!("[0-9]' src/main.rs || echo 'N/A')" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
+          
+          # Build dengan full logging
+          BUILD_START=$(date +%s)
+          
           if cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log; then
+            BUILD_END=$(date +%s)
+            BUILD_DURATION=$((BUILD_END - BUILD_START))
+            
+            echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "Build completed in ${BUILD_DURATION}s" | tee -a build-logs/build-aarch64-linux-android.log
+            
             # Verify binary exists
             if [ ! -f target/aarch64-linux-android/release/injecttools ]; then
               echo "❌ Build failed - binary not found" | tee -a build-logs/build-aarch64-linux-android.log
               exit 1
             fi
             
+            # Verify binary is FRESH (built within last 5 minutes)
+            CURRENT_TIME=$(date +%s)
+            BINARY_TIME=$(stat -c %Y target/aarch64-linux-android/release/injecttools)
+            BINARY_AGE=$((CURRENT_TIME - BINARY_TIME))
+            
+            echo "🔍 Build Verification:" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "Current time: $(date -u '+%Y-%m-%d %H:%M:%S UTC') (${CURRENT_TIME})" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "Binary mtime: $(date -u -d @${BINARY_TIME} '+%Y-%m-%d %H:%M:%S UTC') (${BINARY_TIME})" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "Binary age: ${BINARY_AGE}s" | tee -a build-logs/build-aarch64-linux-android.log
+            
+            if [ $BINARY_AGE -gt 300 ]; then
+              echo "❌ ERROR: Binary is STALE (older than 5 minutes)!" | tee -a build-logs/build-aarch64-linux-android.log
+              echo "This indicates a cached/old binary was used instead of fresh compilation" | tee -a build-logs/build-aarch64-linux-android.log
+              echo "Expected: Binary age < 300s" | tee -a build-logs/build-aarch64-linux-android.log
+              echo "Actual: Binary age = ${BINARY_AGE}s" | tee -a build-logs/build-aarch64-linux-android.log
+              exit 1
+            fi
+            
+            echo "✅ Binary freshness verified (${BINARY_AGE}s old)" | tee -a build-logs/build-aarch64-linux-android.log
             echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
             ls -lh target/aarch64-linux-android/release/injecttools | tee -a build-logs/build-aarch64-linux-android.log
           else
@@ -121,13 +170,16 @@ jobs:
         if: steps.build.outcome == 'success'
         run: |
           BEFORE=$(stat -c%s target/aarch64-linux-android/release/injecttools)
-          echo "Before: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Before strip: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-aarch64-linux-android.log
           
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             target/aarch64-linux-android/release/injecttools
           
           AFTER=$(stat -c%s target/aarch64-linux-android/release/injecttools)
-          echo "After: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "After strip: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-aarch64-linux-android.log
+          
+          SAVED=$((BEFORE - AFTER))
+          echo "Saved: $(numfmt --to=iec-i --suffix=B $SAVED)" | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Package
         if: steps.build.outcome == 'success'
@@ -208,13 +260,17 @@ jobs:
         with:
           targets: armv7-linux-androideabi
 
-      - name: Cache cargo registry
+      - name: Cache cargo dependencies (improved strategy)
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/**/*.rs') }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-
 
       - name: Download Android NDK
         run: |
@@ -239,34 +295,79 @@ jobs:
 
       - name: Force clean build
         run: |
-          echo "🧹 Cleaning previous builds..." | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "🧹 Forcing complete clean build..." | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          # Clean target directory
           cargo clean 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "✅ Clean complete" | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          # Clean cargo cache untuk project ini specifically
+          rm -rf ~/.cargo/registry/cache
+          rm -rf ~/.cargo/git/db
+          
+          # Ensure no leftover target artifacts
+          rm -rf target/
+          
+          echo "✅ Clean complete - guaranteed fresh build" | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Build binary
         id: build
         continue-on-error: true
         run: |
-          set -o pipefail  # Enable pipefail untuk proper error detection
+          set -o pipefail
           
-          echo "🔨 Building..." | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "🔨 Building from source..." | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
           
-          # Show version being built
-          echo "Cargo.toml version:" | tee -a build-logs/build-armv7-linux-androideabi.log
-          grep '^version' Cargo.toml | tee -a build-logs/build-armv7-linux-androideabi.log
+          # Log source state untuk traceability
+          echo "📋 Build Context:" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Git commit short: $(git rev-parse --short HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
           
-          # Show main.rs menu count for verification
-          echo "Main menu options:" | tee -a build-logs/build-armv7-linux-androideabi.log
-          grep -c 'println!("[0-9]' src/main.rs | tee -a build-logs/build-armv7-linux-androideabi.log || echo "Could not count menu items" | tee -a build-logs/build-armv7-linux-androideabi.log
+          CARGO_VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "Cargo.toml version: $CARGO_VERSION" | tee -a build-logs/build-armv7-linux-androideabi.log
           
-          # Build with proper error handling
+          # Hash all source files untuk verification
+          SOURCES_HASH=$(find src -type f -name '*.rs' -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
+          echo "Source files hash: $SOURCES_HASH" | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          echo "Main menu options count: $(grep -c 'println!("[0-9]' src/main.rs || echo 'N/A')" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          # Build dengan full logging
+          BUILD_START=$(date +%s)
+          
           if cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log; then
+            BUILD_END=$(date +%s)
+            BUILD_DURATION=$((BUILD_END - BUILD_START))
+            
+            echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "Build completed in ${BUILD_DURATION}s" | tee -a build-logs/build-armv7-linux-androideabi.log
+            
             # Verify binary exists
             if [ ! -f target/armv7-linux-androideabi/release/injecttools ]; then
               echo "❌ Build failed - binary not found" | tee -a build-logs/build-armv7-linux-androideabi.log
               exit 1
             fi
             
+            # Verify binary is FRESH (built within last 5 minutes)
+            CURRENT_TIME=$(date +%s)
+            BINARY_TIME=$(stat -c %Y target/armv7-linux-androideabi/release/injecttools)
+            BINARY_AGE=$((CURRENT_TIME - BINARY_TIME))
+            
+            echo "🔍 Build Verification:" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "Current time: $(date -u '+%Y-%m-%d %H:%M:%S UTC') (${CURRENT_TIME})" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "Binary mtime: $(date -u -d @${BINARY_TIME} '+%Y-%m-%d %H:%M:%S UTC') (${BINARY_TIME})" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "Binary age: ${BINARY_AGE}s" | tee -a build-logs/build-armv7-linux-androideabi.log
+            
+            if [ $BINARY_AGE -gt 300 ]; then
+              echo "❌ ERROR: Binary is STALE (older than 5 minutes)!" | tee -a build-logs/build-armv7-linux-androideabi.log
+              echo "This indicates a cached/old binary was used instead of fresh compilation" | tee -a build-logs/build-armv7-linux-androideabi.log
+              echo "Expected: Binary age < 300s" | tee -a build-logs/build-armv7-linux-androideabi.log
+              echo "Actual: Binary age = ${BINARY_AGE}s" | tee -a build-logs/build-armv7-linux-androideabi.log
+              exit 1
+            fi
+            
+            echo "✅ Binary freshness verified (${BINARY_AGE}s old)" | tee -a build-logs/build-armv7-linux-androideabi.log
             echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
             ls -lh target/armv7-linux-androideabi/release/injecttools | tee -a build-logs/build-armv7-linux-androideabi.log
           else
@@ -278,13 +379,16 @@ jobs:
         if: steps.build.outcome == 'success'
         run: |
           BEFORE=$(stat -c%s target/armv7-linux-androideabi/release/injecttools)
-          echo "Before: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Before strip: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-armv7-linux-androideabi.log
           
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             target/armv7-linux-androideabi/release/injecttools
           
           AFTER=$(stat -c%s target/armv7-linux-androideabi/release/injecttools)
-          echo "After: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "After strip: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          SAVED=$((BEFORE - AFTER))
+          echo "Saved: $(numfmt --to=iec-i --suffix=B $SAVED)" | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Package
         if: steps.build.outcome == 'success'

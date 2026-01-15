@@ -4,7 +4,54 @@ All notable changes to InjectTools will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [v2.3.1] - 2026-01-15
+## [v2.3.1] - 2026-01-15 (Hotfix)
+
+### Added
+- **🔄 crt.sh Retry Mechanism**
+  - Auto-retry 3x dengan progressive timeout (30s → 45s → 60s)
+  - Better error messages (timeout, connect, parse)
+  - Connection timeout 10s untuk early failure detection
+  - Improved User-Agent header untuk compatibility
+
+- **💡 DNS Brute Force Fallback**
+  - Menu baru: "4. DNS Brute Force Scan"
+  - Auto-offer fallback saat crt.sh gagal
+  - Interactive prompt untuk switch ke brute force
+  - Integrated dengan built-in wordlist
+
+### Changed
+- **📡 crt.sh Error Handling**
+  - Distinguish error types: timeout vs network vs parse
+  - User-friendly error messages dengan tips
+  - Automatic fallback suggestion
+  
+- **🎨 UI Improvements**
+  - Added helpful tips saat crt.sh down
+  - Better progress feedback dengan attempt counter
+  - Clearer menu layout (7 options)
+
+### Fixed
+- 🐛 **crt.sh Connection Errors**
+  - Fix "unexpected end of file" error
+  - Better TLS handshake handling
+  - Proper timeout configuration
+  - Retry mechanism untuk unstable API
+
+### Technical Details
+- **crt.sh Module** (`src/crtsh.rs`)
+  - Added `fetch_with_timeout()` helper
+  - Progressive retry delays (1s, 2s, 3s)
+  - Better validation untuk empty results
+  - Improved subdomain filtering logic
+
+- **Main Module** (`src/main.rs`)
+  - Integrated wordlist module
+  - Added fallback prompt logic
+  - Version bump: 2.3.0 → 2.3.1
+
+---
+
+## [v2.3.0] - 2026-01-15
 
 ### Removed
 - 🚀 **Android/Termux Focused** - Removed Linux/macOS/Windows platform support
@@ -19,10 +66,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `TERMUX_BUILD.md` renamed to `BUILD.md`
   - `RELEASE.md` removed (multi-platform guide)
   - Updated troubleshooting for Android-specific issues
-
----
-
-## [v2.3.0] - 2026-01-15
 
 ### Added
 - **crt.sh Integration** 🌐
@@ -59,20 +102,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Auto-cleanup: keep last 10 logs per architecture
   - Retry push mechanism (up to 3 attempts)
   - Detailed error reporting for failed builds
-
-### Changed
-- **UI/UX Enhancements** 🎨
-  - Better progress visualization
-  - Clearer warning messages
-  - Improved menu navigation
-  - Color-coded status messages
-  - Real-time scan statistics
-
-- **Workflow Improvements** 🔧
-  - Enhanced error handling
-  - Better build step logging
-  - Improved artifact management
-  - Added build duration tracking
 
 ### Fixed
 - 🐛 Build log push conflicts (retry mechanism)
@@ -146,6 +175,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | v1.x | ✅ | ✅ | ❌ | ❌ |
 
 **Note:** Starting from v2.3.1, InjectTools is Android/Termux exclusive.
+
+---
+
+## Troubleshooting crt.sh Issues (v2.3.1+)
+
+### Issue: "connection error: unexpected end of file"
+
+**Cause:** crt.sh API sering down/slow atau network timeout
+
+**Solutions:**
+1. ✅ **Auto-Retry**: Tool akan retry 3x otomatis
+2. ✅ **Fallback**: Gunakan "DNS Brute Force Scan" sebagai alternatif
+3. ✅ **Manual**: Coba lagi beberapa menit kemudian
+
+**Alternative Method:**
+```bash
+# Gunakan menu option 4 untuk DNS brute force
+4. 🚀 DNS Brute Force Scan
+```
 
 ---
 

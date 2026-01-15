@@ -4,6 +4,9 @@ use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::str::FromStr;
+use std::net::Ipv4Addr;
 
 use crate::dns;
 use crate::ui;
@@ -17,20 +20,62 @@ pub struct ScanResult {
     pub status_code: Option<u16>,
 }
 
+// Check if IP is in reserved/private range
+fn is_reserved_ip(ip: &str) -> (bool, &'static str) {
+    let parsed_ip = match Ipv4Addr::from_str(ip) {
+        Ok(addr) => addr,
+        Err(_) => return (false, ""),
+    };
+    
+    let octets = parsed_ip.octets();
+    
+    // Check common reserved ranges
+    match octets[0] {
+        10 => (true, "Private (10.0.0.0/8)"),
+        172 if octets[1] >= 16 && octets[1] <= 31 => (true, "Private (172.16.0.0/12)"),
+        192 if octets[1] == 168 => (true, "Private (192.168.0.0/16)"),
+        198 if octets[1] == 18 || octets[1] == 19 => (true, "Benchmark/VPN (198.18.0.0/15)"),
+        100 if octets[1] >= 64 && octets[1] <= 127 => (true, "CGNAT (100.64.0.0/10)"),
+        127 => (true, "Loopback (127.0.0.0/8)"),
+        0 => (true, "Reserved (0.0.0.0/8)"),
+        _ => (false, ""),
+    }
+}
+
+// TCP port check with timeout
+fn tcp_port_check(host: &str, port: u16, timeout_secs: u64) -> bool {
+    let addr = format!("{}:{}", host, port);
+    
+    // Try to resolve socket addresses
+    let socket_addrs: Vec<_> = match addr.to_socket_addrs() {
+        Ok(addrs) => addrs.collect(),
+        Err(_) => return false,
+    };
+    
+    if socket_addrs.is_empty() {
+        return false;
+    }
+    
+    // Try TCP connect with timeout
+    match TcpStream::connect_timeout(
+        &socket_addrs[0],
+        Duration::from_secs(timeout_secs)
+    ) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
 pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "Testing target host...".cyan());
     println!("{}", "━".repeat(50).bright_black());
     
     // DNS check first
     println!("\n{} Checking DNS resolution...", "🔍".cyan());
-    match dns::resolve_domain_first(target).await {
+    let resolved_ip = match dns::resolve_domain_first(target).await {
         Ok(ip) => {
             println!("{} {} → {}", "✓".green(), target.green(), ip.bright_black());
-            
-            // Check if Cloudflare IP
-            if dns::is_cloudflare_ip(&ip) {
-                println!("{} Cloudflare IP detected", "☁️".cyan());
-            }
+            ip
         }
         Err(e) => {
             println!("{} DNS resolution failed: {}", "✗".red(), e.to_string().red());
@@ -40,6 +85,73 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
             println!("  - Tidak ada koneksi internet");
             return Err(e);
         }
+    };
+    
+    // Check if reserved/private IP
+    let (is_reserved, ip_type) = is_reserved_ip(&resolved_ip);
+    
+    if is_reserved {
+        println!("\n{} {} {}", "⚠️".yellow(), "Reserved IP Range:".yellow().bold(), ip_type.yellow());
+        println!("   This is likely a VPN/Tunnel/Private server");
+        println!("   HTTP requests might not work (normal behavior)");
+        
+        // Try TCP port check as alternative
+        println!("\n{} Checking TCP port availability...", "🔌".cyan());
+        
+        let ports = vec![
+            (443, "HTTPS"),
+            (80, "HTTP"),
+            (8080, "HTTP-Alt"),
+            (8443, "HTTPS-Alt"),
+        ];
+        
+        let mut any_port_open = false;
+        let mut open_ports = Vec::new();
+        
+        for (port, name) in &ports {
+            print!("   Port {} ({}): ", port, name);
+            std::io::Write::flush(&mut std::io::stdout()).ok();
+            
+            if tcp_port_check(target, *port, 3) {
+                println!("{}", "OPEN".green());
+                any_port_open = true;
+                open_ports.push((*port, *name));
+            } else {
+                println!("{}", "CLOSED".dimmed());
+            }
+        }
+        
+        // Status summary
+        println!("\n{}", "═".repeat(50).cyan());
+        
+        if any_port_open {
+            println!("{}", "✅ SERVER ONLINE (TCP Ports Responding)".green().bold());
+            println!("\n{}", "Open Ports:".bright_black());
+            for (port, name) in open_ports {
+                println!("  {} {} ({})", "🟢".green(), port.to_string().green(), name);
+            }
+            println!("\n{}", "Note:".yellow());
+            println!("  VPN/Tunnel servers tidak respond HTTP directly");
+            println!("  Gunakan menu 'Test Single Subdomain' untuk inject testing");
+        } else {
+            println!("{}", "❌ SERVER DOWN OR FIREWALLED".red().bold());
+            println!("\n{}", "Possible causes:".yellow());
+            println!("  - Server sedang down/maintenance");
+            println!("  - Strict firewall blocking all ports");
+            println!("  - Network connectivity issues");
+            println!("  - Try different network/VPN");
+        }
+        
+        println!("{}", "═".repeat(50).cyan());
+        
+        // Return OK to allow subdomain testing
+        return Ok(());
+    }
+    
+    // Non-reserved IP: Try normal HTTP/HTTPS
+    // Check if Cloudflare IP
+    if dns::is_cloudflare_ip(&resolved_ip) {
+        println!("{} Cloudflare IP detected", "☁️".cyan());
     }
     
     // Build client with proper settings
@@ -86,7 +198,7 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
                          protocol.to_uppercase());
                 
                 println!("\n{}", "═".repeat(50).green());
-                println!("{}", "✅ TARGET HOST IS REACHABLE".green().bold());
+                println!("{}", "✅ SERVER ONLINE (HTTP Responding)".green().bold());
                 println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
                 println!("{} {}", "Status Code:".bright_black(), status.to_string().green());
                 println!("{} {}", "Port:".bright_black(), port.to_string().green());
@@ -102,36 +214,66 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
         }
     }
     
-    // All protocols failed - detailed error
+    // HTTP/HTTPS failed - try TCP as fallback
     if let Some(e) = last_error {
-        println!("\n{}", "═".repeat(50).red());
-        println!("{}", "❌ CONNECTION FAILED".red().bold());
-        println!("{}", "═".repeat(50).red());
+        println!("\n{} HTTP/HTTPS tidak respond, checking TCP ports...", "🔌".cyan());
         
-        if e.is_timeout() {
-            println!("\n{}", "⏱️  Timeout Error".yellow().bold());
-            println!("Request exceeded {}s limit", timeout);
-            println!("\n{}", "Possible solutions:".cyan());
-            println!("  1. Increase timeout: Settings → Change Timeout");
-            println!("  2. Check internet connection stability");
-            println!("  3. Try using VPN or different network");
-            println!("  4. Verify target host is online");
-        } else if e.is_connect() {
-            println!("\n{}", "🔌 Connection Error".yellow().bold());
-            println!("Cannot establish connection to host");
-            println!("\n{}", "Possible solutions:".cyan());
-            println!("  1. Verify target format: example.com or ip:port");
-            println!("  2. Check if host requires authentication");
-            println!("  3. Confirm host is accessible from your location");
-        } else if e.is_request() {
-            println!("\n{}", "📡 Request Error".yellow().bold());
-            println!("Invalid request format or parameters");
-        } else {
-            println!("\n{}", "❓ Unknown Error".yellow().bold());
-            println!("{}", e);
+        let tcp_ports = vec![(443, "HTTPS"), (80, "HTTP")];
+        let mut tcp_open = false;
+        
+        for (port, name) in &tcp_ports {
+            print!("   Port {} ({}): ", port, name);
+            std::io::Write::flush(&mut std::io::stdout()).ok();
+            
+            if tcp_port_check(target, *port, 3) {
+                println!("{}", "OPEN".green());
+                tcp_open = true;
+            } else {
+                println!("{}", "CLOSED".dimmed());
+            }
         }
         
-        return Err(anyhow::anyhow!("Target host unreachable"));
+        println!("\n{}", "═".repeat(50).yellow());
+        
+        if tcp_open {
+            println!("{}", "⚠️  SERVER ONLINE BUT HTTP NOT RESPONDING".yellow().bold());
+            println!("\n{}", "Possible causes:".cyan());
+            println!("  - Server is VPN/Tunnel (tidak serve HTTP directly)");
+            println!("  - Firewall blocking HTTP but allowing TCP");
+            println!("  - Server misconfiguration");
+            println!("\n{}", "Recommendation:".green());
+            println!("  Lanjut ke 'Test Single Subdomain' untuk inject testing");
+        } else {
+            println!("{}", "❌ SERVER DOWN OR UNREACHABLE".red().bold());
+            
+            if e.is_timeout() {
+                println!("\n{}", "⏱️  Timeout Error".yellow().bold());
+                println!("Request exceeded {}s limit", timeout);
+                println!("\n{}", "Possible solutions:".cyan());
+                println!("  1. Increase timeout: Settings → Change Timeout");
+                println!("  2. Check internet connection stability");
+                println!("  3. Try using VPN or different network");
+                println!("  4. Verify target host is online");
+            } else if e.is_connect() {
+                println!("\n{}", "🔌 Connection Error".yellow().bold());
+                println!("Cannot establish connection to host");
+                println!("\n{}", "Possible solutions:".cyan());
+                println!("  1. Verify target format: example.com or ip:port");
+                println!("  2. Check if host requires authentication");
+                println!("  3. Confirm host is accessible from your location");
+            } else if e.is_request() {
+                println!("\n{}", "📡 Request Error".yellow().bold());
+                println!("Invalid request format or parameters");
+            } else {
+                println!("\n{}", "❓ Unknown Error".yellow().bold());
+                println!("{}", e);
+            }
+        }
+        
+        println!("{}", "═".repeat(50).yellow());
+        
+        // Don't fail - allow subdomain testing
+        return Ok(());
     }
     
     Ok(())

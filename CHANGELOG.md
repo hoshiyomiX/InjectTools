@@ -4,6 +4,82 @@ All notable changes to InjectTools will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v2.3.2] - 2026-01-15 (Hotfix)
+
+### Fixed
+- 🔒 **HTTPS-First Logic**
+  - Fixed: Timeout issue pada HTTPS-only servers (contoh: hoshiyomi.qzz.io)
+  - Scanner sekarang try HTTPS first, fallback ke HTTP
+  - Proper handling 400 Bad Request ("plain HTTP to HTTPS port")
+  - Added DNS pre-check sebelum HTTP request
+  - Separate `connect_timeout` (5s) dari request timeout
+
+- 🐛 **Test Target Improvements**
+  - Better error messages dengan detailed troubleshooting
+  - Show protocol used (HTTP/HTTPS) di success output
+  - Display port info (80/443) di result summary
+  - Detect Cloudflare IP di test target output
+
+- 🛠️ **CLI Mode Enhancement**
+  - Support: `injecttools -t host.com --non-interactive` (test target only)
+  - Fixed: "Error: Gunakan --subdomain atau --crtsh --domain"
+  - CLI sekarang bisa test target tanpa --subdomain/--crtsh flag
+  - Improved usage hints untuk invalid commands
+
+### Changed
+- 🔧 **Scanner Module** (`src/scanner.rs`)
+  - `test_target()`: DNS check → HTTPS → HTTP fallback
+  - `test_single()`: HTTPS-first untuk subdomain testing
+  - `batch_test()`: HTTPS fallback untuk mass scanning
+  - Skip HTTP 400 errors di batch mode
+
+- 📝 **Main Module** (`src/main.rs`)
+  - Allow test target without subdomain/domain di CLI
+  - Version bump: 2.3.1 → 2.3.2
+  - Better error messages dengan usage examples
+
+### Technical Details
+
+**Root Cause:**  
+Modern servers (especially behind Cloudflare) often:
+- Block HTTP port 80 entirely
+- Redirect HTTP → HTTPS (301/302)
+- Return 400 "Bad Request" untuk plain HTTP
+
+Tool lama kirim HTTP first → timeout/fail pada HTTPS-only hosts.
+
+**Solution:**  
+1. DNS resolution check first (fast fail jika domain invalid)
+2. Try HTTPS (port 443) dengan TLS
+3. Fallback ke HTTP (port 80) jika HTTPS gagal
+4. Skip HTTP 400 errors di batch mode (server wants HTTPS)
+
+**Impact:**  
+- ✅ HTTPS-only servers sekarang reachable
+- ✅ Faster connection (HTTPS typically succeeds first)
+- ✅ Better error messages (protocol/port specific)
+- ✅ No false negatives dari 400 errors
+
+**Testing:**  
+```bash
+# Working sekarang (was timeout before)
+injecttools -t hoshiyomi.qzz.io --non-interactive
+
+# Output:
+# 🔍 Checking DNS resolution...
+# ✓ hoshiyomi.qzz.io → 198.19.137.249
+# ☁️ Cloudflare IP detected
+# 📡 Testing: https://hoshiyomi.qzz.io
+# ✓ Status: 200 via HTTPS
+# ✅ TARGET HOST IS REACHABLE
+```
+
+**Related Commits:**
+- [888e1e4](https://github.com/hoshiyomiX/InjectTools/commit/888e1e41a5ed08cd5437ff8a922bab0f0cc848ee) - scanner.rs HTTPS-first logic
+- [a3e86fd](https://github.com/hoshiyomiX/InjectTools/commit/a3e86fd24e768051a34de588bda8ea4c369611ee) - main.rs CLI improvements
+
+---
+
 ## [v2.3.1] - 2026-01-15 (Hotfix)
 
 ### Fixed
@@ -162,7 +238,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Menu Options | Features |
 |---------|--------------|----------|
-| **v2.3.1** | 6 | Test Target, Single Test, crt.sh, Results, Settings, Exit |
+| **v2.3.2** | 6 | Test Target (HTTPS-first), Single Test, crt.sh, Results, Settings, Exit |
+| v2.3.1 | 6 | Test Target, Single Test, crt.sh, Results, Settings, Exit |
 | v2.3.0 | 6 | Same as v2.3.1 |
 | v2.0.0 | 8 | Included Full Scan + Batch Test |
 | v1.1.0 | 8 | Bash version with all features |
@@ -175,7 +252,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Android/Termux | Linux | macOS | Windows |
 |---------|----------------|-------|-------|----------|
-| v2.3.1+ | ✅ Primary | ❌ | ❌ | ❌ |
+| v2.3.2+ | ✅ Primary | ❌ | ❌ | ❌ |
+| v2.3.1 | ✅ Primary | ❌ | ❌ | ❌ |
 | v2.3.0 | ✅ Primary | ✅ | ✅ | ✅ |
 | v2.0.0 | ✅ | ✅ | ✅ | ✅ |
 | v1.x | ✅ | ✅ | ❌ | ❌ |
@@ -184,9 +262,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## Troubleshooting v2.3.1
+## Troubleshooting v2.3.2
 
-### Issue: "Cannot connect to internet" / Network errors
+### Issue: Timeout pada HTTPS-only servers
+
+**Symptoms:**
+- `error sending request for url (http://...): operation timed out`
+- `⚠️  Timeout: Request exceeded timeout limit`
+- Server yang accessible via browser timeout di tool
+
+**Cause:** Server requires HTTPS tapi tool kirim HTTP request
+
+**Solution:** Update ke v2.3.2+ (HTTPS-first logic)
+```bash
+# Update tool
+cd ~/InjectTools
+git pull
+cargo build --release --target aarch64-linux-android
+cp target/aarch64-linux-android/release/injecttools $PREFIX/bin/
+```
+
+**Verification:**
+```bash
+injecttools -t hoshiyomi.qzz.io --non-interactive
+# Should show: "✓ Status: 200 via HTTPS"
+```
+
+---
+
+### Issue: "Cannot connect to internet" / Network errors (v2.3.1)
 
 **Cause:** Missing OpenSSL atau TLS configuration issue
 
@@ -200,6 +304,8 @@ cd InjectTools
 cargo clean
 cargo build --release
 ```
+
+---
 
 ### Issue: "Failed to build HTTP client"
 

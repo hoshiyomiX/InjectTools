@@ -48,7 +48,6 @@ jobs:
 
       - name: Setup build logging
         run: |
-          # Logs di root repo biar jelas
           mkdir -p build-logs
           
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
@@ -57,36 +56,36 @@ jobs:
           echo "BUILD_LOG=$BUILD_LOG" >> $GITHUB_ENV
           echo "BUILD_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
           
-          # Create header
-          cat > "$BUILD_LOG" << 'EOFLOG'
-╔══════════════════════════════════════════════════════════════╗
-║          InjectTools Termux Build Log                        ║
-╚══════════════════════════════════════════════════════════════╝
-EOFLOG
+          # Create log header
+          cat > "$BUILD_LOG" << 'EOF'
+          ============================================================
+                    InjectTools Termux Build Log
+          ============================================================
+          EOF
           
-          cat >> "$BUILD_LOG" << EOF
-
-Build Information:
-══════════════════
-Target: ${{ matrix.target }}
-Architecture: ${{ matrix.arch }}
-Android API: ${{ matrix.api }}
-Runner: ubuntu-latest
-Rust: $(rustc --version 2>&1 || echo 'installing...')
-Cargo: $(cargo --version 2>&1 || echo 'installing...')
-
-Trigger: ${{ github.event_name }}
-Commit: ${{ github.sha }}
-Ref: ${{ github.ref }}
-Actor: ${{ github.actor }}
-
-Started: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-
-══════════════════════════════════════════════════════════════
-
-EOF
+          cat >> "$BUILD_LOG" << EOFINFO
           
-          echo "✅ Log initialized: $BUILD_LOG"
+          Build Information:
+          ==================
+          Target: ${{ matrix.target }}
+          Architecture: ${{ matrix.arch }}
+          Android API: ${{ matrix.api }}
+          Runner: ubuntu-latest
+          Rust: $(rustc --version 2>&1 || echo 'installing...')
+          Cargo: $(cargo --version 2>&1 || echo 'installing...')
+          
+          Triggered by: ${{ github.event_name }}
+          Commit SHA: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          Actor: ${{ github.actor }}
+          
+          Started: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          
+          ============================================================
+          
+          EOFINFO
+          
+          echo "Log initialized: $BUILD_LOG"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -105,35 +104,33 @@ EOF
       - name: Download Android NDK
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] 📦 Downloading NDK r26d..."
+            echo "[$(date +'%H:%M:%S')] Downloading NDK r26d..."
             wget -q --show-progress https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
             
-            echo "[$(date +'%H:%M:%S')] 📂 Extracting..."
+            echo "[$(date +'%H:%M:%S')] Extracting..."
             unzip -q android-ndk-r26d-linux.zip
             
             echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
-            echo "[$(date +'%H:%M:%S')] ✅ NDK ready"
+            echo "[$(date +'%H:%M:%S')] NDK ready"
             echo ""
           } 2>&1 | tee -a "$BUILD_LOG"
 
       - name: Configure Android toolchain
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] ⚙️ Configuring toolchain..."
+            echo "[$(date +'%H:%M:%S')] Configuring toolchain..."
             
             NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
             
-            # aarch64
             echo "CC_aarch64_linux_android=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
             echo "AR_aarch64_linux_android=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
             echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_BIN}/aarch64-linux-android${{ matrix.api }}-clang" >> $GITHUB_ENV
             
-            # armv7
             echo "CC_armv7_linux_androideabi=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
             echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
             echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang" >> $GITHUB_ENV
             
-            echo "[$(date +'%H:%M:%S')] ✅ Toolchain configured"
+            echo "[$(date +'%H:%M:%S')] Toolchain configured"
             echo ""
           } 2>&1 | tee -a "$BUILD_LOG"
 
@@ -142,22 +139,23 @@ EOF
         continue-on-error: true
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] 🔨 Building for ${{ matrix.target }}..."
+            echo "[$(date +'%H:%M:%S')] Building for ${{ matrix.target }}..."
             echo ""
             
             if cargo build --release --target ${{ matrix.target }} 2>&1; then
               echo ""
-              echo "[$(date +'%H:%M:%S')] ✅ BUILD SUCCESS"
+              echo "[$(date +'%H:%M:%S')] BUILD SUCCESS"
               echo "BUILD_STATUS=success" >> $GITHUB_OUTPUT
             else
+              EXIT_CODE=$?
               echo ""
-              echo "[$(date +'%H:%M:%S')] ❌ BUILD FAILED (exit: $?)"
+              echo "[$(date +'%H:%M:%S')] BUILD FAILED (exit: $EXIT_CODE)"
               echo "BUILD_STATUS=failed" >> $GITHUB_OUTPUT
               exit 1
             fi
             
             echo ""
-            ls -lh target/${{ matrix.target }}/release/injecttools 2>&1 || echo "⚠️ Binary not found"
+            ls -lh target/${{ matrix.target }}/release/injecttools 2>&1 || echo "Binary not found"
             echo ""
           } 2>&1 | tee -a "$BUILD_LOG"
 
@@ -165,7 +163,7 @@ EOF
         if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] ✂️ Stripping..."
+            echo "[$(date +'%H:%M:%S')] Stripping debug symbols..."
             
             BEFORE=$(stat -c%s target/${{ matrix.target }}/release/injecttools)
             
@@ -185,7 +183,7 @@ EOF
         if: steps.build.outputs.BUILD_STATUS == 'success'
         run: |
           {
-            echo "[$(date +'%H:%M:%S')] 📦 Packaging..."
+            echo "[$(date +'%H:%M:%S')] Packaging..."
             
             cd target/${{ matrix.target }}/release
             tar czf ../../../${{ matrix.asset_name }}.tar.gz injecttools
@@ -201,62 +199,57 @@ EOF
         if: always()
         run: |
           {
-            echo "══════════════════════════════════════════════════════════════"
+            echo "============================================================"
             echo ""
             echo "Build Summary"
-            echo "═════════════"
+            echo "-------------"
             echo "Status:   ${{ steps.build.outputs.BUILD_STATUS || 'FAILED' }}"
             echo "Finished: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
             echo "Duration: ${SECONDS}s"
             echo ""
             
             if [ "${{ steps.build.outputs.BUILD_STATUS }}" = "success" ]; then
-              echo "✅ SUCCESS - Artifacts ready"
+              echo "BUILD SUCCESS - Artifacts ready"
             else
-              echo "❌ FAILED - Check logs above"
+              echo "BUILD FAILED - Check logs above"
             fi
             
             echo ""
-            echo "╔══════════════════════════════════════════════════════════════╗"
-            echo "║                    End of Build Log                          ║"
-            echo "╚══════════════════════════════════════════════════════════════╝"
+            echo "============================================================"
+            echo "                    End of Build Log"
+            echo "============================================================"
           } 2>&1 | tee -a "$BUILD_LOG"
           
           echo ""
-          echo "📝 Log file: $BUILD_LOG"
+          echo "Log file: $BUILD_LOG"
           ls -lh "$BUILD_LOG"
 
       - name: Push log to repo
         if: always()
         continue-on-error: true
         run: |
-          # Git setup
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # Rename with status
           STATUS="${{ steps.build.outputs.BUILD_STATUS || 'failed' }}"
           FINAL_LOG="build-logs/${STATUS}-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
           
           mv "$BUILD_LOG" "$FINAL_LOG"
-          echo "✅ Renamed: $FINAL_LOG"
+          echo "Renamed to: $FINAL_LOG"
           
-          # Cleanup old logs (keep last 10)
           cd build-logs
           ls -t *-${{ matrix.arch }}-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
           cd ..
           
-          # Commit
           git add build-logs/
           git commit -m "ci: Build log [$STATUS] ${{ matrix.arch }} - ${BUILD_TIMESTAMP}" || exit 0
           
-          # Push with retry
           for i in {1..3}; do
             if git push; then
-              echo "✅ Log pushed to repo"
+              echo "Log pushed to repo"
               break
             else
-              echo "⚠️ Retry $i/3..."
+              echo "Retry $i/3..."
               git pull --rebase || true
               sleep 2
             fi
@@ -328,14 +321,14 @@ EOF
           body: |
             # InjectTools ${{ steps.version.outputs.version }} - Termux
             
-            🤖 Bug Inject Scanner for Cloudflare - Rust Edition
+            Bug Inject Scanner for Cloudflare - Rust Edition
             
-            ## 📥 Quick Install
+            ## Quick Install
             ```bash
             curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
             ```
             
-            ## 📦 Manual Install
+            ## Manual Install
             
             | Device | Arch | File |
             |--------|------|------|
@@ -344,22 +337,22 @@ EOF
             
             Check: `uname -m`
             
-            ## ✨ Features
-            - ⚡ Async scanning
-            - 🔍 Cloudflare detection  
-            - 📊 Progress bars
-            - 🌐 crt.sh scanner
-            - 📋 Batch testing
-            - 📁 Results viewer
-            - 📡 Ping test
-            - 🎨 Colorful TUI
+            ## Features
+            - Async scanning
+            - Cloudflare detection  
+            - Progress bars
+            - crt.sh scanner
+            - Batch testing
+            - Results viewer
+            - Ping test
+            - Colorful TUI
             
-            ## 🔐 Checksums
+            ## Checksums
             ```
             $(cat release-assets/checksums.txt)
             ```
             
-            ## 📝 Build Logs
+            ## Build Logs
             - [View Logs](https://github.com/hoshiyomiX/InjectTools/tree/main/build-logs)
             
             **Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)

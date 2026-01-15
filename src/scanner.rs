@@ -21,14 +21,22 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "Testing target host...".cyan());
     println!("{}", "━".repeat(50).bright_black());
     
+    // Debug info
+    println!("\n{} Building HTTP client...", "🔧".bright_black());
     let client = Client::builder()
         .timeout(Duration::from_secs(timeout))
         .danger_accept_invalid_certs(true)
-        .build()?;
+        .build()
+        .map_err(|e| {
+            eprintln!("{} Failed to build HTTP client: {}", "✗".red(), e);
+            e
+        })?;
 
     let url = format!("http://{}", target);
-    println!("\n{} {}", "URL:".bright_black(), url);
+    println!("{} {}", "URL:".bright_black(), url);
+    println!("{} Timeout: {}s", "⏱️".bright_black(), timeout);
     
+    println!("\n{} Sending request...", "📡".cyan());
     match client.get(&url).send().await {
         Ok(response) => {
             let status = response.status().as_u16();
@@ -37,7 +45,19 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
         }
         Err(e) => {
             println!("{} {}", "✗".red(), format!("Error: {}", e).red());
-            println!("{}", "⚠️  Target might be unreachable or timeout".yellow());
+            
+            // Detailed error breakdown
+            if e.is_timeout() {
+                println!("{}", "⚠️  Timeout: Request exceeded timeout limit".yellow());
+            } else if e.is_connect() {
+                println!("{}", "⚠️  Connection failed: Cannot reach target host".yellow());
+                println!("{}", "   - Check if target host is valid".bright_black());
+                println!("{}", "   - Verify internet connection".bright_black());
+            } else if e.is_request() {
+                println!("{}", "⚠️  Request error: Invalid request format".yellow());
+            } else {
+                println!("{}", "⚠️  Unknown error type".yellow());
+            }
         }
     }
     
@@ -94,6 +114,12 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
                 }
                 Err(e) => {
                     println!(" {} {}", "✗".red(), format!("Error: {}", e).red());
+                    
+                    if e.is_timeout() {
+                        println!("{}", "   Timeout: Request took too long".yellow());
+                    } else if e.is_connect() {
+                        println!("{}", "   Connection failed to target".yellow());
+                    }
                 }
             }
         }

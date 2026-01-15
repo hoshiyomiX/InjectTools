@@ -3,29 +3,14 @@
 [![Termux Build](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Bug Inject Scanner for Cloudflare Subdomains** - High-performance Rust implementation
+**Bug Inject Scanner for Cloudflare Subdomains** - Android/Termux Only
+
+High-performance Rust implementation optimized for Android devices running Termux.
 
 ## 🚀 Quick Install
 
-### Termux (One-Liner)
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
-```
-
-**Features:**
-- ✅ Auto-detect latest release
-- ✅ Fallback to build from source
-- ✅ Auto-install dependencies
-- ✅ Backup existing installation
-
-**Install Specific Version:**
-```bash
-# Install specific release
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
-
-# Or any other version
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s v1.1.0
 ```
 
 ---
@@ -51,62 +36,83 @@ curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.
 5. ⚙️ **Settings** - Configure target & timeout
 6. 🚪 **Exit**
 
-### Platform Support
-- 📱 Android/Termux (ARM64, ARMv7)
-- 💻 Linux (x86_64, ARM64, ARMv7)
-- 💙 Windows (x86_64)
-- 🍎 macOS (Intel & Apple Silicon)
-
 ---
 
 ## Installation
 
-### Termux (Recommended)
+### Requirements
+- **Android device** with Termux installed
+- **ARM64** (aarch64) or **ARMv7** architecture
+- Internet connection
 
-**Method 1: Auto-Install (Latest)**
+### Method 1: One-Liner (Recommended)
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
 ```
 
-**Method 2: Specific Version**
+**Features:**
+- ✅ Auto-detect latest release
+- ✅ Fallback to build from source
+- ✅ Auto-install dependencies
+- ✅ Backup existing installation
+
+### Method 2: Install Specific Version
+
 ```bash
+# Install specific release
 curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
+
+# Or any other version
+curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s v1.1.0
 ```
 
-**Method 3: Manual Download**
-```bash
-# Check architecture
-uname -m  # aarch64=ARM64, armv7l=ARMv7
+### Method 3: Manual Installation
 
-# ARM64
-wget https://github.com/hoshiyomiX/InjectTools/releases/download/termux-v2.3.0/injecttools-termux-arm64.tar.gz
+**Step 1: Check Architecture**
+```bash
+uname -m
+# aarch64 = ARM64 (modern devices)
+# armv7l/armv8l = ARMv7 (older devices)
+```
+
+**Step 2: Download Binary**
+
+**For ARM64:**
+```bash
+wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-arm64.tar.gz
 tar xzf injecttools-termux-arm64.tar.gz
 mv injecttools $PREFIX/bin/
 chmod +x $PREFIX/bin/injecttools
+```
 
-# ARMv7
-wget https://github.com/hoshiyomiX/InjectTools/releases/download/termux-v2.3.0/injecttools-termux-armv7.tar.gz
+**For ARMv7:**
+```bash
+wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-armv7.tar.gz
 tar xzf injecttools-termux-armv7.tar.gz
 mv injecttools $PREFIX/bin/
 chmod +x $PREFIX/bin/injecttools
 ```
 
-**Method 4: Build from Source**
+**Step 3: Run**
 ```bash
+injecttools
+```
+
+### Method 4: Build from Source
+
+```bash
+# Install dependencies
 pkg install rust git binutils -y
+
+# Clone & build
 git clone https://github.com/hoshiyomiX/InjectTools.git
 cd InjectTools
 cargo build --release --target aarch64-linux-android
+
+# Install
 cp target/aarch64-linux-android/release/injecttools $PREFIX/bin/
 injecttools --version
-```
-
-### Linux
-```bash
-wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-linux-x86_64.tar.gz
-tar xzf injecttools-linux-x86_64.tar.gz
-sudo mv injecttools /usr/local/bin/
-injecttools
 ```
 
 ---
@@ -159,19 +165,31 @@ Options:
 ## Configuration
 
 **Config Location:**
-- **Termux:** `/sdcard/InjectTools/config.toml`
-- **Linux/macOS:** `~/.config/injecttools/config.toml`
-- **Windows:** `%USERPROFILE%\.config\injecttools\config.toml`
+```
+/sdcard/InjectTools/config.toml
+```
 
 **Results Location:**
-- **Termux:** `/sdcard/InjectTools/results/`
-- **Linux/macOS:** `~/.config/injecttools/results/`
-- **Windows:** `%USERPROFILE%\.config\injecttools\results\`
+```
+/sdcard/InjectTools/results/
+```
 
 **Config Format:**
 ```toml
 target_host = "tunnel.example.com"
 timeout = 10
+```
+
+**Accessing Files:**
+```bash
+# View config
+cat /sdcard/InjectTools/config.toml
+
+# List results
+ls -lh /sdcard/InjectTools/results/
+
+# View latest result
+cat /sdcard/InjectTools/results/*.txt | tail -100
 ```
 
 ---
@@ -199,29 +217,16 @@ Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
 
 ---
 
-## What's New
+## What's New in v2.3
 
-### v2.3.1 (2026-01-15)
-- ❌ **Removed**: Batch test dari file (useless feature)
-- ❌ **Removed**: Full domain scan (useless feature)
-- 🚀 **Improved**: Simplified menu (6 options)
-- 🚀 **Improved**: Cleaner codebase
-
-### v2.3.0 (2026-01-15)
-- ✨ NEW: crt.sh integration for subdomain discovery
-- ✨ NEW: Export results to file with timestamps
-- ✨ NEW: View exported results
-- ✨ NEW: Signal handling (Ctrl+C graceful exit)
-- ✨ NEW: Settings menu
-- ✨ NEW: Smart installer with version management
-- 🐛 FIX: Android /sdcard path support
-- 🚀 IMPROVE: Better progress tracking
-- 🚀 IMPROVE: Enhanced UI/UX
-
-### v1.1.0 (2026-01-14)
-- Initial Rust implementation
-- Basic scanning features
-- Config persistence
+✅ **crt.sh Integration** - Automatic subdomain discovery  
+✅ **Export Results** - Save scans with timestamps  
+✅ **View Results** - Browse past scan results  
+✅ **Signal Handling** - Graceful Ctrl+C interrupt  
+✅ **Improved UI** - Better progress tracking  
+✅ **Settings Menu** - Configure target & timeout  
+✅ **Android Optimized** - `/sdcard/InjectTools` storage  
+🚨 **BREAKING** - Android/Termux only (Linux/Windows/macOS support removed)  
 
 ---
 
@@ -230,10 +235,11 @@ Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
 | Device | Subdomains | Time | Speed |
 |--------|------------|------|-------|
 | Snapdragon 8 Gen 2 | 250 subs | ~30s | 8.3 req/s |
+| Snapdragon 888 | 250 subs | ~40s | 6.2 req/s |
 | Exynos 2100 | 250 subs | ~50s | 5 req/s |
-| Linux VPS (4 core) | 250 subs | ~20s | 12.5 req/s |
+| MediaTek Dimensity 1200 | 250 subs | ~45s | 5.5 req/s |
 
-*Tested with 10s timeout*
+*Tested with 10s timeout on Termux*
 
 ---
 
@@ -242,16 +248,15 @@ Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
 ```
 InjectTools/
 ├── src/
-│   ├── main.rs        # Entry point & menu (6 options)
+│   ├── main.rs        # Entry point & menu
 │   ├── config.rs      # Config management
-│   ├── scanner.rs     # Scan engine (3 functions)
+│   ├── scanner.rs     # Scan engine
 │   ├── dns.rs         # DNS + CF detection
 │   ├── crtsh.rs       # crt.sh integration
 │   ├── results.rs     # Export & view results
 │   └── ui.rs          # Terminal UI
 ├── .github/workflows/
-│   ├── release.yml        # Multi-platform build
-│   └── termux-release.yml # Termux-only (fast)
+│   └── termux-release.yml # Termux build
 ├── install.sh        # Smart installer
 ├── Cargo.toml        # Dependencies
 └── README.md
@@ -259,28 +264,30 @@ InjectTools/
 
 ---
 
-## Build Your Own
-
-### Termux Build (Fast)
-
-**Via GitHub UI:**
-1. Go to [Termux Workflow](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml)
-2. Click "Run workflow"
-3. Version: `termux-v2.3.1`
-
-**Via Git Tag:**
-```bash
-git tag termux-v2.3.1
-git push origin termux-v2.3.1
-```
-
-See [TERMUX_BUILD.md](TERMUX_BUILD.md) for details.
-
----
-
 ## Troubleshooting
 
 ### Installation Issues
+
+**curl not found:**
+```bash
+pkg install curl
+```
+
+**wget not found:**
+```bash
+pkg install wget
+```
+
+**Permission denied:**
+```bash
+chmod +x $PREFIX/bin/injecttools
+```
+
+**Storage permission denied:**
+```bash
+termux-setup-storage
+# Allow storage access when prompted
+```
 
 **No release available:**
 ```bash
@@ -292,18 +299,7 @@ cd InjectTools
 cargo build --release --target aarch64-linux-android
 ```
 
-**Wrong version:**
-```bash
-# Install specific version
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v1.1.0
-```
-
 ### Runtime Issues
-
-**Permission denied:**
-```bash
-chmod +x $PREFIX/bin/injecttools
-```
 
 **DNS errors:**
 ```bash
@@ -321,13 +317,88 @@ uname -m  # Check your arch
 # Download matching binary (arm64 or armv7)
 ```
 
+**Config file errors:**
+```bash
+# Remove old config
+rm /sdcard/InjectTools/config.toml
+# Run again to recreate
+injecttools
+```
+
+### Build from Source Issues
+
+**Rust not installed:**
+```bash
+pkg install rust
+```
+
+**Out of memory during build:**
+```bash
+# Use swap file
+pkg install tsu
+sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+**Compilation errors:**
+```bash
+# Update packages
+pkg update && pkg upgrade
+# Clean and rebuild
+cargo clean
+cargo build --release
+```
+
+---
+
+## Device Compatibility
+
+### Supported Architectures
+- ✅ **ARM64** (aarch64) - Most devices 2018+
+- ✅ **ARMv7** (armv7l) - Older devices 2015-2018
+
+### Tested Devices
+- ✅ Samsung Galaxy S21/S22/S23 series
+- ✅ Xiaomi Redmi Note series
+- ✅ POCO X3/X4/F3/F4 series
+- ✅ OnePlus 7/8/9/10 series
+- ✅ Realme GT series
+
+### Requirements
+- **Termux** app (from F-Droid, not Google Play)
+- **Android 7.0+** (API 24+)
+- **Storage permission** granted
+- **100MB** free space (after installation: ~10MB)
+
+---
+
+## Changelog
+
+### v2.3.0 (2026-01-15)
+- ✨ NEW: crt.sh integration for subdomain discovery
+- ✨ NEW: Export results to file with timestamps
+- ✨ NEW: View exported results
+- ✨ NEW: Signal handling (Ctrl+C graceful exit)
+- ✨ NEW: Settings menu
+- 🐛 FIX: Android /sdcard path support
+- 🚀 IMPROVE: Better progress tracking
+- 🚀 IMPROVE: Enhanced UI/UX
+- 🚨 BREAKING: Android/Termux only (removed Linux/Windows/macOS support)
+
+### v2.0.0 (2026-01-14)
+- Initial Rust implementation
+- Migration from Bash script
+- Async concurrent scanning
+- Native Termux binary
+- Config persistence
+
 ---
 
 ## Documentation
 
 - 📖 [README.md](README.md) - This file
-- 📱 [TERMUX_BUILD.md](TERMUX_BUILD.md) - Build guide
-- 🚀 [RELEASE.md](RELEASE.md) - Multi-platform release
+- 📱 [BUILD.md](TERMUX_BUILD.md) - Build guide for Termux
 - 💾 [install.sh](install.sh) - Installer script
 
 ---

@@ -1,311 +1,216 @@
-use crate::config::Config;
 use crate::dns::{self, DnsResolver};
-use crate::ui;
-use crate::wordlist;
-
 use anyhow::Result;
 use colored::*;
+use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::io::{self, Write};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-pub struct TestResult {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanResult {
     pub subdomain: String,
     pub ip: String,
     pub works: bool,
-    pub reason: String,
 }
 
-pub async fn test_subdomain(config: &Config, subdomain: &str) -> Result<TestResult> {
-    let resolver = DnsResolver::new();
-    
-    // Resolve DNS
-    let ip = match resolver.resolve(subdomain).await? {
-        Some(ip) => ip,
-        None => {
-            return Ok(TestResult {
-                subdomain: subdomain.to_string(),
-                ip: "N/A".to_string(),
-                works: false,
-                reason: "DNS resolution failed".to_string(),
-            });
-        }
-    };
-    
-    println!("   {}: {}", "IP Address".white(), ip.to_string().blue());
-    
-    // Check if Cloudflare
-    let is_cf = dns::is_cloudflare(&ip);
-    if is_cf {
-        println!("   {}: {}", "Provider".white(), "☁️  Cloudflare".cyan());
-    } else {
-        println!("   {}: {}", "Provider".white(), "⚠️  Non-Cloudflare".yellow());
-    }
-    
-    println!();
-    println!("{}", "🧪 Testing bug inject...".cyan());
-    
-    // Test connection
-    let works = test_connection(&config.target_host, &ip, config.timeout).await?;
-    
-    Ok(TestResult {
-        subdomain: subdomain.to_string(),
-        ip: ip.to_string(),
-        works,
-        reason: if works {
-            "Connected successfully".to_string()
-        } else {
-            "Connection failed or blocked".to_string()
-        },
-    })
+#[derive(Debug)]
+pub struct BatchResult {
+    pub working: Vec<ScanResult>,
+    pub failed: Vec<ScanResult>,
+    pub skipped: usize,
+    pub total_scanned: usize,
+    pub elapsed_secs: u64,
 }
 
-async fn test_connection(target_host: &str, ip: &IpAddr, timeout_secs: u64) -> Result<bool> {
-    let url = format!("https://{}/", target_host);
-    
-    // Create custom DNS resolver that maps target_host to the specific IP
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .danger_accept_invalid_certs(true)
-        .resolve(target_host, format!("{}:443", ip).parse()?)
-        .build()?;
-    
-    match client.get(&url).send().await {
-        Ok(response) => Ok(response.status().is_success() || response.status().is_redirection()),
-        Err(_) => Ok(false),
-    }
+pub struct Scanner {
+    target_host: String,
+    timeout: u64,
+    client: Client,
 }
 
-pub async fn full_scan(config: &Config) -> Result<()> {
-    ui::clear_screen();
-    ui::print_header("Cloudflare Bug Scanner");
-    println!();
-    
-    // Get domain to scan
-    print!(
-        "{}",
-        format!(
-            "Masukkan target domain [default: {}]: ",
-            config.default_domain
-        )
-        .white()
-    );
-    io::stdout().flush()?;
-    
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let target_domain = if input.trim().is_empty() {
-        config.default_domain.clone()
-    } else {
-        input.trim().to_string()
-    };
-    
-    println!();
-    println!("{}: {}", "Domain".blue(), target_domain.green());
-    println!("{}: {}", "Target".blue(), config.target_host.green());
-    println!(
-        "{}: {}",
-        "Filter".blue(),
-        "☁️  Cloudflare only".cyan()
-    );
-    
-    // Load wordlist
-    let wordlist_data = wordlist::load_wordlist(&config.active_wordlist)?;
-    let words: Vec<&str> = wordlist_data.lines().filter(|l| !l.trim().is_empty()).collect();
-    let total = words.len();
-    
-    match &config.active_wordlist {
-        Some(path) => {
-            let name = std::path::Path::new(path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown");
-            println!("{}: {}", "Wordlist".blue(), name.green());
-        }
-        None => {
-            println!(
-                "{}: {}",
-                "Wordlist".blue(),
-                "Embedded (terbatas)".yellow()
-            );
+impl Scanner {
+    pub fn new(target_host: String, timeout: u64) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(timeout))
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self {
+            target_host,
+            timeout,
+            client,
         }
     }
-    
-    println!();
-    println!("{}", format!("✅ Loaded {} patterns", total).green());
-    println!();
-    
-    // Progress bar
-    let pb = ProgressBar::new(total as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.cyan} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-    
-    let resolver = Arc::new(DnsResolver::new());
-    let mut work_bugs = Vec::new();
-    let mut fail_bugs = Vec::new();
-    let mut skipped = 0;
-    
-    let start = std::time::Instant::now();
-    
-    // Scan
-    for (idx, sub) in words.iter().enumerate() {
-        let domain = format!("{}.{}", sub, target_domain);
-        pb.set_position((idx + 1) as u64);
-        pb.set_message(format!("Testing: {}", domain));
-        
-        // Resolve
-        let ip = match resolver.resolve(&domain).await? {
-            Some(ip) => ip,
-            None => {
-                continue;
+
+    pub async fn resolve_domain(&self, domain: &str) -> Option<IpAddr> {
+        let resolver = DnsResolver::new();
+        resolver.resolve(domain).await.ok().flatten()
+    }
+
+    /// Ping test with platform-specific implementation
+    /// - Non-Android: Uses ICMP ping via surge-ping
+    /// - Android: Uses HTTP response time as fallback (no root required)
+    pub async fn ping_test(&self, domain: &str) -> Option<u128> {
+        #[cfg(not(target_os = "android"))]
+        {
+            use surge_ping::{Client, Config, PingIdentifier, PingSequence, ICMP};
+
+            let client = Client::new(&Config::default()).ok()?;
+            let mut pinger = client
+                .pinger(domain.parse().ok()?, PingIdentifier(rand::random()))
+                .await;
+
+            match pinger
+                .ping(PingSequence(0), &[])
+                .await
+                .ok()?
+                .1
+            {
+                Some((_packet, duration)) => Some(duration.as_millis()),
+                None => None,
             }
-        };
-        
-        // Check Cloudflare
-        if !dns::is_cloudflare(&ip) {
-            skipped += 1;
-            continue;
         }
-        
-        // Test
-        let works = test_connection(&config.target_host, &ip, config.timeout).await?;
-        
-        if works {
-            work_bugs.push((domain.clone(), ip.to_string()));
-        } else {
-            fail_bugs.push((domain.clone(), ip.to_string()));
-        }
-        
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    
-    pb.finish_and_clear();
-    
-    let elapsed = start.elapsed().as_secs();
-    
-    // Results
-    println!();
-    ui::print_header("HASIL SCAN");
-    println!();
-    
-    if !work_bugs.is_empty() {
-        println!(
-            "{}",
-            format!("✅ Working Bugs ({}):", work_bugs.len())
-                .green()
-                .bold()
-        );
-        for (domain, ip) in &work_bugs {
-            println!("  {} {} {}", "🟢".green(), domain.white(), format!("({})", ip).cyan());
-        }
-        println!();
-    } else {
-        println!("{}", "Tidak ada working bug ditemukan".yellow());
-        println!();
-    }
-    
-    if !fail_bugs.is_empty() {
-        println!(
-            "{}",
-            format!("❌ Failed Tests ({}):", fail_bugs.len()).red().bold()
-        );
-        for (domain, ip) in &fail_bugs {
-            println!("  {} {} {}", "🔴".red(), domain.white(), format!("({})", ip).cyan());
-        }
-        println!();
-    }
-    
-    ui::print_separator();
-    println!("{}", "Statistik:".white().bold());
-    println!(
-        "  {}: {}/{} ({}%)",
-        "Scanned".blue(),
-        total,
-        total,
-        100
-    );
-    println!(
-        "  {}: {} | {}: {}",
-        "CF Found".blue(),
-        (work_bugs.len() + fail_bugs.len()).to_string().green(),
-        "Non-CF".blue(),
-        skipped.to_string().yellow()
-    );
-    println!("  {}: {}s", "Waktu".blue(), elapsed.to_string().cyan());
-    println!();
-    
-    // Export option
-    if !work_bugs.is_empty() || !fail_bugs.is_empty() {
-        print!("Export hasil? (y/n): ");
-        io::stdout().flush()?;
-        
-        let mut export_choice = String::new();
-        io::stdin().read_line(&mut export_choice)?;
-        
-        if export_choice.trim().to_lowercase() == "y" {
-            export_results(&target_domain, &work_bugs, &fail_bugs, elapsed)?;
-        }
-    }
-    
-    println!();
-    print!("Tekan Enter untuk kembali ke menu...");
-    io::stdout().flush()?;
-    let mut _dummy = String::new();
-    io::stdin().read_line(&mut _dummy)?;
-    
-    Ok(())
-}
 
-fn export_results(
-    domain: &str,
-    work_bugs: &[(String, String)],
-    fail_bugs: &[(String, String)],
-    elapsed: u64,
-) -> Result<()> {
-    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let filename = format!("bug-{}-{}.txt", domain, timestamp);
-    let filepath = home.join(&filename);
-    
-    let mut content = String::new();
-    content.push_str("# InjectTools Scan Results\n");
-    content.push_str("# Created by: t.me/hoshiyomi_id\n");
-    content.push_str(&format!("# Domain: {}\n", domain));
-    content.push_str(&format!("# Date: {}\n", chrono::Local::now()));
-    content.push_str(&format!("# Scan time: {}s\n", elapsed));
-    content.push_str("\n");
-    
-    if !work_bugs.is_empty() {
-        content.push_str(&format!("=== WORKING ({}) ===\n", work_bugs.len()));
-        for (domain, ip) in work_bugs {
-            content.push_str(&format!("✅ {} {}\n", domain, ip));
-        }
-        content.push_str("\n");
-    }
-    
-    if !fail_bugs.is_empty() {
-        content.push_str(&format!("=== FAILED ({}) ===\n", fail_bugs.len()));
-        for (domain, ip) in fail_bugs {
-            content.push_str(&format!("❌ {} {}\n", domain, ip));
+        #[cfg(target_os = "android")]
+        {
+            // Android fallback: HTTP response time
+            let start = Instant::now();
+            let url = format!("https://{}", domain);
+
+            match self
+                .client
+                .get(&url)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await
+            {
+                Ok(_) => Some(start.elapsed().as_millis()),
+                Err(_) => None,
+            }
         }
     }
-    
-    std::fs::write(&filepath, content)?;
-    
-    println!();
-    println!(
-        "{}",
-        format!("✅ Tersimpan: {}", filepath.display())
-            .green()
-            .bold()
-    );
-    std::thread::sleep(Duration::from_secs(2));
-    
-    Ok(())
+
+    pub async fn test_inject(&self, ip: &IpAddr, subdomain: &str) -> bool {
+        let url = format!("https://{}/", self.target_host);
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(self.timeout))
+            .danger_accept_invalid_certs(true)
+            .resolve(&self.target_host, format!("{}:443", ip).parse().unwrap())
+            .build();
+
+        match client {
+            Ok(client) => match client.get(&url).header("Host", subdomain).send().await {
+                Ok(resp) => resp.status().is_success() || resp.status().is_redirection(),
+                Err(_) => false,
+            },
+            Err(_) => false,
+        }
+    }
+
+    pub async fn batch_test(
+        &self,
+        subdomains: Vec<String>,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<BatchResult> {
+        let start = Instant::now();
+        let total = subdomains.len();
+
+        let progress = Arc::new(ProgressBar::new(total as u64));
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.cyan} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}",
+                )?
+                .progress_chars("#>-"),
+        );
+
+        let working = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let failed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let scanned = Arc::new(AtomicUsize::new(0));
+
+        let mut tasks = FuturesUnordered::new();
+
+        for subdomain in subdomains {
+            if cancelled.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let subdomain = subdomain.clone();
+            let progress = Arc::clone(&progress);
+            let working = Arc::clone(&working);
+            let failed = Arc::clone(&failed);
+            let scanned = Arc::clone(&scanned);
+            let cancelled = Arc::clone(&cancelled);
+            let target_host = self.target_host.clone();
+            let timeout = self.timeout;
+
+            tasks.push(tokio::spawn(async move {
+                if cancelled.load(Ordering::SeqCst) {
+                    return;
+                }
+
+                progress.set_message(format!("Testing: {}", subdomain));
+
+                let resolver = DnsResolver::new();
+                if let Ok(Some(ip)) = resolver.resolve(&subdomain).await {
+                    if dns::is_cloudflare(&ip) {
+                        let scanner = Scanner::new(target_host, timeout);
+                        let result = scanner.test_inject(&ip, &subdomain).await;
+
+                        let scan_result = ScanResult {
+                            subdomain: subdomain.clone(),
+                            ip: ip.to_string(),
+                            works: result,
+                        };
+
+                        if result {
+                            working.lock().unwrap().push(scan_result);
+                        } else {
+                            failed.lock().unwrap().push(scan_result);
+                        }
+                    }
+                }
+
+                scanned.fetch_add(1, Ordering::SeqCst);
+                progress.inc(1);
+            }));
+
+            // Limit concurrent tasks
+            if tasks.len() >= 50 {
+                tasks.next().await;
+            }
+        }
+
+        while tasks.next().await.is_some() {}
+
+        progress.finish_and_clear();
+
+        let working = Arc::try_unwrap(working)
+            .unwrap()
+            .into_inner()
+            .unwrap();
+        let failed = Arc::try_unwrap(failed).unwrap().into_inner().unwrap();
+
+        Ok(BatchResult {
+            working,
+            failed,
+            skipped: 0,
+            total_scanned: scanned.load(Ordering::SeqCst),
+            elapsed_secs: start.elapsed().as_secs(),
+        })
+    }
+
+    pub async fn full_scan(
+        &self,
+        subdomains: Vec<String>,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<BatchResult> {
+        self.batch_test(subdomains, cancelled).await
+    }
 }

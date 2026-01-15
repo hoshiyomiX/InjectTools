@@ -45,6 +45,38 @@ fi
 
 echo ""
 
+# Function to force uninstall old binary
+force_uninstall() {
+    local target_path="$PREFIX/bin/injecttools"
+    
+    if [[ -f "$target_path" ]]; then
+        echo -e "${YELLOW}🗑️  Removing old installation...${NC}"
+        
+        # Get old version for reference
+        local old_version=$("$target_path" --version 2>/dev/null || echo "unknown")
+        echo -e "${YELLOW}  Old: $old_version${NC}"
+        
+        # Kill any running instances
+        pkill -9 injecttools 2>/dev/null || true
+        sleep 0.5
+        
+        # Multiple removal attempts
+        rm -f "$target_path" 2>/dev/null || true
+        rm -rf "$target_path" 2>/dev/null || true
+        
+        # Verify removal
+        if [[ -f "$target_path" ]]; then
+            echo -e "${RED}✗ Failed to remove old binary (permission issue?)${NC}"
+            echo -e "${YELLOW}  Try: chmod 777 $target_path && rm -f $target_path${NC}"
+            return 1
+        fi
+        
+        echo -e "${GREEN}✓ Old binary removed${NC}"
+    fi
+    
+    return 0
+}
+
 # Function to safely install binary with verification
 safe_install_binary() {
     local source_binary="$1"
@@ -59,6 +91,7 @@ safe_install_binary() {
     # Check if it's a valid ELF binary
     if ! file "$source_binary" | grep -q "ELF"; then
         echo -e "${RED}✗ Invalid binary format${NC}"
+        file "$source_binary"
         return 1
     fi
     
@@ -67,24 +100,28 @@ safe_install_binary() {
     local new_version=$("$source_binary" --version 2>/dev/null || echo "unknown")
     echo -e "${BLUE}  New version: ${GREEN}$new_version${NC}"
     
-    # Backup existing if present
-    if [[ -f "$target_path" ]]; then
-        local old_version=$("$target_path" --version 2>/dev/null || echo "unknown")
-        echo -e "${YELLOW}  Old version: $old_version${NC}"
-        
-        local backup="$target_path.backup.$(date +%s)"
-        echo -e "${YELLOW}  📦 Backing up to: ${backup##*/}${NC}"
-        cp "$target_path" "$backup"
-        
-        # Force remove old binary
-        echo -e "${CYAN}  🗑️ Removing old binary...${NC}"
-        rm -f "$target_path"
+    # Extract version number for comparison
+    local new_ver_num=$(echo "$new_version" | grep -oP '\d+\.\d+\.\d+' | head -1)
+    echo -e "${BLUE}  Version number: ${CYAN}$new_ver_num${NC}"
+    
+    # Force remove old binary
+    if ! force_uninstall; then
+        return 1
     fi
     
     # Install new binary
     echo -e "${CYAN}  📥 Installing new binary...${NC}"
-    cp "$source_binary" "$target_path"
-    chmod +x "$target_path"
+    
+    # Use cp with force overwrite
+    cp -f "$source_binary" "$target_path" 2>/dev/null || {
+        echo -e "${RED}✗ Copy failed, trying with sudo-like approach${NC}"
+        cat "$source_binary" > "$target_path" || {
+            echo -e "${RED}✗ Installation failed${NC}"
+            return 1
+        }
+    }
+    
+    chmod 755 "$target_path"
     
     # Verify installation
     if [[ ! -f "$target_path" ]]; then
@@ -92,13 +129,27 @@ safe_install_binary() {
         return 1
     fi
     
+    # Verify executable
+    sleep 0.5
     if ! "$target_path" --version &>/dev/null; then
         echo -e "${RED}✗ Installation failed: binary not executable${NC}"
+        ls -la "$target_path"
         return 1
     fi
     
+    # Get installed version and verify
     local installed_version=$("$target_path" --version 2>&1)
     echo -e "${GREEN}✓ Installed: $installed_version${NC}"
+    
+    # Cross-check version
+    local inst_ver_num=$(echo "$installed_version" | grep -oP '\d+\.\d+\.\d+' | head -1)
+    if [[ "$new_ver_num" != "$inst_ver_num" ]]; then
+        echo -e "${YELLOW}⚠ Version mismatch detected!${NC}"
+        echo -e "${YELLOW}  Expected: $new_ver_num${NC}"
+        echo -e "${YELLOW}  Got: $inst_ver_num${NC}"
+        echo -e "${RED}✗ Installation verification failed${NC}"
+        return 1
+    fi
     
     return 0
 }
@@ -111,20 +162,38 @@ try_download_release() {
     local download_url="$base_url/$tarball"
     
     echo -e "${BLUE}  Trying: ${CYAN}$version${NC}"
+    echo -e "${BLUE}  URL: ${CYAN}$download_url${NC}"
     
     local tmp_dir=$(mktemp -d)
     cd "$tmp_dir"
     
-    if curl -fsSL -o "$tarball" "$download_url" 2>/dev/null; then
-        if tar xzf "$tarball" 2>/dev/null && [[ -f "injecttools" ]]; then
+    # Download with verbose error
+    if curl -fsSL -o "$tarball" "$download_url" 2>&1; then
+        echo -e "${GREEN}  ✓ Downloaded${NC}"
+        
+        # Extract
+        if tar xzf "$tarball" 2>&1 && [[ -f "injecttools" ]]; then
+            echo -e "${GREEN}  ✓ Extracted${NC}"
+            
+            # Show binary info
+            echo -e "${BLUE}  Binary info:${NC}"
+            ls -lh injecttools
+            file injecttools
+            
             # Use safe install
             if safe_install_binary "$PWD/injecttools"; then
                 cd ~
                 rm -rf "$tmp_dir"
                 echo -e "${GREEN}✓ Installed from release: $version${NC}"
                 return 0
+            else
+                echo -e "${RED}✗ Safe install failed${NC}"
             fi
+        else
+            echo -e "${RED}✗ Extraction failed${NC}"
         fi
+    else
+        echo -e "${RED}✗ Download failed (release might not exist)${NC}"
     fi
     
     cd ~
@@ -197,9 +266,16 @@ build_from_source() {
     
     cd "$build_dir"
     
+    # Show version being built
+    echo -e "${BLUE}  Cargo.toml version:${NC}"
+    grep '^version' Cargo.toml
+    
     echo -e "${CYAN}🔧 Compiling (this may take 5-15 minutes)...${NC}"
     echo -e "${YELLOW}  Device will be busy, grab some coffee ☕${NC}"
     echo ""
+    
+    # Clean build
+    cargo clean
     
     # Build with progress output
     if cargo build --release --target "$RUST_TARGET" 2>&1 | \
@@ -217,6 +293,13 @@ build_from_source() {
         local binary_path="target/$RUST_TARGET/release/injecttools"
         
         if [[ -f "$binary_path" ]]; then
+            echo ""
+            echo -e "${GREEN}✓ Build complete${NC}"
+            
+            # Show build info
+            ls -lh "$binary_path"
+            "$binary_path" --version
+            
             # Use safe install
             if safe_install_binary "$binary_path"; then
                 cd ~
@@ -231,6 +314,7 @@ build_from_source() {
         fi
     else
         echo -e "${RED}✗ Build failed${NC}"
+        echo -e "${YELLOW}  Check build logs above for errors${NC}"
         cd ~
         return 1
     fi
@@ -318,6 +402,15 @@ if [[ -f "$PREFIX/bin/injecttools" ]]; then
     
     # Show SHA256 for verification
     echo -e "${BLUE}🔐 SHA256: ${GREEN}$(sha256sum $PREFIX/bin/injecttools | cut -d' ' -f1 | head -c16)...${NC}"
+    
+    # Full path test
+    echo ""
+    echo -e "${YELLOW}🧪 Quick Test:${NC}"
+    if $PREFIX/bin/injecttools --version &>/dev/null; then
+        echo -e "${GREEN}✓ Binary is functional${NC}"
+    else
+        echo -e "${RED}✗ Binary test failed${NC}"
+    fi
 fi
 
 echo ""

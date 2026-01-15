@@ -1,6 +1,7 @@
 #!/bin/bash
 # InjectTools - Smart Installer for Termux
 # Usage: curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
+# Or with version: curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
 
 set -e
 
@@ -9,31 +10,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}   InjectTools v2.3 - Smart Installer${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-
-# Detect architecture
-ARCH=$(uname -m)
-echo -e "${BLUE}📱 Detected architecture: ${GREEN}$ARCH${NC}"
-
-if [[ "$ARCH" == "aarch64" ]]; then
-    BINARY="injecttools-termux-arm64"
-    RUST_TARGET="aarch64-linux-android"
-    echo -e "${GREEN}✓ Using ARM64 binary (modern devices)${NC}"
-elif [[ "$ARCH" == "armv7"* ]] || [[ "$ARCH" == "armv8l" ]]; then
-    BINARY="injecttools-termux-armv7"
-    RUST_TARGET="armv7-linux-androideabi"
-    echo -e "${GREEN}✓ Using ARMv7 binary (older devices)${NC}"
-else
-    echo -e "${RED}✗ Unsupported architecture: $ARCH${NC}"
-    echo -e "${YELLOW}  Supported: aarch64 (ARM64), armv7/armv8l (ARMv7)${NC}"
-    exit 1
-fi
-
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}   InjectTools - Smart Installer${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
 # Check if running in Termux
@@ -43,165 +25,267 @@ if [[ -z "$PREFIX" ]]; then
     exit 1
 fi
 
-# Try to download pre-built binary first
-echo -e "${CYAN}🔍 Checking for pre-built release...${NC}"
+# Detect architecture
+ARCH=$(uname -m)
+echo -e "${BLUE}📱 Architecture: ${GREEN}$ARCH${NC}"
 
-# Try multiple version tags
-VERSIONS=("termux-v2.3.0" "v2.3.0" "termux-v1.1.0" "v1.1.0")
-DOWNLOAD_SUCCESS=false
+if [[ "$ARCH" == "aarch64" ]]; then
+    BINARY_NAME="injecttools-termux-arm64"
+    RUST_TARGET="aarch64-linux-android"
+    echo -e "${GREEN}✓ Target: ARM64 (modern devices)${NC}"
+elif [[ "$ARCH" == "armv7"* ]] || [[ "$ARCH" == "armv8l" ]]; then
+    BINARY_NAME="injecttools-termux-armv7"
+    RUST_TARGET="armv7-linux-androideabi"
+    echo -e "${GREEN}✓ Target: ARMv7 (older devices)${NC}"
+else
+    echo -e "${RED}✗ Unsupported architecture: $ARCH${NC}"
+    echo -e "${YELLOW}  Supported: aarch64, armv7, armv8l${NC}"
+    exit 1
+fi
 
-for VERSION in "${VERSIONS[@]}"; do
-    BASE_URL="https://github.com/hoshiyomiX/InjectTools/releases/download/$VERSION"
-    TARBALL="${BINARY}.tar.gz"
-    DOWNLOAD_URL="$BASE_URL/$TARBALL"
+echo ""
+
+# Function to try download from GitHub releases
+try_download_release() {
+    local version="$1"
+    local base_url="https://github.com/hoshiyomiX/InjectTools/releases/download/$version"
+    local tarball="${BINARY_NAME}.tar.gz"
+    local download_url="$base_url/$tarball"
     
-    echo -e "${BLUE}  Trying version: ${CYAN}$VERSION${NC}"
+    echo -e "${BLUE}  Trying: ${CYAN}$version${NC}"
     
-    TMP_DIR=$(mktemp -d)
-    cd "$TMP_DIR"
+    local tmp_dir=$(mktemp -d)
+    cd "$tmp_dir"
     
-    if curl -fsSL -o "$TARBALL" "$DOWNLOAD_URL" 2>/dev/null; then
-        echo -e "${GREEN}✓ Found release: $VERSION${NC}"
-        
-        # Extract
-        echo -e "${CYAN}📎 Extracting...${NC}"
-        if tar xzf "$TARBALL" 2>/dev/null && [[ -f "injecttools" ]]; then
-            # Backup existing
+    if curl -fsSL -o "$tarball" "$download_url" 2>/dev/null; then
+        if tar xzf "$tarball" 2>/dev/null && [[ -f "injecttools" ]]; then
+            # Success!
             if [[ -f "$PREFIX/bin/injecttools" ]]; then
-                echo -e "${YELLOW}⚠ Backing up existing installation...${NC}"
-                mv "$PREFIX/bin/injecttools" "$PREFIX/bin/injecttools.backup.$(date +%s)"
+                local backup="$PREFIX/bin/injecttools.backup.$(date +%s)"
+                echo -e "${YELLOW}  ⚠ Backing up: ${backup##*/}${NC}"
+                mv "$PREFIX/bin/injecttools" "$backup"
             fi
             
-            # Install
-            echo -e "${CYAN}📦 Installing...${NC}"
             mv injecttools "$PREFIX/bin/"
             chmod +x "$PREFIX/bin/injecttools"
             
-            # Cleanup
             cd ~
-            rm -rf "$TMP_DIR"
+            rm -rf "$tmp_dir"
             
-            DOWNLOAD_SUCCESS=true
-            break
+            echo -e "${GREEN}✓ Installed from release: $version${NC}"
+            return 0
         fi
     fi
     
-    # Cleanup failed attempt
     cd ~
-    rm -rf "$TMP_DIR"
-done
+    rm -rf "$tmp_dir"
+    return 1
+}
 
-if [[ "$DOWNLOAD_SUCCESS" == "true" ]]; then
-    echo -e "${GREEN}✓ Pre-built binary installed${NC}"
-else
-    # No release found, build from source
-    echo -e "${YELLOW}⚠ No pre-built release found${NC}"
+# Function to fetch latest GitHub release tag
+get_latest_release() {
+    local api_url="https://api.github.com/repos/hoshiyomiX/InjectTools/releases"
+    
+    # Try to get termux-specific release first
+    local termux_tag=$(curl -fsSL "$api_url" 2>/dev/null | \
+        grep -m1 '"tag_name".*termux-' | \
+        sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+    
+    if [[ -n "$termux_tag" ]]; then
+        echo "$termux_tag"
+        return 0
+    fi
+    
+    # Fallback to any latest release
+    local any_tag=$(curl -fsSL "$api_url" 2>/dev/null | \
+        grep -m1 '"tag_name"' | \
+        sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+    
+    if [[ -n "$any_tag" ]]; then
+        echo "$any_tag"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to build from source
+build_from_source() {
     echo -e "${CYAN}🔨 Building from source...${NC}"
     echo ""
     
     # Check dependencies
-    MISSING=()
+    local missing=()
     
-    if ! command -v git &> /dev/null; then
-        MISSING+=("git")
-    fi
+    command -v git &>/dev/null || missing+=("git")
+    command -v rustc &>/dev/null || missing+=("rust")
+    command -v pkg-config &>/dev/null || missing+=("binutils")
     
-    if ! command -v rustc &> /dev/null; then
-        MISSING+=("rust")
-    fi
-    
-    if ! command -v pkg-config &> /dev/null; then
-        MISSING+=("binutils")
-    fi
-    
-    if [[ ${#MISSING[@]} -gt 0 ]]; then
-        echo -e "${YELLOW}📦 Installing build dependencies...${NC}"
-        for pkg in "${MISSING[@]}"; do
-            echo -e "${CYAN}  Installing $pkg...${NC}"
-            pkg install -y $pkg
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}📦 Installing dependencies: ${missing[*]}${NC}"
+        for pkg in "${missing[@]}"; do
+            echo -e "${CYAN}  → $pkg${NC}"
+            pkg install -y "$pkg" >/dev/null 2>&1
         done
         echo -e "${GREEN}✓ Dependencies installed${NC}"
         echo ""
     fi
     
-    # Clone repo
-    BUILD_DIR="$HOME/InjectTools-build"
-    if [[ -d "$BUILD_DIR" ]]; then
-        echo -e "${YELLOW}⚠ Removing old build directory...${NC}"
-        rm -rf "$BUILD_DIR"
+    # Clone or update repo
+    local build_dir="$HOME/InjectTools-build"
+    
+    if [[ -d "$build_dir" ]]; then
+        echo -e "${YELLOW}⚠ Cleaning old build directory${NC}"
+        rm -rf "$build_dir"
     fi
     
     echo -e "${CYAN}📥 Cloning repository...${NC}"
-    if ! git clone --depth 1 https://github.com/hoshiyomiX/InjectTools.git "$BUILD_DIR"; then
-        echo -e "${RED}✗ Failed to clone repository${NC}"
-        exit 1
+    if ! git clone --depth 1 -q https://github.com/hoshiyomiX/InjectTools.git "$build_dir"; then
+        echo -e "${RED}✗ Git clone failed${NC}"
+        return 1
     fi
     
-    cd "$BUILD_DIR"
+    cd "$build_dir"
     
-    # Build
-    echo -e "${CYAN}🔨 Compiling Rust code...${NC}"
-    echo -e "${YELLOW}  This may take 5-15 minutes depending on your device${NC}"
+    echo -e "${CYAN}🔧 Compiling (this may take 5-15 minutes)...${NC}"
+    echo -e "${YELLOW}  Device will be busy, grab some coffee ☕${NC}"
     echo ""
     
-    if cargo build --release --target "$RUST_TARGET" 2>&1 | grep -E '(Compiling|Finished|error)'; then
-        BINARY_PATH="target/$RUST_TARGET/release/injecttools"
+    # Build with progress output
+    if cargo build --release --target "$RUST_TARGET" 2>&1 | \
+       grep --line-buffered -E '(Compiling|Finished|error:)' | \
+       while IFS= read -r line; do
+           if echo "$line" | grep -q "Compiling"; then
+               echo -e "${BLUE}  $line${NC}"
+           elif echo "$line" | grep -q "Finished"; then
+               echo -e "${GREEN}  $line${NC}"
+           elif echo "$line" | grep -q "error:"; then
+               echo -e "${RED}  $line${NC}"
+           fi
+       done; then
         
-        if [[ -f "$BINARY_PATH" ]]; then
+        local binary_path="target/$RUST_TARGET/release/injecttools"
+        
+        if [[ -f "$binary_path" ]]; then
             # Backup existing
             if [[ -f "$PREFIX/bin/injecttools" ]]; then
-                echo -e "${YELLOW}⚠ Backing up existing installation...${NC}"
-                mv "$PREFIX/bin/injecttools" "$PREFIX/bin/injecttools.backup.$(date +%s)"
+                local backup="$PREFIX/bin/injecttools.backup.$(date +%s)"
+                echo -e "${YELLOW}⚠ Backing up: ${backup##*/}${NC}"
+                mv "$PREFIX/bin/injecttools" "$backup"
             fi
             
             # Install
-            echo -e "${CYAN}📦 Installing...${NC}"
-            cp "$BINARY_PATH" "$PREFIX/bin/injecttools"
+            cp "$binary_path" "$PREFIX/bin/injecttools"
             chmod +x "$PREFIX/bin/injecttools"
             
-            echo -e "${GREEN}✓ Built from source successfully${NC}"
+            cd ~
+            rm -rf "$build_dir"
+            
+            echo -e "${GREEN}✓ Built and installed from source${NC}"
+            return 0
         else
             echo -e "${RED}✗ Build succeeded but binary not found${NC}"
-            exit 1
+            cd ~
+            return 1
         fi
     else
         echo -e "${RED}✗ Build failed${NC}"
-        echo -e "${YELLOW}  Check error messages above${NC}"
+        cd ~
+        return 1
+    fi
+}
+
+# Main installation flow
+INSTALLED=false
+
+# Check if version specified by user
+if [[ -n "$1" ]]; then
+    echo -e "${BLUE}🎯 User-specified version: ${GREEN}$1${NC}"
+    echo ""
+    
+    if try_download_release "$1"; then
+        INSTALLED=true
+    else
+        echo -e "${RED}✗ Version $1 not found${NC}"
+        echo -e "${YELLOW}  Available releases: https://github.com/hoshiyomiX/InjectTools/releases${NC}"
+        echo ""
+        echo -e "${CYAN}💡 Fallback to latest or build from source? (y/n)${NC}"
+        read -r fallback
+        if [[ ! "$fallback" =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}Installation cancelled${NC}"
+            exit 1
+        fi
+    fi
+fi
+
+# Try to get latest release
+if [[ "$INSTALLED" == "false" ]]; then
+    echo -e "${CYAN}🔍 Checking for latest release...${NC}"
+    
+    if LATEST=$(get_latest_release); then
+        echo -e "${GREEN}✓ Found: $LATEST${NC}"
+        echo ""
+        
+        if try_download_release "$LATEST"; then
+            INSTALLED=true
+        fi
+    fi
+fi
+
+# Try fallback versions
+if [[ "$INSTALLED" == "false" ]]; then
+    echo -e "${YELLOW}⚠ No latest release found, trying fallback versions...${NC}"
+    echo ""
+    
+    FALLBACK_VERSIONS=("termux-v2.3.0" "v2.3.0" "termux-v1.1.0" "v1.1.0")
+    
+    for version in "${FALLBACK_VERSIONS[@]}"; do
+        if try_download_release "$version"; then
+            INSTALLED=true
+            break
+        fi
+    done
+fi
+
+# Last resort: build from source
+if [[ "$INSTALLED" == "false" ]]; then
+    echo -e "${YELLOW}⚠ No pre-built releases available${NC}"
+    echo ""
+    
+    if build_from_source; then
+        INSTALLED=true
+    else
+        echo -e "${RED}✗ Installation failed${NC}"
         exit 1
     fi
-    
-    # Cleanup
-    cd ~
-    echo -e "${CYAN}🧹 Cleaning up build directory...${NC}"
-    rm -rf "$BUILD_DIR"
 fi
 
+# Final report
 echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}✅ Installation Complete!${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "${BLUE}📍 Binary location: ${GREEN}$PREFIX/bin/injecttools${NC}"
+
 if [[ -f "$PREFIX/bin/injecttools" ]]; then
-    echo -e "${BLUE}📏 Binary size: ${GREEN}$(du -h $PREFIX/bin/injecttools | cut -f1)${NC}"
-fi
-echo ""
-echo -e "${YELLOW}🚀 Run the tool:${NC}"
-echo -e "   ${CYAN}injecttools${NC}"
-echo ""
-echo -e "${YELLOW}📚 Help & Options:${NC}"
-echo -e "   ${CYAN}injecttools --help${NC}"
-echo ""
-echo -e "${BLUE}Created by: ${CYAN}t.me/hoshiyomi_id${NC}"
-echo ""
-
-# Test binary
-if injecttools --version &>/dev/null; then
-    VERSION_OUTPUT=$(injecttools --version 2>&1)
-    echo -e "${GREEN}✓ Installation verified: $VERSION_OUTPUT${NC}"
-else
-    echo -e "${YELLOW}⚠ Binary installed but verification failed${NC}"
-    echo -e "${YELLOW}  Try running: ${CYAN}injecttools --version${NC}"
+    echo -e "${BLUE}📍 Location: ${GREEN}$PREFIX/bin/injecttools${NC}"
+    echo -e "${BLUE}📊 Size: ${GREEN}$(du -h $PREFIX/bin/injecttools | cut -f1)${NC}"
+    
+    if VERSION_OUT=$(injecttools --version 2>&1); then
+        echo -e "${BLUE}🔖 Version: ${GREEN}$VERSION_OUT${NC}"
+    fi
 fi
 
+echo ""
+echo -e "${YELLOW}🚀 Quick Start:${NC}"
+echo -e "   ${CYAN}injecttools${NC}              ${MAGENTA}# Interactive menu${NC}"
+echo -e "   ${CYAN}injecttools --help${NC}       ${MAGENTA}# Show all options${NC}"
+echo ""
+echo -e "${YELLOW}📚 Examples:${NC}"
+echo -e "   ${CYAN}injecttools -t host.com -s cdn.cloudflare.com${NC}"
+echo -e "   ${CYAN}injecttools -t host.com -d cloudflare.com --crtsh${NC}"
+echo -e "   ${CYAN}injecttools --view-results${NC}"
+echo ""
+echo -e "${BLUE}👤 Created by: ${CYAN}t.me/hoshiyomi_id${NC}"
+echo -e "${BLUE}🐛 Report bugs: ${CYAN}github.com/hoshiyomiX/InjectTools/issues${NC}"
 echo ""

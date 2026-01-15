@@ -13,7 +13,7 @@ use std::sync::Arc;
 #[derive(Parser, Debug)]
 #[command(name = "InjectTools")]
 #[command(author = "hoshiyomi_id <t.me/hoshiyomi_id>")]
-#[command(version = "2.3.0")]
+#[command(version = "2.3.1")]
 #[command(about = "Bug Inject Scanner for Cloudflare Subdomains", long_about = None)]
 struct Args {
     /// Target host (tunnel/proxy domain)
@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
     // Interactive mode
     loop {
         ui::clear_screen();
-        ui::print_header("INJECTTOOLS v2.3");
+        ui::print_header("INJECTTOOLS v2.3.1");
         
         println!("\n{}", "MAIN MENU".bold());
         println!("{}" , "━".repeat(50).cyan());

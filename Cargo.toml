@@ -6,6 +6,8 @@ authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
 description = "Bug Inject Scanner for Cloudflare Subdomains - Android/Termux Only"
 license = "MIT"
 repository = "https://github.com/hoshiyomiX/InjectTools"
+keywords = ["android", "termux", "cloudflare", "scanner", "networking"]
+categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 # HTTP client
@@ -19,7 +21,7 @@ trust-dns-resolver = "0.23"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialogueur = "0.11"
+dialoguer = "0.11"
 terminal_size = "0.3"
 
 # Networking
@@ -47,8 +49,8 @@ ctrlc = "3.4"
 regex = "1.10"
 
 [profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-strip = true
-panic = "abort"
+opt-level = "z"       # Optimize for size
+lto = true            # Link-time optimization
+codegen-units = 1     # Single codegen unit
+strip = true          # Strip symbols
+panic = "abort"        # Abort on panic

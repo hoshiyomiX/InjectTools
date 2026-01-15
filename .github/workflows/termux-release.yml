@@ -14,10 +14,17 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Add global permissions for all jobs
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-termux:
     name: Build for Termux (${{ matrix.target }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for pushing logs
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +44,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Fetch all history for git operations
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -267,6 +275,7 @@ jobs:
 
       - name: Push build log to repository
         if: always()
+        continue-on-error: true  # Don't fail build if log push fails
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -285,7 +294,7 @@ jobs:
           git add .github/build-logs/
           
           if git diff --staged --quiet; then
-            echo "No build log changes to commit"
+            echo "ℹ️ No build log changes to commit"
           else
             git commit -m "ci: Add build log [$STATUS] for ${{ matrix.arch }} - ${BUILD_TIMESTAMP}"
             
@@ -296,12 +305,12 @@ jobs:
                 break
               else
                 echo "⚠️ Push attempt $i failed, retrying..."
-                git pull --rebase origin main
+                git pull --rebase origin main || true
                 sleep 2
               fi
               
               if [ $i -eq 3 ]; then
-                echo "❌ Failed to push build log after 3 attempts"
+                echo "⚠️ Failed to push build log after 3 attempts"
                 echo "Log will be available as artifact only"
               fi
             done
@@ -330,6 +339,7 @@ jobs:
         run: |
           echo "::error::Build failed for ${{ matrix.target }}"
           echo "::error::Check build log at .github/build-logs/failed-${{ matrix.arch }}-${BUILD_TIMESTAMP}.log"
+          echo "::error::Or download artifact: build-log-${{ matrix.arch }}-${BUILD_TIMESTAMP}"
           exit 1
 
   create-release:
@@ -427,7 +437,7 @@ jobs:
             ## 📖 Documentation
             
             - [README.md](https://github.com/hoshiyomiX/InjectTools#readme)
-            - [Termux Build Guide](https://github.com/hoshiyomiX/InjectTools/blob/main/TERMUX_BUILD.md)
+            - [CHANGELOG.md](https://github.com/hoshiyomiX/InjectTools/blob/main/CHANGELOG.md)
             
             ---
             
@@ -455,4 +465,4 @@ jobs:
           echo "- 📦 [injecttools-termux-armv7.tar.gz](https://github.com/hoshiyomiX/InjectTools/releases/download/${{ steps.version.outputs.version }}/injecttools-termux-armv7.tar.gz)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Build Logs:**" >> $GITHUB_STEP_SUMMARY
-          echo "- 📋 [View Logs](.github/build-logs/)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 [View Logs](https://github.com/hoshiyomiX/InjectTools/tree/main/.github/build-logs)" >> $GITHUB_STEP_SUMMARY

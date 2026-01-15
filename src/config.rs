@@ -18,30 +18,14 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Get config path - Android/Termux only
     pub fn config_path() -> PathBuf {
-        // Try Android/Termux path first
-        let android_path = PathBuf::from("/sdcard/InjectTools");
-        if android_path.exists() || cfg!(target_os = "android") {
-            android_path.join("config.toml")
-        } else {
-            // Use standard config directory
-            dirs::config_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("injecttools")
-                .join("config.toml")
-        }
+        PathBuf::from("/sdcard/InjectTools/config.toml")
     }
 
+    /// Get results directory - Android/Termux only
     pub fn results_dir() -> PathBuf {
-        let android_path = PathBuf::from("/sdcard/InjectTools/results");
-        if android_path.parent().unwrap().exists() || cfg!(target_os = "android") {
-            android_path
-        } else {
-            dirs::config_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("injecttools")
-                .join("results")
-        }
+        PathBuf::from("/sdcard/InjectTools/results")
     }
 
     pub fn load_or_create() -> anyhow::Result<Self> {
@@ -60,11 +44,12 @@ impl Config {
     pub fn save(&self) -> anyhow::Result<()> {
         let config_path = Self::config_path();
         
+        // Create /sdcard/InjectTools directory
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
         }
         
-        // Also ensure results dir exists
+        // Create results directory
         let results_dir = Self::results_dir();
         fs::create_dir_all(results_dir)?;
         

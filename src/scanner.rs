@@ -3,7 +3,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::net::{TcpStream, ToSocketAddrs};
 
 use crate::dns;
@@ -33,7 +33,7 @@ fn tcp_latency_check(host: &str, port: u16, timeout_secs: u64) -> Option<u128> {
     }
     
     // Measure TCP connect time
-    let start = Instant::now();
+    let start = std::time::Instant::now();
     match TcpStream::connect_timeout(
         &socket_addrs[0],
         Duration::from_secs(timeout_secs)
@@ -111,10 +111,8 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
         println!("\n{} Testing: {}", "📡".cyan(), url.bright_black());
         println!("{} Timeout: {}s", "⏱️".bright_black(), timeout);
         
-        let start = Instant::now();
         match client.get(&url).send().await {
             Ok(response) => {
-                let latency = start.elapsed().as_millis();
                 let status = response.status().as_u16();
                 
                 // Check if 400 with HTTPS error message
@@ -127,17 +125,15 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
                     }
                 }
                 
-                println!("{} Status: {} via {} ({})", "✓".green(), 
+                println!("{} Status: {} via {}", "✓".green(), 
                          status.to_string().green(), 
-                         protocol.to_uppercase(),
-                         format_latency(latency));
+                         protocol.to_uppercase());
                 
                 println!("\n{}", "═".repeat(50).green());
                 println!("{}", "✅ SERVER ONLINE (HTTP Responding)".green().bold());
                 println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
                 println!("{} {}", "Status Code:".bright_black(), status.to_string().green());
                 println!("{} {}", "Port:".bright_black(), port.to_string().green());
-                println!("{} {}", "Response Time:".bright_black(), format_latency(latency));
                 println!("{}", "═".repeat(50).green());
                 
                 http_success = true;
@@ -282,10 +278,8 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
                     .header("Host", subdomain)
                     .build()?;
 
-                let start = Instant::now();
                 match client.execute(request).await {
                     Ok(response) => {
-                        let latency = start.elapsed().as_millis();
                         let status = response.status().as_u16();
                         
                         // Skip HTTP 400 if server wants HTTPS
@@ -297,10 +291,9 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
                             }
                         }
                         
-                        println!(" {} Status: {} via {} ({})", "✓".green(), 
+                        println!(" {} Status: {} via {}", "✓".green(), 
                                  status.to_string().green(),
-                                 protocol.to_uppercase(),
-                                 format_latency(latency));
+                                 protocol.to_uppercase());
                         
                         if is_cf {
                             println!("\n{}", "═".repeat(50).green());
@@ -309,7 +302,6 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
                             println!("{} {}", "IP:".bright_black(), ip.green());
                             println!("{} {}", "Status:".bright_black(), status.to_string().green());
                             println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
-                            println!("{} {}", "Response Time:".bright_black(), format_latency(latency));
                             println!("{}", "═".repeat(50).green());
                         } else {
                             println!("\n{}", "⚠️  Not a Cloudflare IP".yellow());

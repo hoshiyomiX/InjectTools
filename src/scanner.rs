@@ -4,7 +4,7 @@ use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::process::Command;
 
 use crate::dns;
@@ -78,94 +78,10 @@ fn ping_test(host: &str, timeout_secs: u64) -> Option<u128> {
     None
 }
 
-// Format latency with color coding
-fn format_latency(ms: u128) -> colored::ColoredString {
-    let latency_str = format!("{}ms", ms);
-    
-    if ms < 100 {
-        latency_str.green()
-    } else if ms < 300 {
-        latency_str.yellow()
-    } else if ms < 500 {
-        latency_str.bright_yellow()
-    } else {
-        latency_str.red()
-    }
-}
-
 // Check if HTTP status indicates working inject
 // Only 2xx codes are considered working
 fn is_working_status(status: u16) -> bool {
     status >= 200 && status < 300
-}
-
-/// Mimic curl --resolve behavior:
-/// Connect ke IP subdomain, tapi request dengan target hostname
-/// Ini untuk SNI routing: TLS handshake ke target, koneksi ke IP subdomain
-async fn resolve_to_ip(
-    client: &Client,
-    target: &str,
-    subdomain_ip: &str,
-    protocol: &str,
-    timeout: u64,
-) -> Result<reqwest::Response, reqwest::Error> {
-    // Parse IP dari subdomain
-    let ip: IpAddr = subdomain_ip.parse()
-        .map_err(|_| reqwest::Error::from(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid IP address"
-        )))?;
-    
-    let port = if protocol == "https" { 443 } else { 80 };
-    
-    // Build URL dengan target sebagai hostname
-    // Ini akan set SNI ke target, bukan subdomain
-    let url = format!("{}://{}", protocol, target);
-    
-    // Buat custom connector yang force resolve ke subdomain IP
-    // Tapi SNI tetap ke target karena URL pakai target hostname
-    let socket_addr = SocketAddr::new(ip, port);
-    
-    // Untuk mimic curl --resolve, kita perlu:
-    // 1. Connect ke subdomain_ip:port
-    // 2. TLS SNI kirim target hostname
-    // 3. HTTP Host header ke target
-    
-    // Reqwest akan otomatis set SNI berdasarkan URL hostname (target)
-    // Kita perlu override DNS resolution ke subdomain_ip
-    
-    // Workaround: Pakai URL dengan IP tapi override SNI via Host header
-    // Tidak, ini tidak set SNI dengan benar
-    
-    // Better approach: Build request dengan target URL langsung
-    // tapi inject custom resolver (butuh hyper custom connector)
-    
-    // Untuk simplicity tanpa custom connector:
-    // Pakai URL target langsung, reqwest akan resolve DNS sendiri
-    // Lalu kita pastikan request benar
-    
-    // ACTUAL FIX: Reqwest tidak support custom DNS per-request
-    // Solusi: Pakai URL dengan target (untuk SNI), tapi...
-    // Kita harus accept bahwa reqwest akan resolve target via DNS
-    
-    // WORKAROUND for curl --resolve behavior:
-    // Karena reqwest limitation, kita pakai subdomain di URL (untuk IP resolution)
-    // Tapi override Host header ke target (untuk HTTP routing)
-    // TLS SNI akan ke subdomain, bukan target
-    
-    // ACTUAL IMPLEMENTATION:
-    // Connect ke https://subdomain_ip:port dengan custom host header
-    // Ini akan force koneksi ke IP tersebut
-    
-    let target_url = format!("{}://{}:{}", protocol, subdomain_ip, port);
-    
-    client
-        .get(&target_url)
-        .header("Host", target)  // Override Host header ke target
-        .header("Connection", "close")
-        .timeout(Duration::from_secs(timeout))
-        .send()
-        .await
 }
 
 pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
@@ -179,7 +95,7 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     // 4. (Last resort) TCP port check
     
     // Step 1: DNS Resolution Test
-    let resolved_ip = match dns::resolve_domain_first(target).await {
+    let _resolved_ip = match dns::resolve_domain_first(target).await {
         Ok(ip) => ip,
         Err(_) => {
             // DNS failed - target DOWN
@@ -283,8 +199,6 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
     ];
     
     let mut success = false;
-    let mut working_protocol = None;
-    let mut working_status = None;
 
     for (protocol, port) in protocols {
         // CURL --RESOLVE BEHAVIOR:
@@ -331,8 +245,6 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
                     println!("{}", "═".repeat(50));
                     
                     success = true;
-                    working_protocol = Some(protocol);
-                    working_status = Some(status);
                     break; // Stop on first 2xx success
                 }
                 

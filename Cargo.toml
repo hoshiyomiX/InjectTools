@@ -41,7 +41,14 @@ chrono = "0.4"
 anyhow = "1.0"
 thiserror = "1.0"
 
-# Ping
+# Signal handling
+ctrlc = "3.4"
+
+# Ping support - DISABLED for Android due to raw socket limitations
+# Android requires root/privileged access for ICMP ping
+# Fallback: HTTP response time check is used instead
+[target.'cfg(not(target_os = "android"))']
+[target.'cfg(not(target_os = "android"))'.dependencies]
 surge-ping = "0.8"
 
 [profile.release]

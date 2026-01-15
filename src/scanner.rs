@@ -1,7 +1,6 @@
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
-use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -204,53 +203,4 @@ pub async fn batch_test(
     println!("{}", "─".repeat(60).bright_black());
     
     Ok(results)
-}
-
-pub fn load_batch_file(path: &str) -> anyhow::Result<Vec<String>> {
-    let content = fs::read_to_string(path)?;
-    let subdomains: Vec<String> = content
-        .lines()
-        .map(|line| line.trim().to_string())
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .collect();
-    
-    Ok(subdomains)
-}
-
-pub async fn full_scan(
-    target: &str,
-    domain: &str,
-    timeout: u64,
-    running: Arc<AtomicBool>,
-) -> anyhow::Result<()> {
-    ui::print_header("FULL DOMAIN SCAN");
-    println!("\n{} {}", "Domain:".bright_black(), domain.cyan());
-    println!("{} {}\n", "Target:".bright_black(), target.cyan());
-    
-    // Common subdomains to test
-    let common_subs = vec![
-        format!("www.{}", domain),
-        format!("api.{}", domain),
-        format!("cdn.{}", domain),
-        format!("static.{}", domain),
-        format!("mail.{}", domain),
-        format!("ftp.{}", domain),
-        format!("blog.{}", domain),
-        format!("shop.{}", domain),
-        format!("admin.{}", domain),
-        format!("dev.{}", domain),
-        format!("staging.{}", domain),
-        format!("test.{}", domain),
-        format!("m.{}", domain),
-        format!("mobile.{}", domain),
-        format!("app.{}", domain),
-    ];
-    
-    let results = batch_test(target, &common_subs, timeout, running).await?;
-    
-    if !results.is_empty() {
-        crate::results::export_results(&results, domain)?;
-    }
-    
-    Ok(())
 }

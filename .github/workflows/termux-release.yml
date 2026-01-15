@@ -25,24 +25,25 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout latest main branch
         uses: actions/checkout@v4
         with:
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Sync with main
+      - name: Verify checkout
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git fetch origin main
-          git reset --hard origin/main
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo "Current branch: $(git branch --show-current)"
+          git log -1 --oneline
 
       - name: Create build log directory
         run: |
           mkdir -p build-logs
           echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee build-logs/build-aarch64-linux-android.log
           echo "Target: aarch64-linux-android" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
           echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
 
       - name: Install Rust toolchain
@@ -84,6 +85,10 @@ jobs:
         run: |
           echo "🔨 Building..." | tee -a build-logs/build-aarch64-linux-android.log
           
+          # Show version being built
+          echo "Cargo.toml version:" | tee -a build-logs/build-aarch64-linux-android.log
+          grep '^version' Cargo.toml | tee -a build-logs/build-aarch64-linux-android.log
+          
           if cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log; then
             echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
           else
@@ -118,14 +123,11 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          git fetch origin main
-          git reset --hard origin/main
-          
           git add build-logs/build-aarch64-linux-android.log
           
           if ! git diff --staged --quiet; then
             git commit -m "Update ARM64 build log [skip ci]"
-            git push origin HEAD:main
+            git push origin main
           fi
 
       - name: Upload artifacts
@@ -142,25 +144,25 @@ jobs:
     needs: build-arm64
     
     steps:
-      - name: Checkout code
+      - name: Checkout latest main branch
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Sync with main
+      - name: Verify checkout
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git fetch origin main
-          git reset --hard origin/main
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo "Current branch: $(git branch --show-current)"
+          git log -1 --oneline
 
       - name: Create build log directory
         run: |
           mkdir -p build-logs
           echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee build-logs/build-armv7-linux-androideabi.log
           echo "Target: armv7-linux-androideabi" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
 
       - name: Install Rust toolchain
@@ -202,6 +204,10 @@ jobs:
         run: |
           echo "🔨 Building..." | tee -a build-logs/build-armv7-linux-androideabi.log
           
+          # Show version being built
+          echo "Cargo.toml version:" | tee -a build-logs/build-armv7-linux-androideabi.log
+          grep '^version' Cargo.toml | tee -a build-logs/build-armv7-linux-androideabi.log
+          
           if cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log; then
             echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
           else
@@ -236,14 +242,11 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          git fetch origin main
-          git reset --hard origin/main
-          
           git add build-logs/build-armv7-linux-androideabi.log
           
           if ! git diff --staged --quiet; then
             git commit -m "Update ARMv7 build log [skip ci]"
-            git push origin HEAD:main
+            git push origin main
           fi
 
       - name: Upload artifacts

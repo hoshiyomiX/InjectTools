@@ -1,11 +1,3 @@
-use anyhow::Result;
-use clap::Parser;
-use colored::*;
-use dialoguer::{theme::ColorfulTheme, Input, Select, Confirm};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-
 mod config;
 mod scanner;
 mod dns;
@@ -13,12 +5,15 @@ mod ui;
 mod crtsh;
 mod results;
 
-use config::Config;
-use scanner::Scanner;
+use clap::Parser;
+use colored::Colorize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(name = "InjectTools")]
-#[command(version = "2.3.1")]
+#[command(author = "hoshiyomi_id <t.me/hoshiyomi_id>")]
+#[command(version = "2.3.0")]
 #[command(about = "Bug Inject Scanner for Cloudflare Subdomains", long_about = None)]
 struct Args {
     /// Target host (tunnel/proxy domain)
@@ -33,197 +28,286 @@ struct Args {
     #[arg(short, long)]
     subdomain: Option<String>,
 
-    /// Batch test file
+    /// Fetch subdomains from crt.sh
+    #[arg(long)]
+    crtsh: bool,
+
+    /// Batch test file (one subdomain per line)
     #[arg(short, long)]
-    batch_file: Option<String>,
+    batch: Option<String>,
 
     /// Timeout in seconds
     #[arg(long, default_value = "10")]
     timeout: u64,
 
-    /// Skip interactive mode
+    /// Non-interactive mode
     #[arg(long)]
     non_interactive: bool,
+
+    /// View exported results
+    #[arg(long)]
+    view_results: bool,
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    // Setup Ctrl+C handler
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let cancelled_clone = Arc::clone(&cancelled);
+    // Setup signal handler
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    
     ctrlc::set_handler(move || {
-        cancelled_clone.store(true, Ordering::SeqCst);
-        eprintln!("\n{}\n", "⚠️ Scan dibatalkan oleh user (Ctrl+C)".yellow().bold());
-        std::process::exit(0);
+        eprintln!("\n\n{}", "⚠️  Scan dibatalkan oleh user (Ctrl+C)".yellow());
+        eprintln!("{}", "Menyimpan hasil scan..." .cyan());
+        r.store(false, Ordering::SeqCst);
     })?;
 
-    // Check dependencies
-    check_dependencies();
+    // View results mode
+    if args.view_results {
+        results::view_results()?;
+        return Ok(());
+    }
 
     // Load or create config
-    let mut config = match Config::load() {
-        Ok(c) => c,
-        Err(_) => {
-            if args.non_interactive {
-                eprintln!("{}", "Error: Config tidak ditemukan. Jalankan interactive mode dulu.".red());
-                std::process::exit(1);
-            }
-            first_time_setup()?
-        }
-    };
+    let mut config = config::Config::load_or_create()?;
 
-    // Override config with CLI args
-    if let Some(target) = args.target {
-        config.target_host = target;
-    }
-    config.timeout = args.timeout;
-
-    // CLI mode
+    // Non-interactive mode
     if args.non_interactive {
-        if let Some(subdomain) = args.subdomain {
-            test_single_subdomain(&config, &subdomain).await?;
-            return Ok(());
-        }
+        if let (Some(target), Some(domain)) = (args.target, args.domain) {
+            config.target_host = target;
+            config.save()?;
 
-        if let Some(batch_file) = args.batch_file {
-            batch_test_from_file(&config, &batch_file, cancelled).await?;
+            if args.crtsh {
+                // Fetch from crt.sh and test
+                ui::print_header("CRTSH SUBDOMAIN DISCOVERY");
+                let subdomains = crtsh::fetch_subdomains(&domain).await?;
+                println!("\n{} subdomains dari crt.sh\n", subdomains.len());
+                
+                let results = scanner::batch_test(
+                    &config.target_host,
+                    &subdomains,
+                    args.timeout,
+                    running.clone(),
+                ).await?;
+                
+                results::export_results(&results, &domain)?;
+            } else if let Some(batch_file) = args.batch {
+                // Batch test
+                let subdomains = scanner::load_batch_file(&batch_file)?;
+                let results = scanner::batch_test(
+                    &config.target_host,
+                    &subdomains,
+                    args.timeout,
+                    running.clone(),
+                ).await?;
+                
+                results::export_results(&results, "batch")?;
+            } else if let Some(subdomain) = args.subdomain {
+                // Single test
+                scanner::test_single(&config.target_host, &subdomain, args.timeout).await?;
+            } else {
+                // Full scan
+                scanner::full_scan(&config.target_host, &domain, args.timeout, running).await?;
+            }
+            
             return Ok(());
+        } else {
+            eprintln!("{}", "Error: --target dan --domain required untuk non-interactive mode".red());
+            std::process::exit(1);
         }
-
-        if let Some(domain) = args.domain {
-            full_scan(&config, &domain, cancelled).await?;
-            return Ok(());
-        }
-
-        eprintln!("{}", "Error: Specify --subdomain, --batch-file, or --domain".red());
-        std::process::exit(1);
     }
 
     // Interactive mode
-    main_menu(&mut config, cancelled).await?;
+    loop {
+        ui::clear_screen();
+        ui::print_header("INJECTTOOLS v2.3");
+        
+        println!("\n{}", "MAIN MENU".bold());
+        println!("{}" , "━".repeat(50).cyan());
+        println!("\n1. {} Test Target Host", "🎯".cyan());
+        println!("2. {} Test Single Subdomain", "🔍".cyan());
+        println!("3. {} Fetch & Test dari crt.sh", "🌐".cyan());
+        println!("4. {} Batch Test dari File", "📦".cyan());
+        println!("5. {} Full Domain Scan", "🚀".cyan());
+        println!("6. {} View Exported Results", "📊".cyan());
+        println!("7. {} Settings", "⚙️".cyan());
+        println!("8. {} Exit", "🚪".red());
+        println!("\n{}", "━".repeat(50).cyan());
+        
+        if !config.target_host.is_empty() {
+            println!("\n{} {}", "Target:".bright_black(), config.target_host.green());
+        }
+        
+        print!("\n{} ", "Pilih:".bold());
+        let choice = ui::read_line();
+
+        match choice.trim() {
+            "1" => {
+                ui::print_header("TEST TARGET HOST");
+                print!("\nMasukkan target host: ");
+                let target = ui::read_line();
+                if !target.is_empty() {
+                    scanner::test_target(&target, args.timeout).await?;
+                    config.target_host = target;
+                    config.save()?;
+                }
+                ui::pause();
+            }
+            "2" => {
+                if config.target_host.is_empty() {
+                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
+                    ui::pause();
+                    continue;
+                }
+                
+                ui::print_header("TEST SINGLE SUBDOMAIN");
+                print!("\nMasukkan subdomain: ");
+                let subdomain = ui::read_line();
+                if !subdomain.is_empty() {
+                    scanner::test_single(&config.target_host, &subdomain, args.timeout).await?;
+                }
+                ui::pause();
+            }
+            "3" => {
+                if config.target_host.is_empty() {
+                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
+                    ui::pause();
+                    continue;
+                }
+                
+                ui::print_header("CRTSH SUBDOMAIN DISCOVERY");
+                print!("\nMasukkan domain (contoh: cloudflare.com): ");
+                let domain = ui::read_line();
+                if !domain.is_empty() {
+                    println!("\n{}", "📡 Fetching subdomains dari crt.sh...".cyan());
+                    match crtsh::fetch_subdomains(&domain).await {
+                        Ok(subdomains) => {
+                            println!("{} {} subdomains ditemukan\n", "✓".green(), subdomains.len());
+                            
+                            if subdomains.is_empty() {
+                                println!("{}", "Tidak ada subdomain ditemukan".yellow());
+                            } else {
+                                println!("{}", "Mulai testing...".cyan());
+                                let results = scanner::batch_test(
+                                    &config.target_host,
+                                    &subdomains,
+                                    args.timeout,
+                                    running.clone(),
+                                ).await?;
+                                
+                                results::export_results(&results, &domain)?;
+                            }
+                        }
+                        Err(e) => {
+                            println!("{} {}", "✗".red(), format!("Gagal fetch dari crt.sh: {}", e).red());
+                        }
+                    }
+                }
+                ui::pause();
+            }
+            "4" => {
+                if config.target_host.is_empty() {
+                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
+                    ui::pause();
+                    continue;
+                }
+                
+                ui::print_header("BATCH TEST");
+                print!("\nPath ke file (satu subdomain per line): ");
+                let file_path = ui::read_line();
+                if !file_path.is_empty() {
+                    match scanner::load_batch_file(&file_path) {
+                        Ok(subdomains) => {
+                            println!("\n{} {} subdomains dari file\n", "✓".green(), subdomains.len());
+                            let results = scanner::batch_test(
+                                &config.target_host,
+                                &subdomains,
+                                args.timeout,
+                                running.clone(),
+                            ).await?;
+                            
+                            results::export_results(&results, "batch")?;
+                        }
+                        Err(e) => {
+                            println!("{} {}", "✗".red(), format!("Gagal load file: {}", e).red());
+                        }
+                    }
+                }
+                ui::pause();
+            }
+            "5" => {
+                if config.target_host.is_empty() {
+                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
+                    ui::pause();
+                    continue;
+                }
+                
+                ui::print_header("FULL DOMAIN SCAN");
+                print!("\nMasukkan domain: ");
+                let domain = ui::read_line();
+                if !domain.is_empty() {
+                    scanner::full_scan(&config.target_host, &domain, args.timeout, running.clone()).await?;
+                }
+                ui::pause();
+            }
+            "6" => {
+                results::view_results()?;
+                ui::pause();
+            }
+            "7" => {
+                settings_menu(&mut config, args.timeout)?;
+            }
+            "8" => {
+                println!("\n{}", "👋 Terima kasih telah menggunakan InjectTools!".green());
+                break;
+            }
+            _ => {
+                println!("\n{}", "❌ Pilihan tidak valid".red());
+                ui::pause();
+            }
+        }
+    }
 
     Ok(())
 }
 
-fn check_dependencies() {
-    // Check if curl/reqwest works (we're using Rust so this is implicit)
-    // Just a placeholder for future dependency checks
-}
-
-fn first_time_setup() -> Result<Config> {
-    ui::clear_screen();
-    ui::print_header("SETUP AWAL");
-
-    println!();
-    println!("{}", "Selamat datang di InjectTools!".white());
-    println!("{}", "Created by: t.me/hoshiyomi_id".cyan());
-    println!();
-    println!("{}", "Yuk setup config dulu.".blue());
-    println!();
-
-    println!("{}", "━".repeat(ui::term_width()).cyan());
-    println!("{}", "Setup Target Host".white().bold());
-    println!("{}", "━".repeat(ui::term_width()).cyan());
-    println!();
-    println!("{}", "Ini domain tunnel/proxy kamu yang akan dipakai bug inject.".blue());
-    println!("{}", "Contoh: your-tunnel.com, proxy.example.com".yellow());
-    println!();
-
-    let target_host: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Masukkan target host")
-        .interact_text()?;
-
-    println!();
-    println!("{}", "━".repeat(ui::term_width()).cyan());
-    println!("{}", "Setup Selesai!".white().bold());
-    println!("{}", "━".repeat(ui::term_width()).cyan());
-    println!();
-
-    let config = Config {
-        target_host: target_host.clone(),
-        timeout: 10,
-    };
-
-    config.save()?;
-
-    println!("{}", "Config kamu:".blue());
-    println!("  {}: {}", "Target Host".white(), target_host.green());
-    println!();
-    println!("{}: {}", "Data disimpan di".blue(), Config::config_dir().display().to_string().cyan());
-    println!();
-    println!("{}", "Config bisa diubah kapan saja dari Menu 6 (Settings).".blue());
-    println!();
-
-    Input::<String>::new()
-        .with_prompt("Tekan Enter untuk lanjut")
-        .allow_empty(true)
-        .interact_text()?;
-
-    Ok(config)
-}
-
-async fn main_menu(config: &mut Config, cancelled: Arc<AtomicBool>) -> Result<()> {
+fn settings_menu(config: &mut config::Config, timeout: u64) -> anyhow::Result<()> {
     loop {
         ui::clear_screen();
-        ui::print_header("InjectTools v2.3.1");
+        ui::print_header("SETTINGS");
+        
+        println!("\n{}", "CURRENT SETTINGS".bold());
+        println!("{}" , "━".repeat(50).cyan());
+        println!("\n{} {}", "Target Host:".bright_black(), 
+                 if config.target_host.is_empty() { "(not set)".red() } else { config.target_host.green() });
+        println!("{} {} seconds", "Timeout:".bright_black(), timeout.to_string().green());
+        println!("\n{}" , "━".repeat(50).cyan());
+        
+        println!("\n1. Change Target Host");
+        println!("2. Back to Main Menu");
+        
+        print!("\n{} ", "Pilih:".bold());
+        let choice = ui::read_line();
 
-        println!();
-        println!("{}", "Created by: t.me/hoshiyomi_id".cyan());
-        println!();
-        println!("{}: {}", "Target Host".blue(), config.target_host.green());
-        println!();
-        println!("{}", "─".repeat(ui::term_width()).cyan());
-        println!();
-        println!("{}", "Menu:".white().bold());
-        println!();
-
-        let options = vec![
-            "Single Subdomain Test",
-            "Batch Subdomain Test",
-            "Full Scan (crt.sh)",
-            "View Scan Results",
-            "Test Target Host",
-            "Settings",
-            "Exit",
-        ];
-
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .items(&options)
-            .default(0)
-            .interact()?;
-
-        match selection {
-            0 => test_single_menu(config).await?,
-            1 => batch_test_menu(config, Arc::clone(&cancelled)).await?,
-            2 => full_scan_menu(config, Arc::clone(&cancelled)).await?,
-            3 => results::view_results()?,
-            4 => test_target_host_menu(config).await?,
-            5 => settings_menu(config)?,
-            6 => {
-                ui::clear_screen();
-                println!("{}", "Sampai jumpa!".green().bold());
-                println!("{}", "Created by: t.me/hoshiyomi_id".cyan());
-                println!();
-                std::process::exit(0);
+        match choice.trim() {
+            "1" => {
+                print!("\nMasukkan target host baru: ");
+                let target = ui::read_line();
+                if !target.is_empty() {
+                    config.target_host = target;
+                    config.save()?;
+                    println!("{}", "✓ Target host updated".green());
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
             }
-            _ => {}
+            "2" => break,
+            _ => {
+                println!("\n{}", "❌ Pilihan tidak valid".red());
+                ui::pause();
+            }
         }
     }
+    
+    Ok(())
 }
-
-// ... rest of the code stays same ...
-// (keeping only the function signatures for brevity, actual implementation unchanged)
-
-async fn test_single_menu(config: &Config) -> Result<()> { /* unchanged */ }
-async fn test_single_subdomain(config: &Config, subdomain: &str) -> Result<()> { /* unchanged */ }
-async fn batch_test_menu(config: &Config, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn batch_test_manual(config: &Config, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn batch_test_from_file_menu(config: &Config, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn batch_test_from_file(config: &Config, file_path: &str, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn batch_test_execute(config: &Config, subdomains: Vec<String>, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn full_scan_menu(config: &Config, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn full_scan(config: &Config, domain: &str, cancelled: Arc<AtomicBool>) -> Result<()> { /* unchanged */ }
-async fn test_target_host_menu(config: &Config) -> Result<()> { /* unchanged */ }
-fn settings_menu(config: &mut Config) -> Result<()> { /* unchanged */ }

@@ -1,216 +1,256 @@
-use crate::dns::{self, DnsResolver};
-use anyhow::Result;
-use colored::*;
-use futures::stream::{FuturesUnordered, StreamExt};
+use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use crate::dns;
+use crate::ui;
+
+#[derive(Debug, Clone)]
 pub struct ScanResult {
     pub subdomain: String,
     pub ip: String,
-    pub works: bool,
+    pub is_cloudflare: bool,
+    pub is_working: bool,
+    pub status_code: Option<u16>,
 }
 
-#[derive(Debug)]
-pub struct BatchResult {
-    pub working: Vec<ScanResult>,
-    pub failed: Vec<ScanResult>,
-    pub skipped: usize,
-    pub total_scanned: usize,
-    pub elapsed_secs: u64,
-}
+pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
+    println!("\n{}", "Testing target host...".cyan());
+    println!("{}", "━".repeat(50).bright_black());
+    
+    let client = Client::builder()
+        .timeout(Duration::from_secs(timeout))
+        .danger_accept_invalid_certs(true)
+        .build()?;
 
-pub struct Scanner {
-    target_host: String,
-    timeout: u64,
-    client: Client,
-}
-
-impl Scanner {
-    pub fn new(target_host: String, timeout: u64) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(timeout))
-            .danger_accept_invalid_certs(true)
-            .build()
-            .expect("Failed to create HTTP client");
-
-        Self {
-            target_host,
-            timeout,
-            client,
+    let url = format!("http://{}", target);
+    println!("\n{} {}", "URL:".bright_black(), url);
+    
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            println!("{} Status: {}", "✓".green(), status.to_string().green());
+            println!("{} Target host is reachable", "✓".green());
+        }
+        Err(e) => {
+            println!("{} {}", "✗".red(), format!("Error: {}", e).red());
+            println!("{}", "⚠️  Target might be unreachable or timeout".yellow());
         }
     }
+    
+    Ok(())
+}
 
-    pub async fn resolve_domain(&self, domain: &str) -> Option<IpAddr> {
-        let resolver = DnsResolver::new();
-        resolver.resolve(domain).await.ok().flatten()
-    }
-
-    /// Ping test with platform-specific implementation
-    /// - Non-Android: Uses ICMP ping via surge-ping
-    /// - Android: Uses HTTP response time as fallback (no root required)
-    pub async fn ping_test(&self, domain: &str) -> Option<u128> {
-        #[cfg(not(target_os = "android"))]
-        {
-            use surge_ping::{Client, Config, PingIdentifier, PingSequence, ICMP};
-
-            let client = Client::new(&Config::default()).ok()?;
-            let mut pinger = client
-                .pinger(domain.parse().ok()?, PingIdentifier(rand::random()))
-                .await;
-
-            match pinger
-                .ping(PingSequence(0), &[])
-                .await
-                .ok()?
-                .1
-            {
-                Some((_packet, duration)) => Some(duration.as_millis()),
-                None => None,
+pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow::Result<()> {
+    println!("\n{}", "Testing subdomain...".cyan());
+    println!("{}", "━".repeat(50).bright_black());
+    println!("\n{} {}", "Subdomain:".bright_black(), subdomain);
+    println!("{} {}", "Target:".bright_black(), target);
+    
+    // DNS resolution
+    print!("\n{} Resolving DNS...", "📡".cyan());
+    match dns::resolve_domain_first(subdomain).await {
+        Ok(ip) => {
+            println!(" {} {}", "✓".green(), ip.green());
+            
+            let is_cf = dns::is_cloudflare_ip(&ip);
+            if is_cf {
+                println!("{} {} {}", "☁️".cyan(), "Cloudflare IP detected".cyan(), ip.bright_black());
+            } else {
+                println!("{} {} {}", "🌐".yellow(), "Non-Cloudflare IP".yellow(), ip.bright_black());
             }
-        }
+            
+            // HTTP test
+            print!("\n{} Testing connection...", "🔌".cyan());
+            let client = Client::builder()
+                .timeout(Duration::from_secs(timeout))
+                .danger_accept_invalid_certs(true)
+                .build()?;
 
-        #[cfg(target_os = "android")]
-        {
-            // Android fallback: HTTP response time
-            let start = Instant::now();
-            let url = format!("https://{}", domain);
-
-            match self
-                .client
+            let url = format!("http://{}", target);
+            let request = client
                 .get(&url)
-                .timeout(Duration::from_secs(5))
-                .send()
-                .await
-            {
-                Ok(_) => Some(start.elapsed().as_millis()),
-                Err(_) => None,
-            }
-        }
-    }
+                .header("Host", subdomain)
+                .build()?;
 
-    pub async fn test_inject(&self, ip: &IpAddr, subdomain: &str) -> bool {
-        let url = format!("https://{}/", self.target_host);
-
-        let client = Client::builder()
-            .timeout(Duration::from_secs(self.timeout))
-            .danger_accept_invalid_certs(true)
-            .resolve(&self.target_host, format!("{}:443", ip).parse().unwrap())
-            .build();
-
-        match client {
-            Ok(client) => match client.get(&url).header("Host", subdomain).send().await {
-                Ok(resp) => resp.status().is_success() || resp.status().is_redirection(),
-                Err(_) => false,
-            },
-            Err(_) => false,
-        }
-    }
-
-    pub async fn batch_test(
-        &self,
-        subdomains: Vec<String>,
-        cancelled: Arc<AtomicBool>,
-    ) -> Result<BatchResult> {
-        let start = Instant::now();
-        let total = subdomains.len();
-
-        let progress = Arc::new(ProgressBar::new(total as u64));
-        progress.set_style(
-            ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.cyan} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}",
-                )?
-                .progress_chars("#>-"),
-        );
-
-        let working = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let failed = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let scanned = Arc::new(AtomicUsize::new(0));
-
-        let mut tasks = FuturesUnordered::new();
-
-        for subdomain in subdomains {
-            if cancelled.load(Ordering::SeqCst) {
-                break;
-            }
-
-            let subdomain = subdomain.clone();
-            let progress = Arc::clone(&progress);
-            let working = Arc::clone(&working);
-            let failed = Arc::clone(&failed);
-            let scanned = Arc::clone(&scanned);
-            let cancelled = Arc::clone(&cancelled);
-            let target_host = self.target_host.clone();
-            let timeout = self.timeout;
-
-            tasks.push(tokio::spawn(async move {
-                if cancelled.load(Ordering::SeqCst) {
-                    return;
-                }
-
-                progress.set_message(format!("Testing: {}", subdomain));
-
-                let resolver = DnsResolver::new();
-                if let Ok(Some(ip)) = resolver.resolve(&subdomain).await {
-                    if dns::is_cloudflare(&ip) {
-                        let scanner = Scanner::new(target_host, timeout);
-                        let result = scanner.test_inject(&ip, &subdomain).await;
-
-                        let scan_result = ScanResult {
-                            subdomain: subdomain.clone(),
-                            ip: ip.to_string(),
-                            works: result,
-                        };
-
-                        if result {
-                            working.lock().unwrap().push(scan_result);
-                        } else {
-                            failed.lock().unwrap().push(scan_result);
-                        }
+            match client.execute(request).await {
+                Ok(response) => {
+                    let status = response.status().as_u16();
+                    println!(" {} Status: {}", "✓".green(), status.to_string().green());
+                    
+                    if is_cf {
+                        println!("\n{}", "═".repeat(50).green());
+                        println!("{}", "✅ WORKING BUG!".green().bold());
+                        println!("{} {}", "Subdomain:".bright_black(), subdomain.green());
+                        println!("{} {}", "IP:".bright_black(), ip.green());
+                        println!("{} {}", "Status:".bright_black(), status.to_string().green());
+                        println!("{}", "═".repeat(50).green());
+                    } else {
+                        println!("\n{}", "⚠️  Not a Cloudflare IP".yellow());
                     }
                 }
-
-                scanned.fetch_add(1, Ordering::SeqCst);
-                progress.inc(1);
-            }));
-
-            // Limit concurrent tasks
-            if tasks.len() >= 50 {
-                tasks.next().await;
+                Err(e) => {
+                    println!(" {} {}", "✗".red(), format!("Error: {}", e).red());
+                }
             }
         }
+        Err(e) => {
+            println!(" {} {}", "✗".red(), format!("DNS resolution failed: {}", e).red());
+        }
+    }
+    
+    Ok(())
+}
 
-        while tasks.next().await.is_some() {}
-
-        progress.finish_and_clear();
-
-        let working = Arc::try_unwrap(working)
+pub async fn batch_test(
+    target: &str,
+    subdomains: &[String],
+    timeout: u64,
+    running: Arc<AtomicBool>,
+) -> anyhow::Result<Vec<ScanResult>> {
+    let total = subdomains.len();
+    let mut results = Vec::new();
+    
+    println!("\n{}", "Starting batch test...".cyan());
+    println!("{} {} subdomains\n", "Total:".bright_black(), total.to_string().yellow());
+    
+    let pb = ProgressBar::new(total as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
             .unwrap()
-            .into_inner()
-            .unwrap();
-        let failed = Arc::try_unwrap(failed).unwrap().into_inner().unwrap();
+            .progress_chars("█▓▒░"),
+    );
 
-        Ok(BatchResult {
-            working,
-            failed,
-            skipped: 0,
-            total_scanned: scanned.load(Ordering::SeqCst),
-            elapsed_secs: start.elapsed().as_secs(),
-        })
-    }
+    let client = Client::builder()
+        .timeout(Duration::from_secs(timeout))
+        .danger_accept_invalid_certs(true)
+        .build()?;
 
-    pub async fn full_scan(
-        &self,
-        subdomains: Vec<String>,
-        cancelled: Arc<AtomicBool>,
-    ) -> Result<BatchResult> {
-        self.batch_test(subdomains, cancelled).await
+    for subdomain in subdomains {
+        if !running.load(Ordering::SeqCst) {
+            pb.finish_with_message("Cancelled");
+            break;
+        }
+
+        pb.set_message(format!("Testing: {}", subdomain));
+        
+        // DNS resolution
+        if let Ok(ip) = dns::resolve_domain_first(subdomain).await {
+            let is_cf = dns::is_cloudflare_ip(&ip);
+            
+            // HTTP test
+            let url = format!("http://{}", target);
+            let request = client
+                .get(&url)
+                .header("Host", subdomain)
+                .build();
+
+            if let Ok(req) = request {
+                if let Ok(response) = client.execute(req).await {
+                    let status = response.status().as_u16();
+                    
+                    results.push(ScanResult {
+                        subdomain: subdomain.clone(),
+                        ip: ip.clone(),
+                        is_cloudflare: is_cf,
+                        is_working: is_cf && status < 500,
+                        status_code: Some(status),
+                    });
+                }
+            }
+        }
+        
+        pb.inc(1);
     }
+    
+    pb.finish_with_message("Complete");
+    
+    // Display results
+    let working: Vec<_> = results.iter().filter(|r| r.is_working).collect();
+    let non_cf: Vec<_> = results.iter().filter(|r| !r.is_cloudflare && r.status_code.is_some()).collect();
+    
+    println!("\n{}", "═".repeat(60).cyan());
+    ui::center_text("HASIL SCAN");
+    println!("{}", "═".repeat(60).cyan());
+    
+    if working.is_empty() {
+        println!("\n{}", "❌ Tidak ada working bug ditemukan".yellow());
+    } else {
+        println!("\n{} Working Bugs ({}):", "✅".green(), working.len());
+        for result in &working {
+            println!("  {} {} ({})", "🟢".green(), result.subdomain.green(), result.ip.bright_black());
+        }
+    }
+    
+    if !non_cf.is_empty() {
+        println!("\n{} Non-CF Responses ({}):", "📝".yellow(), non_cf.len());
+        for result in non_cf.iter().take(5) {
+            println!("  {} {} ({})", "🟡".yellow(), result.subdomain, result.ip.bright_black());
+        }
+        if non_cf.len() > 5 {
+            println!("  ... and {} more", non_cf.len() - 5);
+        }
+    }
+    
+    println!("\n{}", "─".repeat(60).bright_black());
+    println!("{}" , "Statistik:");
+    println!("  Scanned: {}/{} ({}%)", results.len(), total, (results.len() * 100 / total.max(1)));
+    println!("  CF Found: {} | Non-CF: {}", working.len(), non_cf.len());
+    println!("{}", "─".repeat(60).bright_black());
+    
+    Ok(results)
+}
+
+pub fn load_batch_file(path: &str) -> anyhow::Result<Vec<String>> {
+    let content = fs::read_to_string(path)?;
+    let subdomains: Vec<String> = content
+        .lines()
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    
+    Ok(subdomains)
+}
+
+pub async fn full_scan(
+    target: &str,
+    domain: &str,
+    timeout: u64,
+    running: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
+    ui::print_header("FULL DOMAIN SCAN");
+    println!("\n{} {}", "Domain:".bright_black(), domain.cyan());
+    println!("{} {}\n", "Target:".bright_black(), target.cyan());
+    
+    // Common subdomains to test
+    let common_subs = vec![
+        format!("www.{}", domain),
+        format!("api.{}", domain),
+        format!("cdn.{}", domain),
+        format!("static.{}", domain),
+        format!("mail.{}", domain),
+        format!("ftp.{}", domain),
+        format!("blog.{}", domain),
+        format!("shop.{}", domain),
+        format!("admin.{}", domain),
+        format!("dev.{}", domain),
+        format!("staging.{}", domain),
+        format!("test.{}", domain),
+        format!("m.{}", domain),
+        format!("mobile.{}", domain),
+        format!("app.{}", domain),
+    ];
+    
+    let results = batch_test(target, &common_subs, timeout, running).await?;
+    
+    if !results.is_empty() {
+        crate::results::export_results(&results, domain)?;
+    }
+    
+    Ok(())
 }

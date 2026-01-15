@@ -1,79 +1,60 @@
-use anyhow::Result;
-use std::net::IpAddr;
-use trust_dns_resolver::config::*;
 use trust_dns_resolver::TokioAsyncResolver;
+use trust_dns_resolver::config::*;
+use ipnetwork::Ipv4Network;
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 
-pub struct DnsResolver {
-    resolver: TokioAsyncResolver,
-}
+// Cloudflare IP ranges
+const CLOUDFLARE_RANGES: &[&str] = &[
+    "173.245.48.0/20",
+    "103.21.244.0/22",
+    "103.22.200.0/22",
+    "103.31.4.0/22",
+    "141.101.64.0/18",
+    "108.162.192.0/18",
+    "190.93.240.0/20",
+    "188.114.96.0/20",
+    "197.234.240.0/22",
+    "198.41.128.0/17",
+    "162.158.0.0/15",
+    "104.16.0.0/13",
+    "104.24.0.0/14",
+    "172.64.0.0/13",
+    "131.0.72.0/22",
+];
 
-impl DnsResolver {
-    pub fn new() -> Self {
-        let resolver = TokioAsyncResolver::tokio(
-            ResolverConfig::cloudflare(),
-            ResolverOpts::default(),
-        );
-        Self { resolver }
-    }
+pub fn is_cloudflare_ip(ip: &str) -> bool {
+    let parsed_ip = match Ipv4Addr::from_str(ip) {
+        Ok(addr) => addr,
+        Err(_) => return false,
+    };
 
-    pub async fn resolve(&self, domain: &str) -> Result<Option<IpAddr>> {
-        match self.resolver.lookup_ip(domain).await {
-            Ok(lookup) => {
-                if let Some(ip) = lookup.iter().next() {
-                    return Ok(Some(ip));
-                }
-                Ok(None)
+    for range_str in CLOUDFLARE_RANGES {
+        if let Ok(range) = Ipv4Network::from_str(range_str) {
+            if range.contains(parsed_ip) {
+                return true;
             }
-            Err(_) => Ok(None),
         }
     }
-}
 
-pub fn is_cloudflare(ip: &IpAddr) -> bool {
-    if let IpAddr::V4(ipv4) = ip {
-        let octets = ipv4.octets();
-        
-        // Cloudflare IP ranges
-        // 104.16.0.0/13 -> 104.16-23.*
-        if octets[0] == 104 && (16..=23).contains(&octets[1]) {
-            return true;
-        }
-        
-        // 172.64.0.0/13 -> 172.64-71.*
-        if octets[0] == 172 && (64..=71).contains(&octets[1]) {
-            return true;
-        }
-        
-        // 173.245.48.0/20
-        if octets[0] == 173 && octets[1] == 245 {
-            return true;
-        }
-        
-        // 162.158.0.0/15
-        if octets[0] == 162 && (158..=159).contains(&octets[1]) {
-            return true;
-        }
-        
-        // 141.101.64.0/18
-        if octets[0] == 141 && octets[1] == 101 {
-            return true;
-        }
-    }
-    
     false
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str::FromStr;
+pub async fn resolve_domain(domain: &str) -> anyhow::Result<Vec<String>> {
+    let resolver = TokioAsyncResolver::tokio(
+        ResolverConfig::default(),
+        ResolverOpts::default(),
+    );
 
-    #[test]
-    fn test_cloudflare_detection() {
-        assert!(is_cloudflare(&IpAddr::from_str("104.16.1.1").unwrap()));
-        assert!(is_cloudflare(&IpAddr::from_str("172.64.1.1").unwrap()));
-        assert!(is_cloudflare(&IpAddr::from_str("173.245.48.1").unwrap()));
-        assert!(!is_cloudflare(&IpAddr::from_str("8.8.8.8").unwrap()));
-        assert!(!is_cloudflare(&IpAddr::from_str("1.1.1.1").unwrap()));
-    }
+    let response = resolver.lookup_ip(domain).await?;
+    let ips: Vec<String> = response.iter().map(|ip| ip.to_string()).collect();
+    
+    Ok(ips)
+}
+
+pub async fn resolve_domain_first(domain: &str) -> anyhow::Result<String> {
+    let ips = resolve_domain(domain).await?;
+    ips.first()
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("No IP found for domain"))
 }

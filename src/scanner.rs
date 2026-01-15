@@ -69,29 +69,16 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "Testing target host...".cyan());
     println!("{}", "━".repeat(50).bright_black());
     
-    // DNS check
-    println!("\n{} Checking DNS resolution...", "🔍".cyan());
-    let resolved_ip = match dns::resolve_domain_first(target).await {
-        Ok(ip) => {
-            println!("{} {} → {}", "✓".green(), target.green(), ip.bright_black());
-            
-            if dns::is_cloudflare_ip(&ip) {
-                println!("{} Cloudflare IP detected", "☁️".cyan());
-            }
-            
-            ip
-        }
-        Err(e) => {
-            println!("{} DNS resolution failed: {}", "✗".red(), e.to_string().red());
-            println!("\n{}", "Possible causes:".yellow());
-            println!("  - Domain tidak exist atau typo");
-            println!("  - DNS server bermasalah");
-            println!("  - Tidak ada koneksi internet");
-            return Err(e);
+    // Silent DNS check (no logging)
+    let _resolved_ip = match dns::resolve_domain_first(target).await {
+        Ok(ip) => ip,
+        Err(_) => {
+            // DNS failed, will try HTTP anyway via Cloudflare IPs
+            String::new()
         }
     };
     
-    // Build client with legitimate User-Agent
+    // Build client
     let client = Client::builder()
         .timeout(Duration::from_secs(timeout))
         .connect_timeout(Duration::from_secs(timeout.saturating_sub(2)))
@@ -102,92 +89,39 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     
     // Try HTTPS first, then HTTP
     let protocols = vec![("https", 443), ("http", 80)];
-    let mut last_error = None;
     
-    for (protocol, port) in &protocols {
+    for (protocol, _port) in &protocols {
         let url = format!("{}://{}", protocol, target);
         
-        match client.get(&url).send().await {
-            Ok(response) => {
-                let status = response.status().as_u16();
-                
-                // Skip HTTP 400 if likely HTTPS-only
-                if status == 400 && protocol == &"http" {
-                    if let Ok(body) = response.text().await {
-                        if body.contains("HTTPS port") || body.contains("SSL") {
-                            continue;
-                        }
+        if let Ok(response) = client.get(&url).send().await {
+            let status = response.status().as_u16();
+            
+            // Skip HTTP 400 if likely HTTPS-only
+            if status == 400 && protocol == &"http" {
+                if let Ok(body) = response.text().await {
+                    if body.contains("HTTPS port") || body.contains("SSL") {
+                        continue;
                     }
                 }
-                
-                println!("\n{}", "═".repeat(50).green());
-                
-                if is_working_status(status) {
-                    println!("{}", "✅ SERVER RESPONDING (Inject Target Working)".green().bold());
-                } else {
-                    println!("{}", "⚠️  SERVER ERROR (Inject OK, Server Issue)".yellow().bold());
-                }
-                
-                println!("{} {}", "Protocol:".bright_black(), protocol.to_uppercase().green());
-                println!("{} {}", "Status:".bright_black(), status.to_string().green());
-                println!("{} {}", "Port:".bright_black(), port.to_string().green());
-                println!("{}", "═".repeat(50).green());
-                
-                return Ok(());
             }
-            Err(e) => {
-                last_error = Some(e);
-            }
+            
+            println!("\n{}", "✅ TARGET ONLINE".green().bold());
+            return Ok(());
         }
     }
     
-    // HTTP/HTTPS failed - try TCP check
-    println!("\n{} Checking TCP port availability...", "🔌".cyan());
+    // HTTP/HTTPS failed - try TCP check (silent)
+    let tcp_ports = vec![443, 80, 8080];
     
-    let tcp_ports = vec![
-        (443, "HTTPS"),
-        (80, "HTTP"),
-        (8080, "HTTP-Alt"),
-    ];
-    
-    let mut tcp_results = Vec::new();
-    
-    for (port, name) in &tcp_ports {
-        print!("   Port {} ({}): ", port, name);
-        std::io::Write::flush(&mut std::io::stdout()).ok();
-        
-        match tcp_latency_check(target, *port, 3) {
-            Some(latency) => {
-                println!("{} {}", "OPEN".green(), format!("({})", format_latency(latency)));
-                tcp_results.push((*port, *name, latency));
-            }
-            None => {
-                println!("{}", "CLOSED".dimmed());
-            }
+    for port in &tcp_ports {
+        if tcp_latency_check(target, *port, 3).is_some() {
+            println!("\n{}", "✅ TARGET ONLINE".green().bold());
+            return Ok(());
         }
     }
     
-    println!("\n{}", "═".repeat(50).cyan());
-    
-    if !tcp_results.is_empty() {
-        println!("{}", "✅ SERVER ONLINE (TCP Responding)".green().bold());
-        println!("\n{}", "Open Ports:".bright_black());
-        for (port, name, latency) in &tcp_results {
-            println!("  {} {} ({}) - {}", "🟢".green(), port.to_string().green(), name, format_latency(*latency));
-        }
-        
-        println!("\n{}", "Note:".yellow());
-        println!("  Server tidak respond HTTP request (likely VPN/Tunnel server)");
-        println!("  Gunakan menu 'Test Single Subdomain' untuk inject testing");
-    } else {
-        println!("{}", "❌ SERVER DOWN OR UNREACHABLE".red().bold());
-        
-        if let Some(e) = last_error {
-            println!("\n{} {}", "Error:".red(), e.to_string().red());
-        }
-    }
-    
-    println!("{}", "═".repeat(50).cyan());
+    // All checks failed
+    println!("\n{}", "❌ TARGET OFFLINE".red().bold());
     Ok(())
 }
 

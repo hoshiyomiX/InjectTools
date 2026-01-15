@@ -1,191 +1,163 @@
 # Build Logs
 
-📝 **Automatic build logs** dari setiap Termux build via GitHub Actions.
+Folder ini berisi **detailed build logs** dari setiap Termux build yang di-trigger via GitHub Actions.
 
-## 📂 Location
+## 📋 Purpose
 
-Logs ada di **root repo** `build-logs/` (bukan di `.github/`) biar lebih gampang diakses.
+Build logs di-commit ke repository (bukan artifact) untuk:
+
+✅ **Transparency** - Full visibility dari proses build  
+✅ **Debugging** - Trace compile errors atau warnings  
+✅ **Audit Trail** - Historical record dari setiap build  
+✅ **Reproducibility** - Verify exact build conditions  
+
+## 📁 Log Files
+
+Setiap build menghasilkan 2 log files:
+
+- `build-aarch64-linux-android.log` - ARM64 build log
+- `build-armv7-linux-androideabi.log` - ARMv7 build log
+
+## 📊 Log Contents
+
+Setiap log file berisi:
+
+1. **Build Metadata**
+   - Timestamp (UTC)
+   - Target architecture
+   - Runner OS info
+
+2. **Rust Toolchain**
+   - `rustc` version
+   - `cargo` version
+   - Installed targets
+
+3. **Android NDK**
+   - NDK version (r26d)
+   - Download & extraction logs
+   - NDK path
+
+4. **Toolchain Configuration**
+   - Compiler paths (clang)
+   - Linker configuration
+   - API level
+
+5. **Build Output**
+   - Full `cargo build` output
+   - Compilation warnings/errors
+   - Dependency resolution
+   - Build timing
+
+6. **Binary Info**
+   - File size (before/after strip)
+   - File type
+   - Saved space from stripping
+
+7. **Packaging**
+   - tar.gz creation
+   - SHA256 checksum
+   - Package size
+
+## 🔍 Example Log Entry
 
 ```
-InjectTools/
-├── build-logs/           ⬅️ DI SINI
-│   ├── success-aarch64-20260115-120530.log
-│   ├── success-armv7a-20260115-120545.log
-│   └── failed-aarch64-20260115-121030.log
-├── src/
-├── Cargo.toml
-└── README.md
-```
-
-## 📝 Format Filename
-
-```
-{status}-{arch}-{timestamp}.log
-```
-
-**Examples:**
-- `success-aarch64-20260115-120530.log` → ARM64 build success
-- `failed-armv7a-20260115-120545.log` → ARMv7 build failed
-
-## 📄 Log Contents
-
-### Header
-```
-╔══════════════════════════════════════════════════════════════╗
-║          InjectTools Termux Build Log                        ║
-╚══════════════════════════════════════════════════════════════╝
-
-Build Information:
-══════════════════
+Build started at 2026-01-15 06:30:42 UTC
 Target: aarch64-linux-android
-Architecture: aarch64
-Android API: 30
-Rust: rustc 1.75.0
-Cargo: cargo 1.75.0
-...
+Runner OS: Linux
+========================================
+
+📦 Rust Toolchain
+========================================
+rustc 1.75.0 (82e1608df 2023-12-21)
+cargo 1.75.0 (1d8b05cdd 2023-11-20)
+aarch64-linux-android
+
+📥 Downloading Android NDK
+========================================
+Downloading NDK r26d...
+Extracting NDK...
+NDK location: /home/runner/work/InjectTools/android-ndk-r26d
+✅ NDK ready
+
+🔧 Configuring Toolchain
+========================================
+NDK Binary Path: /home/runner/.../bin
+API Level: 30
+✅ Toolchain configured
+
+🔨 Building Binary
+========================================
+Target: aarch64-linux-android
+Build started: 2026-01-15 06:31:15 UTC
+
+   Compiling injecttools v2.3.0
+    Finished release [optimized] target(s) in 4m 23s
+
+✅ Build successful
+Build finished: 2026-01-15 06:35:38 UTC
+
+📊 Binary Info:
+-rwxr-xr-x 1 runner docker 8.2M injecttools
+injecttools: ELF 64-bit LSB shared object, ARM aarch64
+
+✂️  Stripping Debug Symbols
+========================================
+Before strip: 8.2M
+After strip:  3.1M
+Saved:        5.1M (62%)
+✅ Strip complete
+
+📦 Packaging
+========================================
+fd8a3b... injecttools-termux-arm64.tar.gz
+Package size: 2.8M
+✅ Packaging complete
+
+========================================
+Build finished at 2026-01-15 06:36:02 UTC
 ```
 
-### Build Steps
-1. 📦 **NDK Download** - Android NDK r26d
-2. ⚙️ **Toolchain Setup** - Configure compilers/linkers
-3. 🔨 **Cargo Build** - Compile Rust to Android binary
-4. ✂️ **Strip** - Remove debug symbols
-5. 📦 **Package** - Create `.tar.gz` + SHA256
+## 🔄 Automatic Updates
 
-### Footer
-```
-Build Summary
-═════════════
-Status:   SUCCESS
-Finished: 2026-01-15 04:08:43 UTC
-Duration: 193s
+Logs are automatically committed by GitHub Actions after each successful build:
 
-✅ SUCCESS - Artifacts ready
-```
+1. Build completes
+2. Log file generated with full output
+3. GitHub Actions bot commits log to this folder
+4. Latest logs always available in `main` branch
 
-## 🔍 Reading Logs
+## 📖 Viewing Logs
 
-### Via GitHub Web
+**Via GitHub:**
+- Browse directly: [build-logs/](https://github.com/hoshiyomiX/InjectTools/tree/main/build-logs)
+- Click on any `.log` file to view
 
-1. Browse ke https://github.com/hoshiyomiX/InjectTools/tree/main/build-logs
-2. Klik file `.log` yang mau dibaca
-3. View atau download
-
-### Via Git
-
+**Via Git:**
 ```bash
 git clone https://github.com/hoshiyomiX/InjectTools.git
 cd InjectTools/build-logs
-
-# List logs (newest first)
-ls -lt
-
-# Read latest success log
-cat success-aarch64-*.log | tail -n 50
-
-# Search for errors
-grep -i error *.log
+cat build-aarch64-linux-android.log
 ```
 
-### Via cURL
-
+**Via Raw URL:**
 ```bash
-# Download specific log
-curl -O https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/build-logs/success-aarch64-20260115-120530.log
-
-# View in terminal
-curl -s https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/build-logs/success-aarch64-20260115-120530.log | less
+curl https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/build-logs/build-aarch64-linux-android.log
 ```
 
-### Via Termux
+## ⚠️ Important Notes
 
-```bash
-# Clone repo
-pkg install git
-git clone https://github.com/hoshiyomiX/InjectTools
+- Logs are **plain text** (not compressed)
+- Logs are **overwritten** on each new build
+- Only **latest build logs** are kept (not historical)
+- Average log size: **50-200 KB** per file
 
-# Read logs
-cd InjectTools/build-logs
-cat success-*.log
-```
+## 🔗 Related
 
-## 🔄 Auto Rotation
-
-Workflow **otomatis keep last 10 logs** per architecture:
-
-```bash
-ls -t *-aarch64-*.log | tail -n +11 | xargs rm
-```
-
-Older logs tetap tersedia di:
-- **Actions Artifacts** (30 days retention)
-- **Git History** (permanent via commits)
-
-## 🐛 Debugging
-
-### Build Failed?
-
-1. Cari log dengan prefix `failed-{arch}-`
-2. Check error lines:
-   ```bash
-   grep -A 5 -B 5 "FAILED" failed-*.log
-   ```
-
-3. Common issues:
-   - **Dependency errors**: Check `Compiling` lines
-   - **Linker errors**: Check NDK toolchain setup
-   - **Timeout**: Check duration in summary
-
-### Build Success tapi Binary Error?
-
-1. Check binary size:
-   ```bash
-   grep "Binary size" success-*.log
-   ```
-
-2. Verify ELF format:
-   ```bash
-   grep "ELF" success-*.log
-   ```
-
-3. Check strip results:
-   ```bash
-   grep -A 3 "Stripping" success-*.log
-   ```
-
-## 📊 Log Statistics
-
-Logs help track:
-- ✅ Build success rate per arch
-- ⏱️ Compilation time trends
-- 💾 Binary size before/after strip
-- 🐛 Error patterns
-- 🔧 NDK compatibility
-
-## 🔗 Related Files
-
-- [`.github/workflows/termux-release.yml`](../.github/workflows/termux-release.yml) - Build workflow
-- [`CHANGELOG.md`](../CHANGELOG.md) - Version history
-- [`Cargo.toml`](../Cargo.toml) - Dependencies
-
-## ❓ FAQ
-
-**Q: Kenapa logs di root bukan di `.github/`?**  
-A: Biar lebih gampang diakses via web/mobile tanpa scroll ke subfolder.
-
-**Q: Logs consume banyak space?**  
-A: No, max 10 logs x 2 arch = 20 files (~2-5 KB each = ~100 KB total).
-
-**Q: Bisa lihat logs dari HP?**  
-A: Yes! Browse via GitHub mobile app atau web browser.
-
-**Q: Logs hilang setelah berapa lama?**  
-A: Di repo: permanent (sampai rotation). Di artifacts: 30 days.
-
-**Q: Bisa disable logging?**  
-A: Edit `.github/workflows/termux-release.yml` dan comment step "Push log to repo".
+- [GitHub Actions Workflow](../.github/workflows/termux-release.yml)
+- [Build Documentation](../TERMUX_BUILD.md)
+- [Latest Release](https://github.com/hoshiyomiX/InjectTools/releases/latest)
 
 ---
 
-**Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)  
-**Auto-generated** by GitHub Actions
+**Last Updated:** Auto-updated by GitHub Actions  
+**Maintained by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)

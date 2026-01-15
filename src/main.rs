@@ -4,7 +4,6 @@ mod dns;
 mod ui;
 mod crtsh;
 mod results;
-mod wordlist;
 
 use clap::Parser;
 use colored::Colorize;
@@ -14,7 +13,7 @@ use std::sync::Arc;
 #[derive(Parser, Debug)]
 #[command(name = "InjectTools")]
 #[command(author = "hoshiyomi_id <t.me/hoshiyomi_id>")]
-#[command(version = "2.3.1")]
+#[command(version = "2.3.0")]
 #[command(about = "Bug Inject Scanner for Cloudflare Subdomains", long_about = None)]
 struct Args {
     /// Target host (tunnel/proxy domain)
@@ -112,17 +111,16 @@ async fn main() -> anyhow::Result<()> {
     // Interactive mode
     loop {
         ui::clear_screen();
-        ui::print_header("INJECTTOOLS v2.3.1");
+        ui::print_header("INJECTTOOLS v2.3");
         
         println!("\n{}", "MAIN MENU".bold());
         println!("{}" , "━".repeat(50).cyan());
         println!("\n1. {} Test Target Host", "🎯".cyan());
         println!("2. {} Test Single Subdomain", "🔍".cyan());
         println!("3. {} Fetch & Test dari crt.sh", "🌐".cyan());
-        println!("4. {} DNS Brute Force Scan", "🚀".cyan());
-        println!("5. {} View Exported Results", "📊".cyan());
-        println!("6. {} Settings", "⚙️".cyan());
-        println!("7. {} Exit", "🚪".red());
+        println!("4. {} View Exported Results", "📊".cyan());
+        println!("5. {} Settings", "⚙️".cyan());
+        println!("6. {} Exit", "🚪".red());
         println!("\n{}", "━".repeat(50).cyan());
         
         if !config.target_host.is_empty() {
@@ -191,85 +189,19 @@ async fn main() -> anyhow::Result<()> {
                         }
                         Err(e) => {
                             println!("{} {}", "✗".red(), format!("Gagal fetch dari crt.sh: {}", e).red());
-                            println!("\n{}", "━".repeat(60).yellow());
-                            println!("{}", "💡 TIP: crt.sh sering down/slow.".yellow());
-                            println!("{}", "   Gunakan opsi '4. DNS Brute Force Scan' sebagai alternatif.".yellow());
-                            println!("{}", "━".repeat(60).yellow());
-                            
-                            print!("\n{} ", "Coba DNS Brute Force sekarang? (y/n):".cyan());
-                            let answer = ui::read_line();
-                            if answer.trim().to_lowercase() == "y" {
-                                println!("\n{}", "🚀 Starting DNS Brute Force...".cyan());
-                                
-                                // Load wordlist
-                                let wordlist = wordlist::get_wordlist()?;
-                                let subdomains: Vec<String> = wordlist
-                                    .iter()
-                                    .map(|prefix| format!("{}.{}", prefix, domain))
-                                    .collect();
-                                
-                                println!("{} {} patterns\n", "Loaded:".bright_black(), subdomains.len());
-                                
-                                let results = scanner::batch_test(
-                                    &config.target_host,
-                                    &subdomains,
-                                    args.timeout,
-                                    running.clone(),
-                                ).await?;
-                                
-                                results::export_results(&results, &domain)?;
-                            }
                         }
                     }
                 }
                 ui::pause();
             }
             "4" => {
-                if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
-                    ui::pause();
-                    continue;
-                }
-                
-                ui::print_header("DNS BRUTE FORCE SCAN");
-                print!("\nMasukkan domain: ");
-                let domain = ui::read_line();
-                if !domain.is_empty() {
-                    println!("\n{}", "📂 Loading wordlist...".cyan());
-                    
-                    match wordlist::get_wordlist() {
-                        Ok(wordlist) => {
-                            let subdomains: Vec<String> = wordlist
-                                .iter()
-                                .map(|prefix| format!("{}.{}", prefix, domain))
-                                .collect();
-                            
-                            println!("{} {} patterns\n", "Loaded:".green(), subdomains.len());
-                            
-                            let results = scanner::batch_test(
-                                &config.target_host,
-                                &subdomains,
-                                args.timeout,
-                                running.clone(),
-                            ).await?;
-                            
-                            results::export_results(&results, &domain)?;
-                        }
-                        Err(e) => {
-                            println!("{} {}", "✗".red(), format!("Gagal load wordlist: {}", e).red());
-                        }
-                    }
-                }
-                ui::pause();
-            }
-            "5" => {
                 results::view_results()?;
                 ui::pause();
             }
-            "6" => {
+            "5" => {
                 settings_menu(&mut config, args.timeout)?;
             }
-            "7" => {
+            "6" => {
                 println!("\n{}", "👋 Terima kasih telah menggunakan InjectTools!".green());
                 break;
             }

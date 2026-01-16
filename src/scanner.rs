@@ -1,6 +1,5 @@
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,22 +43,18 @@ fn tcp_latency_check(host: &str, port: u16, timeout_secs: u64) -> Option<u128> {
 }
 
 // ICMP ping test
-// Returns response time in ms if successful
 fn ping_test(host: &str, timeout_secs: u64) -> Option<u128> {
-    // Try ping command (works on Android/Termux)
     let output = Command::new("ping")
         .arg("-c")
-        .arg("1")  // 1 packet
+        .arg("1")
         .arg("-W")
-        .arg(timeout_secs.to_string())  // timeout
+        .arg(timeout_secs.to_string())
         .arg(host)
         .output();
     
     if let Ok(result) = output {
         if result.status.success() {
-            // Parse output untuk dapat response time
             if let Ok(stdout) = String::from_utf8(result.stdout) {
-                // Cari pattern "time=XXms" atau "time=XX.XX ms"
                 if let Some(time_start) = stdout.find("time=") {
                     let time_str = &stdout[time_start + 5..];
                     if let Some(space_pos) = time_str.find(" ") {
@@ -69,7 +64,6 @@ fn ping_test(host: &str, timeout_secs: u64) -> Option<u128> {
                         }
                     }
                 }
-                // Ping sukses tapi gak bisa parse time, return 0 (success indicator)
                 return Some(0);
             }
         }
@@ -78,27 +72,62 @@ fn ping_test(host: &str, timeout_secs: u64) -> Option<u128> {
     None
 }
 
-// Check if HTTP status indicates working inject
-// Only 2xx codes are considered working
-fn is_working_status(status: u16) -> bool {
-    status >= 200 && status < 300
+// Test SSL/TLS connection using openssl s_client
+// Returns true if SSL handshake successful
+fn test_ssl_connection(ip: &str, port: u16, servername: &str, timeout_secs: u64) -> bool {
+    let connect_addr = format!("{}:{}", ip, port);
+    
+    // openssl s_client -connect <ip>:443 -servername <hostname> -brief < /dev/null
+    let output = Command::new("timeout")
+        .arg(timeout_secs.to_string())
+        .arg("openssl")
+        .arg("s_client")
+        .arg("-connect")
+        .arg(&connect_addr)
+        .arg("-servername")
+        .arg(servername)
+        .arg("-brief")
+        .stdin(std::process::Stdio::null())
+        .output();
+    
+    if let Ok(result) = output {
+        if result.status.success() {
+            // Parse output untuk verify SSL handshake
+            if let Ok(stdout) = String::from_utf8(result.stdout) {
+                // Check for successful handshake indicators
+                if stdout.contains("CONNECTION ESTABLISHED") 
+                    || stdout.contains("Verification: OK")
+                    || stdout.contains("Cipher:")
+                    || result.status.code() == Some(0) {
+                    return true;
+                }
+            }
+            
+            // stderr juga bisa contain success indicators
+            if let Ok(stderr) = String::from_utf8(result.stderr) {
+                if stderr.contains("Verify return code: 0")
+                    || stderr.contains("SSL handshake has read")
+                    || !stderr.contains("error") {
+                    return true;
+                }
+            }
+            
+            // Exit code 0 = success
+            return true;
+        }
+    }
+    
+    false
 }
 
 pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "Testing target host...".cyan());
     println!("{}", "━".repeat(50).bright_black());
     
-    // Mechanism dari bash script:
-    // 1. DNS resolution test
-    // 2. Ping test
-    // 3. (Fallback) HTTP/HTTPS test
-    // 4. (Last resort) TCP port check
-    
     // Step 1: DNS Resolution Test
     let _resolved_ip = match dns::resolve_domain_first(target).await {
         Ok(ip) => ip,
         Err(_) => {
-            // DNS failed - target DOWN
             println!("\n{}", "❌ TARGET OFFLINE".red().bold());
             println!("{}", "Reason: DNS resolution failed".bright_black());
             return Ok(());
@@ -107,40 +136,14 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
     
     // Step 2: Ping Test
     if let Some(_ping_time) = ping_test(target, 3) {
-        // Ping successful - target UP
         println!("\n{}", "✅ TARGET ONLINE".green().bold());
         return Ok(());
     }
     
-    // Step 3: HTTP/HTTPS Test (fallback untuk host yang block ICMP)
-    let client = Client::builder()
-        .timeout(Duration::from_secs(timeout))
-        .connect_timeout(Duration::from_secs(timeout.saturating_sub(2)))
-        .user_agent("curl/8.8.0")
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| anyhow::anyhow!("Failed to build client: {}", e))?;
-    
-    let protocols = vec![("http", 80), ("https", 443)];
-    
-    for (protocol, _port) in &protocols {
-        let url = format!("{}://{}", protocol, target);
-        
-        if let Ok(response) = client.get(&url).send().await {
-            let status = response.status().as_u16();
-            
-            // Skip HTTP 400 if likely HTTPS-only
-            if status == 400 && protocol == &"http" {
-                if let Ok(body) = response.text().await {
-                    if body.contains("HTTPS port") || body.contains("SSL") {
-                        continue;
-                    }
-                }
-            }
-            
-            println!("\n{}", "✅ TARGET ONLINE".green().bold());
-            return Ok(());
-        }
+    // Step 3: SSL/TLS Test (HTTPS port 443)
+    if test_ssl_connection(target, 443, target, timeout) {
+        println!("\n{}", "✅ TARGET ONLINE".green().bold());
+        return Ok(());
     }
     
     // Step 4: TCP Port Check (last resort)
@@ -172,7 +175,6 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
             (ip, is_cf)
         }
         Err(e) => {
-            // DNS failed - show error and exit
             println!("\n{}", "═".repeat(50).red());
             println!("{}", "❌ DNS RESOLUTION FAILED".red().bold());
             println!("\n{} {}", "Subdomain:".bright_black(), subdomain.red());
@@ -182,114 +184,65 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
         }
     };
     
-    // Build client
-    print!("\n{} Testing connection...", "🔌".cyan());
-    let client = Client::builder()
-        .timeout(Duration::from_secs(timeout))
-        .connect_timeout(Duration::from_secs(timeout.saturating_sub(2)))
-        .user_agent("curl/8.8.0")
-        .danger_accept_invalid_certs(true)
-        .build()?;
-
-    // Try HTTPS first (port 443), then HTTP (port 80)
-    // Mimic curl --resolve: connect to subdomain IP, but SNI to target
-    let protocols = vec![
-        ("https", 443),
-        ("http", 80)
-    ];
+    print!("\n{} Testing SSL/TLS connection...", "🔌".cyan());
     
-    let mut success = false;
-
-    for (protocol, port) in protocols {
-        // CURL --RESOLVE BEHAVIOR:
-        // curl --resolve target:443:subdomain_ip https://target/
-        // → Connect ke subdomain_ip:443
-        // → TLS SNI ke target
-        // → HTTP Host ke target
-        
-        let target_url = format!("{}://{}:{}", protocol, ip, port);
-        
-        match client
-            .get(&target_url)
-            .header("Host", target)  // HTTP Host header ke target
-            .header("Connection", "close")
-            .timeout(Duration::from_secs(timeout))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                let status = response.status().as_u16();
-                
-                // Only 2xx codes are considered working
-                if is_working_status(status) {
-                    // Clear "Testing connection..." line
-                    print!("\r\x1B[K");
-                    
-                    println!("\n{}", "═".repeat(50));
-                    println!("{}", "✅ WORKING BUG INJECT!".green().bold());
-                    println!("\n{} {}", "Subdomain:".bright_black(), subdomain.green());
-                    println!("{} {}", "IP:".bright_black(), ip.green());
-                    println!("{} {}", "Status:".bright_black(), status.to_string().green());
-                    println!("{} {} (port {})", "Protocol:".bright_black(), protocol.to_uppercase().green(), port.to_string().green());
-                    
-                    if is_cf {
-                        println!("{} {}", "Provider:".bright_black(), "Cloudflare".cyan());
-                    } else {
-                        println!("{} {}", "Provider:".bright_black(), "Non-Cloudflare".yellow());
-                    }
-                    
-                    println!("\n{}", "Connection Details:".bright_black());
-                    println!("  {} Connect to {}:{}", "→".bright_black(), ip.cyan(), port.to_string().cyan());
-                    println!("  {} Host header: {}", "→".bright_black(), target.cyan());
-                    
-                    println!("{}", "═".repeat(50));
-                    
-                    success = true;
-                    break; // Stop on first 2xx success
-                }
-                
-                // 3xx, 4xx, 5xx = Continue trying next protocol
-                continue;
-            }
-            Err(e) => {
-                // Connection failed - try next protocol
-                if protocol == "https" {
-                    continue; // Try HTTP next
-                }
-                
-                // Both protocols failed
-                print!("\r\x1B[K");
-                
-                println!("\n{}", "═".repeat(50).red());
-                
-                if e.is_timeout() {
-                    println!("{}", "❌ CONNECTION TIMEOUT".red().bold());
-                    println!("\n{} {}", "Error:".bright_black(), "Request timeout".red());
-                } else if e.is_connect() {
-                    println!("{}", "❌ CONNECTION FAILED".red().bold());
-                    println!("\n{} {}", "Error:".bright_black(), "Cannot connect".red());
-                } else {
-                    println!("{}", "❌ REQUEST FAILED".red().bold());
-                    println!("\n{} {}", "Error:".bright_black(), e.to_string().red());
-                }
-                
-                println!("\n{} {}", "Subdomain:".bright_black(), subdomain.red());
-                println!("{} {}", "IP:".bright_black(), ip.red());
-                println!("{}", "═".repeat(50).red());
-            }
-        }
-    }
-
-    // No protocol succeeded with 2xx
-    if !success {
+    // Try HTTPS with openssl s_client (port 443)
+    // Connect ke subdomain IP, tapi SNI servername ke target
+    if test_ssl_connection(&ip, 443, target, timeout) {
         print!("\r\x1B[K");
-        println!("\n{}", "═".repeat(50).red());
-        println!("{}", "❌ NOT WORKING".red().bold());
-        println!("\n{} {}", "Subdomain:".bright_black(), subdomain.red());
-        println!("{} {}", "IP:".bright_black(), ip.red());
-        println!("{} {}", "Hint:".bright_black(), "Got non-2xx response, try different subdomain/target".yellow());
-        println!("{}", "═".repeat(50).red());
+        
+        println!("\n{}", "═".repeat(50));
+        println!("{}", "✅ WORKING BUG INJECT!".green().bold());
+        println!("\n{} {}", "Subdomain:".bright_black(), subdomain.green());
+        println!("{} {}", "IP:".bright_black(), ip.green());
+        println!("{} {} (port 443)", "Protocol:".bright_black(), "HTTPS".green());
+        
+        if is_cf {
+            println!("{} {}", "Provider:".bright_black(), "Cloudflare".cyan());
+        } else {
+            println!("{} {}", "Provider:".bright_black(), "Non-Cloudflare".yellow());
+        }
+        
+        println!("\n{}", "Connection Details:".bright_black());
+        println!("  {} openssl s_client -connect {}:443", "→".bright_black(), ip.cyan());
+        println!("  {} SNI servername: {}", "→".bright_black(), target.cyan());
+        println!("  {} SSL handshake: {}", "→".bright_black(), "SUCCESS".green());
+        
+        println!("{}", "═".repeat(50));
+        return Ok(());
     }
+    
+    // Fallback: Try TCP port 80 if HTTPS failed
+    if let Some(latency) = tcp_latency_check(&ip, 80, timeout) {
+        print!("\r\x1B[K");
+        
+        println!("\n{}", "═".repeat(50));
+        println!("{}", "⚠️  HTTP PORT OPEN".yellow().bold());
+        println!("\n{} {}", "Subdomain:".bright_black(), subdomain.yellow());
+        println!("{} {}", "IP:".bright_black(), ip.yellow());
+        println!("{} {} (port 80)", "Protocol:".bright_black(), "HTTP".yellow());
+        println!("{} {}ms", "Latency:".bright_black(), latency.to_string().cyan());
+        
+        if is_cf {
+            println!("{} {}", "Provider:".bright_black(), "Cloudflare".cyan());
+        } else {
+            println!("{} {}", "Provider:".bright_black(), "Non-Cloudflare".yellow());
+        }
+        
+        println!("\n{} HTTP port accessible, but HTTPS failed", "Note:".bright_black());
+        println!("{}", "═".repeat(50));
+        return Ok(());
+    }
+    
+    // Both HTTPS and HTTP failed
+    print!("\r\x1B[K");
+    
+    println!("\n{}", "═".repeat(50).red());
+    println!("{}", "❌ NOT WORKING".red().bold());
+    println!("\n{} {}", "Subdomain:".bright_black(), subdomain.red());
+    println!("{} {}", "IP:".bright_black(), ip.red());
+    println!("{} {}", "Hint:".bright_black(), "SSL handshake failed or connection timeout".yellow());
+    println!("{}", "═".repeat(50).red());
     
     Ok(())
 }
@@ -314,13 +267,6 @@ pub async fn batch_test(
             .progress_chars("█▓▒░"),
     );
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(timeout))
-        .connect_timeout(Duration::from_secs(timeout.saturating_sub(2)))
-        .user_agent("curl/8.8.0")
-        .danger_accept_invalid_certs(true)
-        .build()?;
-
     for subdomain in subdomains {
         if !running.load(Ordering::SeqCst) {
             pb.finish_with_message("Cancelled");
@@ -333,61 +279,36 @@ pub async fn batch_test(
         if let Ok(ip) = dns::resolve_domain_first(subdomain).await {
             let is_cf = dns::is_cloudflare_ip(&ip);
             
-            // Try HTTPS first (port 443), then HTTP (port 80)
-            // CURL --RESOLVE style: connect to IP, Host header to target
-            let protocols = vec![
-                ("https", 443),
-                ("http", 80)
-            ];
-            
-            let mut found_working = false;
-            
-            for (protocol, port) in protocols {
-                // Connect ke subdomain IP dengan Host header ke target
-                let target_url = format!("{}://{}:{}", protocol, ip, port);
-                
-                match client
-                    .get(&target_url)
-                    .header("Host", target)  // Host header ke target
-                    .header("Connection", "close")
-                    .timeout(Duration::from_secs(timeout))
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        let status = response.status().as_u16();
-                        
-                        // Only 2xx = working
-                        if is_working_status(status) {
-                            results.push(ScanResult {
-                                subdomain: subdomain.clone(),
-                                ip: ip.clone(),
-                                is_cloudflare: is_cf,
-                                is_working: is_cf, // CF + 2xx status = working
-                                status_code: Some(status),
-                                error_msg: None,
-                            });
-                            
-                            found_working = true;
-                            break; // Stop on first 2xx
-                        }
-                        
-                        // 3xx/4xx/5xx = continue to next protocol
-                        continue;
-                    }
-                    Err(_) => continue, // Try next protocol
-                }
-            }
-            
-            // If no 2xx found, add as failed
-            if !found_working {
+            // Try HTTPS dengan openssl s_client (port 443)
+            // Connect ke subdomain IP, SNI servername ke target
+            if test_ssl_connection(&ip, 443, target, timeout) {
+                results.push(ScanResult {
+                    subdomain: subdomain.clone(),
+                    ip: ip.clone(),
+                    is_cloudflare: is_cf,
+                    is_working: is_cf, // CF + SSL success = working
+                    status_code: Some(200), // Dummy status for SSL success
+                    error_msg: None,
+                });
+            } else if let Some(_latency) = tcp_latency_check(&ip, 80, timeout) {
+                // HTTP port 80 accessible tapi HTTPS failed
+                results.push(ScanResult {
+                    subdomain: subdomain.clone(),
+                    ip: ip.clone(),
+                    is_cloudflare: is_cf,
+                    is_working: false,
+                    status_code: Some(80), // Port 80 indicator
+                    error_msg: Some("HTTP only, HTTPS failed".to_string()),
+                });
+            } else {
+                // Both HTTPS and HTTP failed
                 results.push(ScanResult {
                     subdomain: subdomain.clone(),
                     ip: ip.clone(),
                     is_cloudflare: is_cf,
                     is_working: false,
                     status_code: None,
-                    error_msg: Some("No 2xx response".to_string()),
+                    error_msg: Some("Connection failed".to_string()),
                 });
             }
         }
@@ -402,8 +323,8 @@ pub async fn batch_test(
     
     // Display results
     let working: Vec<_> = results.iter().filter(|r| r.is_working).collect();
-    let non_working: Vec<_> = results.iter().filter(|r| !r.is_working && r.status_code.is_some()).collect();
-    let failed: Vec<_> = results.iter().filter(|r| r.error_msg.is_some()).collect();
+    let http_only: Vec<_> = results.iter().filter(|r| !r.is_working && r.status_code == Some(80)).collect();
+    let failed: Vec<_> = results.iter().filter(|r| r.error_msg.is_some() && r.status_code != Some(80)).collect();
     
     println!("\n{}", "═".repeat(60).cyan());
     ui::center_text("HASIL SCAN");
@@ -412,30 +333,24 @@ pub async fn batch_test(
     if working.is_empty() {
         println!("\n{}", "⚠️  Tidak ada working bug ditemukan".yellow());
     } else {
-        println!("\n{} Working Bugs ({}):", "✅".green(), working.len());
+        println!("\n{} Working Bugs (HTTPS/SSL):", "✅".green());
         for result in &working {
-            let status_str = if let Some(s) = result.status_code {
-                format!(" - Status {}", s)
-            } else {
-                String::new()
-            };
-            println!("  {} {} ({}){}", "🟢".green(), result.subdomain.green(), result.ip.bright_black(), status_str.yellow());
+            println!("  {} {} ({})", "🟢".green(), result.subdomain.green(), result.ip.bright_black());
         }
     }
     
-    if !non_working.is_empty() {
-        println!("\n{} Responding tapi Non-2xx Status ({}):", "⚠️".yellow(), non_working.len());
-        for result in non_working.iter().take(3) {
-            let status = result.status_code.unwrap_or(0);
-            println!("  {} {} ({}) - Status {}", "🟡".yellow(), result.subdomain, result.ip.bright_black(), status.to_string().red());
+    if !http_only.is_empty() {
+        println!("\n{} HTTP Only (port 80 open):", "⚠️".yellow());
+        for result in http_only.iter().take(5) {
+            println!("  {} {} ({}) - {}", "🟡".yellow(), result.subdomain, result.ip.bright_black(), "HTTPS failed".red());
         }
-        if non_working.len() > 3 {
-            println!("  ... dan {} lagi", non_working.len() - 3);
+        if http_only.len() > 5 {
+            println!("  ... dan {} lagi", http_only.len() - 5);
         }
     }
     
     if !failed.is_empty() {
-        println!("\n{} Connection Failed/Timeout ({}):", "❌".red(), failed.len());
+        println!("\n{} Connection Failed/Timeout:", "❌".red());
         for result in failed.iter().take(3) {
             println!("  {} {} ({}) - {}", "🔴".red(), result.subdomain.dimmed(), result.ip.bright_black(), "Timeout/Error".red());
         }
@@ -447,9 +362,9 @@ pub async fn batch_test(
     println!("\n{}", "─".repeat(60).bright_black());
     println!("{}", "Statistik:");
     println!("  Scanned: {}/{} ({}%)", results.len(), total, (results.len() * 100 / total.max(1)));
-    println!("  Working Bugs: {} | Non-2xx: {} | Timeout: {}", 
+    println!("  Working (SSL): {} | HTTP only: {} | Failed: {}", 
              working.len().to_string().green(), 
-             non_working.len().to_string().yellow(),
+             http_only.len().to_string().yellow(),
              failed.len().to_string().red());
     println!("{}", "─".repeat(60).bright_black());
     

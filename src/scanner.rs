@@ -184,7 +184,7 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
         }
     };
     
-    print!("\n{} Testing SSL/TLS connection...", "🔌".cyan());
+    print!("\n{} Testing SSL/TLS handshake...", "🔌".cyan());
     
     // Try HTTPS with openssl s_client (port 443)
     // Connect ke subdomain IP, tapi SNI servername ke target
@@ -212,36 +212,22 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
         return Ok(());
     }
     
-    // Fallback: Try TCP port 80 if HTTPS failed
-    if let Some(latency) = tcp_latency_check(&ip, 80, timeout) {
-        print!("\r\x1B[K");
-        
-        println!("\n{}", "═".repeat(50));
-        println!("{}", "⚠️  HTTP PORT OPEN".yellow().bold());
-        println!("\n{} {}", "Subdomain:".bright_black(), subdomain.yellow());
-        println!("{} {}", "IP:".bright_black(), ip.yellow());
-        println!("{} {} (port 80)", "Protocol:".bright_black(), "HTTP".yellow());
-        println!("{} {}ms", "Latency:".bright_black(), latency.to_string().cyan());
-        
-        if is_cf {
-            println!("{} {}", "Provider:".bright_black(), "Cloudflare".cyan());
-        } else {
-            println!("{} {}", "Provider:".bright_black(), "Non-Cloudflare".yellow());
-        }
-        
-        println!("\n{} HTTP port accessible, but HTTPS failed", "Note:".bright_black());
-        println!("{}", "═".repeat(50));
-        return Ok(());
-    }
-    
-    // Both HTTPS and HTTP failed
+    // SSL handshake failed = NOT WORKING
     print!("\r\x1B[K");
     
     println!("\n{}", "═".repeat(50).red());
-    println!("{}", "❌ NOT WORKING".red().bold());
+    println!("{}", "❌ BUG INJECT NOT WORKING".red().bold());
     println!("\n{} {}", "Subdomain:".bright_black(), subdomain.red());
     println!("{} {}", "IP:".bright_black(), ip.red());
-    println!("{} {}", "Hint:".bright_black(), "SSL handshake failed or connection timeout".yellow());
+    
+    if is_cf {
+        println!("{} {}", "Provider:".bright_black(), "Cloudflare".cyan());
+    } else {
+        println!("{} {}", "Provider:".bright_black(), "Non-Cloudflare".yellow());
+    }
+    
+    println!("\n{} {}", "Reason:".bright_black(), "SSL handshake failed".red());
+    println!("{} Subdomain tidak bisa inject ke target", "Note:".bright_black());
     println!("{}", "═".repeat(50).red());
     
     Ok(())
@@ -281,6 +267,7 @@ pub async fn batch_test(
             
             // Try HTTPS dengan openssl s_client (port 443)
             // Connect ke subdomain IP, SNI servername ke target
+            // SSL success = WORKING, SSL failed = NOT WORKING (simple)
             if test_ssl_connection(&ip, 443, target, timeout) {
                 results.push(ScanResult {
                     subdomain: subdomain.clone(),
@@ -290,25 +277,15 @@ pub async fn batch_test(
                     status_code: Some(200), // Dummy status for SSL success
                     error_msg: None,
                 });
-            } else if let Some(_latency) = tcp_latency_check(&ip, 80, timeout) {
-                // HTTP port 80 accessible tapi HTTPS failed
-                results.push(ScanResult {
-                    subdomain: subdomain.clone(),
-                    ip: ip.clone(),
-                    is_cloudflare: is_cf,
-                    is_working: false,
-                    status_code: Some(80), // Port 80 indicator
-                    error_msg: Some("HTTP only, HTTPS failed".to_string()),
-                });
             } else {
-                // Both HTTPS and HTTP failed
+                // SSL handshake failed = NOT WORKING
                 results.push(ScanResult {
                     subdomain: subdomain.clone(),
                     ip: ip.clone(),
                     is_cloudflare: is_cf,
                     is_working: false,
                     status_code: None,
-                    error_msg: Some("Connection failed".to_string()),
+                    error_msg: Some("SSL handshake failed".to_string()),
                 });
             }
         }
@@ -323,8 +300,7 @@ pub async fn batch_test(
     
     // Display results
     let working: Vec<_> = results.iter().filter(|r| r.is_working).collect();
-    let http_only: Vec<_> = results.iter().filter(|r| !r.is_working && r.status_code == Some(80)).collect();
-    let failed: Vec<_> = results.iter().filter(|r| r.error_msg.is_some() && r.status_code != Some(80)).collect();
+    let failed: Vec<_> = results.iter().filter(|r| !r.is_working).collect();
     
     println!("\n{}", "═".repeat(60).cyan());
     ui::center_text("HASIL SCAN");
@@ -333,38 +309,27 @@ pub async fn batch_test(
     if working.is_empty() {
         println!("\n{}", "⚠️  Tidak ada working bug ditemukan".yellow());
     } else {
-        println!("\n{} Working Bugs (HTTPS/SSL):", "✅".green());
+        println!("\n{} Working Bugs (SSL Handshake Success):", "✅".green());
         for result in &working {
             println!("  {} {} ({})", "🟢".green(), result.subdomain.green(), result.ip.bright_black());
         }
     }
     
-    if !http_only.is_empty() {
-        println!("\n{} HTTP Only (port 80 open):", "⚠️".yellow());
-        for result in http_only.iter().take(5) {
-            println!("  {} {} ({}) - {}", "🟡".yellow(), result.subdomain, result.ip.bright_black(), "HTTPS failed".red());
-        }
-        if http_only.len() > 5 {
-            println!("  ... dan {} lagi", http_only.len() - 5);
-        }
-    }
-    
     if !failed.is_empty() {
-        println!("\n{} Connection Failed/Timeout:", "❌".red());
-        for result in failed.iter().take(3) {
-            println!("  {} {} ({}) - {}", "🔴".red(), result.subdomain.dimmed(), result.ip.bright_black(), "Timeout/Error".red());
+        println!("\n{} Not Working (SSL Handshake Failed):", "❌".red());
+        for result in failed.iter().take(5) {
+            println!("  {} {} ({})", "🔴".red(), result.subdomain.dimmed(), result.ip.bright_black());
         }
-        if failed.len() > 3 {
-            println!("  ... dan {} lagi", failed.len() - 3);
+        if failed.len() > 5 {
+            println!("  ... dan {} lagi", failed.len() - 5);
         }
     }
     
     println!("\n{}", "─".repeat(60).bright_black());
     println!("{}", "Statistik:");
     println!("  Scanned: {}/{} ({}%)", results.len(), total, (results.len() * 100 / total.max(1)));
-    println!("  Working (SSL): {} | HTTP only: {} | Failed: {}", 
+    println!("  Working (SSL Success): {} | Failed (SSL Failed): {}", 
              working.len().to_string().green(), 
-             http_only.len().to_string().yellow(),
              failed.len().to_string().red());
     println!("{}", "─".repeat(60).bright_black());
     

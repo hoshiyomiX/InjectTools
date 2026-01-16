@@ -146,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
             
             // Refresh status jika sudah > 30 detik
             if status.should_refresh() {
-                print!("\n{} Checking target status...", "🔄".cyan());
+                print!("\n🔄 Checking target status...");
                 std::io::Write::flush(&mut std::io::stdout()).ok();
                 
                 // Quick check target (async)
@@ -184,11 +184,11 @@ async fn main() -> anyhow::Result<()> {
         
         println!("\n{}", "MAIN MENU".bold());
         println!("{}" , "━".repeat(50).cyan());
-        println!("\n1. {} Test Single Subdomain", "🔍".cyan());
-        println!("2. {} Fetch & Test dari crt.sh", "🌐".cyan());
-        println!("3. {} View Exported Results", "📊".cyan());
-        println!("4. {} Settings", "⚙️".cyan());
-        println!("5. {} Exit", "🚪".red());
+        println!("\n1. 🔍 Test Single Subdomain");
+        println!("2. 🌐 Fetch & Test dari crt.sh");
+        println!("3. 📊 View Exported Results");
+        println!("4. ⚙️  Change Target Host");
+        println!("5. 🚪 Exit");
         println!("\n{}", "━".repeat(50).cyan());
         
         print!("\n{} ", "Pilih:".bold());
@@ -197,7 +197,7 @@ async fn main() -> anyhow::Result<()> {
         match choice.trim() {
             "1" => {
                 if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
+                    println!("\n{}", "⚠️  Set target host dulu (pilih menu 4)!".yellow());
                     ui::pause();
                     continue;
                 }
@@ -212,7 +212,7 @@ async fn main() -> anyhow::Result<()> {
             }
             "2" => {
                 if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu di Settings!".yellow());
+                    println!("\n{}", "⚠️  Set target host dulu (pilih menu 4)!".yellow());
                     ui::pause();
                     continue;
                 }
@@ -252,7 +252,36 @@ async fn main() -> anyhow::Result<()> {
                 ui::pause();
             }
             "4" => {
-                settings_menu(&mut config, args.timeout, target_status.clone()).await?;
+                ui::print_header("CHANGE TARGET HOST");
+                
+                if !config.target_host.is_empty() {
+                    println!("\n{} {}", "Current target:".bright_black(), config.target_host.cyan());
+                }
+                
+                print!("\nMasukkan target host baru: ");
+                let target = ui::read_line();
+                
+                if !target.is_empty() {
+                    // Test target connection
+                    println!("\n{}", "🔍 Testing target connection...".cyan());
+                    scanner::test_target(&target, args.timeout).await?;
+                    
+                    // Save if test successful
+                    config.target_host = target;
+                    config.save()?;
+                    
+                    println!("\n{}", "✓ Target host updated".green());
+                    
+                    // Force refresh status
+                    let mut status = target_status.lock().unwrap();
+                    status.last_check = Instant::now() - Duration::from_secs(60);
+                    
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                } else {
+                    println!("\n{}", "⚠️  Target host tidak boleh kosong".yellow());
+                }
+                
+                ui::pause();
             }
             "5" => {
                 println!("\n{}", "👋 Terima kasih telah menggunakan InjectTools!".green());
@@ -265,72 +294,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    Ok(())
-}
-
-async fn settings_menu(
-    config: &mut config::Config,
-    timeout: u64,
-    target_status: Arc<Mutex<TargetStatus>>,
-) -> anyhow::Result<()> {
-    loop {
-        ui::clear_screen();
-        ui::print_header("SETTINGS");
-        
-        println!("\n{}", "CURRENT SETTINGS".bold());
-        println!("{}" , "━".repeat(50).cyan());
-        println!("\n{} {}", "Target Host:".bright_black(), 
-                 if config.target_host.is_empty() { "(not set)".red() } else { config.target_host.green() });
-        println!("{} {} seconds", "Timeout:".bright_black(), timeout.to_string().green());
-        println!("\n{}" , "━".repeat(50).cyan());
-        
-        println!("\n1. Change Target Host");
-        println!("2. Test Target Connection");
-        println!("3. Back to Main Menu");
-        
-        print!("\n{} ", "Pilih:".bold());
-        let choice = ui::read_line();
-
-        match choice.trim() {
-            "1" => {
-                print!("\nMasukkan target host baru: ");
-                let target = ui::read_line();
-                if !target.is_empty() {
-                    config.target_host = target;
-                    config.save()?;
-                    println!("{}", "✓ Target host updated".green());
-                    
-                    // Force refresh status
-                    let mut status = target_status.lock().unwrap();
-                    status.last_check = Instant::now() - Duration::from_secs(60);
-                    
-                    std::thread::sleep(std::time::Duration::from_secs(1));
-                }
-            }
-            "2" => {
-                if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu!".yellow());
-                    ui::pause();
-                    continue;
-                }
-                
-                println!("\n{}", "Testing target connection...".cyan());
-                scanner::test_target(&config.target_host, timeout).await?;
-                
-                // Force refresh status
-                let mut status = target_status.lock().unwrap();
-                status.last_check = Instant::now() - Duration::from_secs(60);
-                
-                ui::pause();
-            }
-            "3" => break,
-            _ => {
-                println!("\n{}", "❌ Pilihan tidak valid".red());
-                ui::pause();
-            }
-        }
-    }
-    
     Ok(())
 }
 

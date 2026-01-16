@@ -140,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
         ui::clear_screen();
         ui::print_header("INJECTTOOLS v2.4.0");
         
-        // Display target status dengan auto-ping
+        // Display target status dengan auto-check
         if !config.target_host.is_empty() {
             let mut status = target_status.lock().unwrap();
             
@@ -153,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
                 let target_clone = config.target_host.clone();
                 let is_online = tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async {
-                        check_target_quick(&target_clone).await
+                        check_target_quick(&target_clone, 5).await
                     })
                 });
                 
@@ -297,40 +297,73 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-// Quick check target status (ping atau TCP check)
-async fn check_target_quick(target: &str) -> bool {
-    // Try DNS resolution first
-    if dns::resolve_domain_first(target).await.is_err() {
-        return false;
-    }
+// Quick check target status menggunakan curl --resolve
+// curl -s --max-time $TIMEOUT --resolve $TARGET:443:$IP https://$TARGET/ -o /dev/null
+async fn check_target_quick(target: &str, timeout: u64) -> bool {
+    // Step 1: Resolve target domain untuk dapat IP
+    let ip = match dns::resolve_domain_first(target).await {
+        Ok(ip) => ip,
+        Err(_) => return false,
+    };
     
-    // Try ping (1 second timeout)
-    let output = tokio::process::Command::new("ping")
-        .arg("-c")
-        .arg("1")
-        .arg("-W")
-        .arg("1")
-        .arg(target)
+    // Step 2: Test HTTPS connection dengan curl --resolve
+    // curl -s --max-time 5 --resolve target:443:ip https://target/ -o /dev/null
+    let resolve_arg = format!("{}:443:{}", target, ip);
+    let url = format!("https://{}/", target);
+    
+    let output = tokio::process::Command::new("curl")
+        .arg("-s")                          // Silent mode
+        .arg("--max-time")
+        .arg(timeout.to_string())           // Timeout
+        .arg("--resolve")
+        .arg(&resolve_arg)                  // Resolve target:443 to IP
+        .arg("-k")                          // Allow insecure SSL
+        .arg(&url)                          // URL to test
+        .arg("-o")
+        .arg("/dev/null")                   // Discard output
         .output()
         .await;
     
     if let Ok(result) = output {
+        // Exit code 0 = success (connection successful)
         if result.status.success() {
             return true;
         }
+        
+        // Exit codes yang dianggap "target reachable":
+        // - 0: Success
+        // - 22: HTTP error (tapi connection berhasil)
+        if let Some(code) = result.status.code() {
+            if code == 0 || code == 22 {
+                return true;
+            }
+        }
     }
     
-    // Fallback: TCP port check (443 or 80)
-    use std::net::{TcpStream, ToSocketAddrs};
-    use std::time::Duration;
+    // Fallback: Try HTTP port 80
+    let resolve_arg_80 = format!("{}:80:{}", target, ip);
+    let url_80 = format!("http://{}/", target);
     
-    for port in &[443, 80] {
-        let addr = format!("{}:{}", target, port);
-        if let Ok(mut addrs) = addr.to_socket_addrs() {
-            if let Some(socket_addr) = addrs.next() {
-                if TcpStream::connect_timeout(&socket_addr, Duration::from_secs(2)).is_ok() {
-                    return true;
-                }
+    let output_80 = tokio::process::Command::new("curl")
+        .arg("-s")
+        .arg("--max-time")
+        .arg("3")
+        .arg("--resolve")
+        .arg(&resolve_arg_80)
+        .arg(&url_80)
+        .arg("-o")
+        .arg("/dev/null")
+        .output()
+        .await;
+    
+    if let Ok(result) = output_80 {
+        if result.status.success() {
+            return true;
+        }
+        
+        if let Some(code) = result.status.code() {
+            if code == 0 || code == 22 {
+                return true;
             }
         }
     }

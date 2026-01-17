@@ -15,7 +15,7 @@ use std::sync::Mutex;
 #[derive(Parser, Debug)]
 #[command(name = "InjectTools")]
 #[command(author = "hoshiyomi_id <t.me/hoshiyomi_id>")]
-#[command(version = "2.4.0")]
+#[command(version = "3.6.0")]
 #[command(about = "Bug Inject Scanner for Cloudflare Subdomains", long_about = None)]
 struct Args {
     /// Target host (tunnel/proxy domain)
@@ -138,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
     // Interactive mode
     loop {
         ui::clear_screen();
-        ui::print_header("INJECTTOOLS v2.4.0");
+        ui::print_header("INJECTTOOLS v3.6.0");
         
         // Display target status dengan auto-check
         if !config.target_host.is_empty() {
@@ -188,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
         println!("2. 🌐 Fetch & Test dari crt.sh");
         println!("3. 📊 View Exported Results");
         println!("4. ⚙️  Change Target Host");
-        println!("5. 🚪 Exit");
+        println!("5. 🚺 Exit");
         println!("\n{}", "━".repeat(50).cyan());
         
         print!("\n{} ", "Pilih:".bold());

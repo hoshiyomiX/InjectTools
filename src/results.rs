@@ -13,23 +13,114 @@ pub fn export_results(results: &[ScanResult], domain: &str) -> anyhow::Result<()
     let filepath = results_dir.join(&filename);
     
     let mut content = String::new();
-    content.push_str(&format!("InjectTools v2.3 - Scan Results\n"));
+    content.push_str(&format!("InjectTools v3.6 - Scan Results\n"));
     content.push_str(&format!("Domain: {}\n", domain));
     content.push_str(&format!("Timestamp: {}\n", Local::now().format("%Y-%m-%d %H:%M:%S")));
-    content.push_str(&format!("\n{}\n\n", "=".repeat(60)));
+    content.push_str(&format!("\n{}\n\n", "=".repeat(70)));
     
+    // Categorize results
     let working: Vec<_> = results.iter().filter(|r| r.is_working).collect();
-    let non_cf: Vec<_> = results.iter().filter(|r| !r.is_cloudflare && r.status_code.is_some()).collect();
+    let restricted: Vec<_> = results.iter().filter(|r| r.is_restricted).collect();
+    let subdomain_issues: Vec<_> = results.iter()
+        .filter(|r| !r.is_working && !r.is_restricted && r.error_source.as_deref() == Some("subdomain"))
+        .collect();
+    let target_issues: Vec<_> = results.iter()
+        .filter(|r| !r.is_working && !r.is_restricted && r.error_source.as_deref() == Some("target"))
+        .collect();
     
-    content.push_str(&format!("WORKING BUGS ({}):\n", working.len()));
-    content.push_str(&format!("{}\n\n", "-".repeat(60)));
+    // ═══════════════════════════════════════════════════════════════
+    // 1. WORKING BUGS
+    // ═══════════════════════════════════════════════════════════════
+    
+    content.push_str(&format!("✅ WORKING BUG INJECTS ({}):\n", working.len()));
+    content.push_str(&format!("{}\n\n", "-".repeat(70)));
     
     if working.is_empty() {
-        content.push_str("No working bugs found\n");
+        content.push_str("No fully working bugs found\n");
     } else {
         for result in &working {
             content.push_str(&format!(
-                "✓ {} | {} | Status: {}\n",
+                "✓ {}\n  IP: {} | HTTP: {}",
+                result.subdomain,
+                result.ip,
+                result.status_code.unwrap_or(0)
+            ));
+            
+            if let Some(ref cf_ray) = result.cf_ray {
+                content.push_str(&format!(" | CF-Ray: {}", cf_ray));
+            }
+            
+            content.push_str("\n\n");
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // 2. RESTRICTED ACCESS (HTTP 403/404)
+    // ═══════════════════════════════════════════════════════════════
+    
+    content.push_str(&format!("\n⚠️  WORKING WITH RESTRICTIONS ({}):\n", restricted.len()));
+    content.push_str(&format!("{}\n", "-".repeat(70)));
+    content.push_str("Note: Connection works, but access is limited\n\n");
+    
+    if restricted.is_empty() {
+        content.push_str("None\n");
+    } else {
+        for result in &restricted {
+            content.push_str(&format!(
+                "⚠ {}\n  IP: {} | HTTP: {} ({})",
+                result.subdomain,
+                result.ip,
+                result.status_code.unwrap_or(0),
+                match result.status_code {
+                    Some(403) => "Forbidden - May need authentication",
+                    Some(404) => "Not Found - Try specific paths",
+                    _ => "Restricted"
+                }
+            ));
+            
+            if let Some(ref cf_ray) = result.cf_ray {
+                content.push_str(&format!(" | CF-Ray: {}", cf_ray));
+            }
+            
+            content.push_str("\n\n");
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // 3. SUBDOMAIN ISSUES
+    // ═══════════════════════════════════════════════════════════════
+    
+    content.push_str(&format!("\n❌ SUBDOMAIN ISSUES ({}):\n", subdomain_issues.len()));
+    content.push_str(&format!("{}\n", "-".repeat(70)));
+    content.push_str("Note: Problems with subdomain itself (DNS, non-CF IP, SSL failed)\n\n");
+    
+    if subdomain_issues.is_empty() {
+        content.push_str("None\n");
+    } else {
+        for result in &subdomain_issues {
+            content.push_str(&format!(
+                "✗ {}\n  IP: {} | Error: {}\n\n",
+                result.subdomain,
+                result.ip,
+                result.error_msg.as_ref().unwrap_or(&"Unknown".to_string())
+            ));
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // 4. TARGET ISSUES
+    // ═══════════════════════════════════════════════════════════════
+    
+    content.push_str(&format!("\n🎯 TARGET ISSUES ({}):\n", target_issues.len()));
+    content.push_str(&format!("{}\n", "-".repeat(70)));
+    content.push_str("Note: Subdomain OK, but target domain offline/misconfigured\n\n");
+    
+    if target_issues.is_empty() {
+        content.push_str("None\n");
+    } else {
+        for result in &target_issues {
+            content.push_str(&format!(
+                "• {}\n  IP: {} (Cloudflare) | Target Response: HTTP {}\n\n",
                 result.subdomain,
                 result.ip,
                 result.status_code.unwrap_or(0)
@@ -37,32 +128,84 @@ pub fn export_results(results: &[ScanResult], domain: &str) -> anyhow::Result<()
         }
     }
     
-    content.push_str(&format!("\n\nNON-CLOUDFLARE RESPONSES ({}):\n", non_cf.len()));
-    content.push_str(&format!("{}\n\n", "-".repeat(60)));
+    // ═══════════════════════════════════════════════════════════════
+    // STATISTICS
+    // ═══════════════════════════════════════════════════════════════
     
-    for result in &non_cf {
-        content.push_str(&format!(
-            "• {} | {} | Status: {}\n",
-            result.subdomain,
-            result.ip,
-            result.status_code.unwrap_or(0)
-        ));
+    content.push_str(&format!("\n{}\n", "=".repeat(70)));
+    content.push_str(&format!("STATISTICS:\n"));
+    content.push_str(&format!("{}\n", "-".repeat(70)));
+    content.push_str(&format!("Total Scanned:        {}\n", results.len()));
+    content.push_str(&format!("\n"));
+    content.push_str(&format!("✅ Working Bugs:       {} ({:.1}%)\n", 
+        working.len(), 
+        (working.len() as f64 / results.len().max(1) as f64 * 100.0)
+    ));
+    content.push_str(&format!("⚠️  Restricted Access:  {} ({:.1}%)\n", 
+        restricted.len(),
+        (restricted.len() as f64 / results.len().max(1) as f64 * 100.0)
+    ));
+    content.push_str(&format!("\n"));
+    content.push_str(&format!("❌ Subdomain Issues:   {}\n", subdomain_issues.len()));
+    content.push_str(&format!("🎯 Target Issues:      {}\n", target_issues.len()));
+    content.push_str(&format!("\n"));
+    content.push_str(&format!("Success Rate:         {:.1}%\n", 
+        ((working.len() + restricted.len()) as f64 / results.len().max(1) as f64 * 100.0)
+    ));
+    
+    // ═══════════════════════════════════════════════════════════════
+    // RECOMMENDATIONS
+    // ═══════════════════════════════════════════════════════════════
+    
+    content.push_str(&format!("\n{}\n", "=".repeat(70)));
+    content.push_str(&format!("RECOMMENDATIONS:\n"));
+    content.push_str(&format!("{}\n", "-".repeat(70)));
+    
+    if !working.is_empty() {
+        content.push_str(&format!("✓ {} working bug(s) ready to use\n", working.len()));
     }
     
-    content.push_str(&format!("\n\nSTATISTICS:\n"));
-    content.push_str(&format!("{}\n", "-".repeat(60)));
-    content.push_str(&format!("Total Scanned: {}\n", results.len()));
-    content.push_str(&format!("Working Bugs: {}\n", working.len()));
-    content.push_str(&format!("Non-CF: {}\n", non_cf.len()));
+    if !restricted.is_empty() {
+        content.push_str(&format!("⚠ {} bug(s) with restrictions - connection works, try specific endpoints\n", restricted.len()));
+    }
+    
+    if !target_issues.is_empty() {
+        content.push_str(&format!("🎯 {} subdomain(s) OK but target offline - try different target domain\n", target_issues.len()));
+    }
+    
+    if working.is_empty() && restricted.is_empty() {
+        content.push_str(&format!("❌ No working bugs found\n"));
+        content.push_str(&format!("   Try: Different target domain or subdomain source\n"));
+    }
+    
+    content.push_str(&format!("\n{}\n", "=".repeat(70)));
+    content.push_str(&format!("\nExport by InjectTools v3.6\n"));
+    content.push_str(&format!("https://github.com/hoshiyomiX/InjectTools\n"));
     
     fs::write(&filepath, content)?;
     
+    // Console output
     println!("\n{}", "═".repeat(60).green());
     println!("{}", "📁 RESULTS EXPORTED".green().bold());
     println!("{}", "═".repeat(60).green());
     println!("\n{} {}", "File:".bright_black(), filename.green());
     println!("{} {}", "Path:".bright_black(), filepath.display().to_string().bright_black());
-    println!("{} {} bugs\n", "Working:".bright_black(), working.len().to_string().green());
+    println!("\n{}", "Summary:".bold());
+    println!("  {} {} working", "✅".green(), working.len().to_string().green());
+    
+    if !restricted.is_empty() {
+        println!("  {} {} restricted", "⚠️".yellow(), restricted.len().to_string().yellow());
+    }
+    
+    if !subdomain_issues.is_empty() {
+        println!("  {} {} subdomain issues", "❌".red(), subdomain_issues.len().to_string().red());
+    }
+    
+    if !target_issues.is_empty() {
+        println!("  {} {} target issues", "🎯".yellow(), target_issues.len().to_string().yellow());
+    }
+    
+    println!("");
     
     Ok(())
 }
@@ -130,9 +273,9 @@ pub fn view_results() -> anyhow::Result<()> {
         let latest = &files[0];
         let content = fs::read_to_string(latest.path())?;
         
-        println!("\n{}", "═".repeat(60).cyan());
+        println!("\n{}", "═".repeat(70).cyan());
         println!("{}", content);
-        println!("{}", "═".repeat(60).cyan());
+        println!("{}", "═".repeat(70).cyan());
     }
     
     Ok(())

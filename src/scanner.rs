@@ -214,13 +214,10 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
     println!("\n{}", "─".repeat(60).bright_black());
     println!("{} {}", "[1/4]".blue(), "DNS Resolution".bold());
     
-    let (ip, is_cf) = match dns::resolve_domain_first(subdomain).await {
+    let ip = match dns::resolve_domain_first(subdomain).await {
         Ok(ip) => {
-            let is_cf = dns::is_cloudflare_ip(&ip);
             println!("  {} Resolved to {}", "✓".green(), ip.magenta());
-            println!("  {} Provider: {}", "•".bright_black(), 
-                if is_cf { "Cloudflare ☁️".cyan() } else { "Non-Cloudflare".yellow() });
-            (ip, is_cf)
+            ip
         }
         Err(e) => {
             println!("  {} DNS Resolution Failed", "✗".red());
@@ -238,15 +235,27 @@ pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow:
         }
     };
     
-    // Check if Cloudflare IP
-    if !is_cf {
-        println!("  {} {}", "⚠".yellow(), "Non-Cloudflare IP detected".yellow());
+    // ═══════════════════════════════════════════════════════════════
+    // ✨ ENHANCED: Cloudflare Detection (IP + HTTP)
+    // ═══════════════════════════════════════════════════════════════
+    
+    println!("  {} Checking Cloudflare status...", "•".bright_black());
+    
+    let is_cf = dns::is_cloudflare_enhanced(subdomain, &ip).await;
+    
+    if is_cf {
+        println!("  {} Provider: {} (verified)", "•".bright_black(), "Cloudflare ☁️".cyan());
+    } else {
+        println!("  {} Provider: {}", "•".bright_black(), "Non-Cloudflare".yellow());
         println!("\n{}", "═".repeat(60).yellow());
         println!("{}", "⚠️  SUBDOMAIN ISSUE".yellow().bold());
         println!("{}", "═".repeat(60).yellow());
         println!("\n{} {}", "Problem:".bright_black(), "Subdomain".yellow());
-        println!("{} Non-Cloudflare IP", "Issue:".bright_black());
+        println!("{} Non-Cloudflare IP & no CF headers", "Issue:".bright_black());
         println!("{} Bug inject requires Cloudflare-backed subdomain", "Note:".bright_black());
+        println!("\n{}", "Verification:".bright_black());
+        println!("  • IP range check: ❌");
+        println!("  • CF-Ray header: ❌");
         println!("{}", "═".repeat(60).yellow());
         return Ok(());
     }
@@ -461,7 +470,7 @@ pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✨ ENHANCED: Batch Test with v3.6 Logic
+// ✨ ENHANCED: Batch Test with v3.6 Logic + Enhanced CF Detection
 // ═══════════════════════════════════════════════════════════════
 
 pub async fn batch_test(
@@ -493,7 +502,8 @@ pub async fn batch_test(
         pb.set_message(format!("Testing: {}", subdomain));
         
         if let Ok(ip) = dns::resolve_domain_first(subdomain).await {
-            let is_cf = dns::is_cloudflare_ip(&ip);
+            // ✨ ENHANCED: Use hybrid CF detection
+            let is_cf = dns::is_cloudflare_enhanced(subdomain, &ip).await;
             
             // Skip non-Cloudflare IPs
             if !is_cf {

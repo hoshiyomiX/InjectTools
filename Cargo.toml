@@ -1,6 +1,6 @@
 [package]
 name = "injecttools"
-version = "2.4.0"
+version = "3.6.0"
 edition = "2021"
 authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
 description = "Bug Inject Scanner for Cloudflare Subdomains - Android/Termux Only"
@@ -24,7 +24,7 @@ trust-dns-resolver = "0.23"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialoger = "0.11"
 terminal_size = "0.3"
 
 # Networking

@@ -24,57 +24,64 @@ jobs:
     name: Build ARM64
     runs-on: ubuntu-latest
     
+    # Serialize log commits to prevent race conditions
+    concurrency:
+      group: commit-logs-${{ github.ref }}
+      cancel-in-progress: false
+    
     steps:
-      - name: Checkout triggering branch
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Verify checkout
-        run: |
-          echo "Current branch: $(git branch --show-current)"
-          echo "Current commit: $(git rev-parse HEAD)"
-          echo "Git ref: ${{ github.ref }}"
-          echo "Git ref name: ${{ github.ref_name }}"
-          git log -1 --oneline
-
-      - name: Create build log directory
+      - name: Setup build log
         run: |
           mkdir -p build-logs
-          echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee build-logs/build-aarch64-linux-android.log
-          echo "Target: aarch64-linux-android" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
+          LOG_FILE="build-logs/build-aarch64-linux-android.log"
+          
+          echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee $LOG_FILE
+          echo "Target: aarch64-linux-android" | tee -a $LOG_FILE
+          echo "Branch: ${{ github.ref_name }}" | tee -a $LOG_FILE
+          echo "Commit: $(git rev-parse --short HEAD)" | tee -a $LOG_FILE
+          echo "Triggered by: ${{ github.event_name }}" | tee -a $LOG_FILE
+          echo "========================================" | tee -a $LOG_FILE
+          
+          echo "LOG_FILE=$LOG_FILE" >> $GITHUB_ENV
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
 
-      - name: Cache cargo dependencies (improved strategy)
+      - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/**/*.rs') }}-${{ hashFiles('Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-cargo-
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-registry-
+
+      - name: Cache target (ARM64)
+        uses: actions/cache@v4
+        with:
+          path: target/aarch64-linux-android
+          key: target-arm64-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/**/*.rs') }}
+          restore-keys: target-arm64-
 
       - name: Download Android NDK
         run: |
-          echo "📥 Downloading Android NDK r26d..." | tee -a build-logs/build-aarch64-linux-android.log
-          wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip 2>&1 | tee -a build-logs/build-aarch64-linux-android.log
+          echo "📥 Downloading Android NDK r26d..." | tee -a $LOG_FILE
+          wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
           
-          echo "📦 Extracting NDK..." | tee -a build-logs/build-aarch64-linux-android.log
-          unzip -q android-ndk-r26d-linux.zip 2>&1 | tee -a build-logs/build-aarch64-linux-android.log
+          echo "📦 Extracting NDK..." | tee -a $LOG_FILE
+          unzip -q android-ndk-r26d-linux.zip
           
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
-          echo "✅ NDK ready" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "✅ NDK ready" | tee -a $LOG_FILE
 
       - name: Configure toolchain
         run: |
@@ -84,23 +91,14 @@ jobs:
           echo "AR_aarch64_linux_android=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_BIN}/aarch64-linux-android30-clang" >> $GITHUB_ENV
           
-          echo "🔧 Toolchain configured" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "🔧 Toolchain configured" | tee -a $LOG_FILE
 
       - name: Force clean build
         run: |
-          echo "🧹 Forcing complete clean build..." | tee -a build-logs/build-aarch64-linux-android.log
-          
-          # Clean target directory
-          cargo clean 2>&1 | tee -a build-logs/build-aarch64-linux-android.log
-          
-          # Clean cargo cache untuk project ini specifically
-          rm -rf ~/.cargo/registry/cache
-          rm -rf ~/.cargo/git/db
-          
-          # Ensure no leftover target artifacts
+          echo "🧹 Cleaning build artifacts..." | tee -a $LOG_FILE
+          cargo clean 2>&1 | tee -a $LOG_FILE
           rm -rf target/
-          
-          echo "✅ Clean complete - guaranteed fresh build" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "✅ Clean complete" | tee -a $LOG_FILE
 
       - name: Build binary
         id: build
@@ -108,64 +106,48 @@ jobs:
         run: |
           set -o pipefail
           
-          echo "🔨 Building from source..." | tee -a build-logs/build-aarch64-linux-android.log
-          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "🔨 Building from source..." | tee -a $LOG_FILE
+          echo "========================================" | tee -a $LOG_FILE
           
-          # Log source state untuk traceability
-          echo "📋 Build Context:" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Git commit short: $(git rev-parse --short HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
-          
+          # Build context
           CARGO_VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "Cargo.toml version: $CARGO_VERSION" | tee -a build-logs/build-aarch64-linux-android.log
-          
-          # Hash all source files untuk verification
           SOURCES_HASH=$(find src -type f -name '*.rs' -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
-          echo "Source files hash: $SOURCES_HASH" | tee -a build-logs/build-aarch64-linux-android.log
           
-          echo "Main menu options count: $(grep -c 'println!("[0-9]' src/main.rs || echo 'N/A')" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "📋 Build Context:" | tee -a $LOG_FILE
+          echo "Cargo version: $CARGO_VERSION" | tee -a $LOG_FILE
+          echo "Sources hash: $SOURCES_HASH" | tee -a $LOG_FILE
+          echo "========================================" | tee -a $LOG_FILE
           
-          # Build dengan full logging
           BUILD_START=$(date +%s)
           
-          if cargo build --release --target aarch64-linux-android 2>&1 | tee -a build-logs/build-aarch64-linux-android.log; then
+          if cargo build --release --target aarch64-linux-android 2>&1 | tee -a $LOG_FILE; then
             BUILD_END=$(date +%s)
             BUILD_DURATION=$((BUILD_END - BUILD_START))
             
-            echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
-            echo "Build completed in ${BUILD_DURATION}s" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "========================================" | tee -a $LOG_FILE
+            echo "✅ Build completed in ${BUILD_DURATION}s" | tee -a $LOG_FILE
             
-            # Verify binary exists
+            # Verify binary
             if [ ! -f target/aarch64-linux-android/release/injecttools ]; then
-              echo "❌ Build failed - binary not found" | tee -a build-logs/build-aarch64-linux-android.log
+              echo "❌ Binary not found!" | tee -a $LOG_FILE
               exit 1
             fi
             
-            # Verify binary is FRESH (built within last 5 minutes)
+            # Check freshness
             CURRENT_TIME=$(date +%s)
             BINARY_TIME=$(stat -c %Y target/aarch64-linux-android/release/injecttools)
             BINARY_AGE=$((CURRENT_TIME - BINARY_TIME))
             
-            echo "🔍 Build Verification:" | tee -a build-logs/build-aarch64-linux-android.log
-            echo "Current time: $(date -u '+%Y-%m-%d %H:%M:%S UTC') (${CURRENT_TIME})" | tee -a build-logs/build-aarch64-linux-android.log
-            echo "Binary mtime: $(date -u -d @${BINARY_TIME} '+%Y-%m-%d %H:%M:%S UTC') (${BINARY_TIME})" | tee -a build-logs/build-aarch64-linux-android.log
-            echo "Binary age: ${BINARY_AGE}s" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "🔍 Binary age: ${BINARY_AGE}s" | tee -a $LOG_FILE
             
             if [ $BINARY_AGE -gt 300 ]; then
-              echo "❌ ERROR: Binary is STALE (older than 5 minutes)!" | tee -a build-logs/build-aarch64-linux-android.log
-              echo "This indicates a cached/old binary was used instead of fresh compilation" | tee -a build-logs/build-aarch64-linux-android.log
-              echo "Expected: Binary age < 300s" | tee -a build-logs/build-aarch64-linux-android.log
-              echo "Actual: Binary age = ${BINARY_AGE}s" | tee -a build-logs/build-aarch64-linux-android.log
+              echo "❌ Binary is stale (${BINARY_AGE}s > 300s)" | tee -a $LOG_FILE
               exit 1
             fi
             
-            echo "✅ Binary freshness verified (${BINARY_AGE}s old)" | tee -a build-logs/build-aarch64-linux-android.log
-            echo "✅ Build successful" | tee -a build-logs/build-aarch64-linux-android.log
-            ls -lh target/aarch64-linux-android/release/injecttools | tee -a build-logs/build-aarch64-linux-android.log
+            ls -lh target/aarch64-linux-android/release/injecttools | tee -a $LOG_FILE
           else
-            echo "❌ Cargo build failed" | tee -a build-logs/build-aarch64-linux-android.log
+            echo "❌ Build failed" | tee -a $LOG_FILE
             exit 1
           fi
 
@@ -173,16 +155,14 @@ jobs:
         if: steps.build.outcome == 'success'
         run: |
           BEFORE=$(stat -c%s target/aarch64-linux-android/release/injecttools)
-          echo "Before strip: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-aarch64-linux-android.log
           
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             target/aarch64-linux-android/release/injecttools
           
           AFTER=$(stat -c%s target/aarch64-linux-android/release/injecttools)
-          echo "After strip: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-aarch64-linux-android.log
-          
           SAVED=$((BEFORE - AFTER))
-          echo "Saved: $(numfmt --to=iec-i --suffix=B $SAVED)" | tee -a build-logs/build-aarch64-linux-android.log
+          
+          echo "📦 Stripped: $(numfmt --to=iec-i --suffix=B $BEFORE) → $(numfmt --to=iec-i --suffix=B $AFTER) (saved $(numfmt --to=iec-i --suffix=B $SAVED))" | tee -a $LOG_FILE
 
       - name: Package
         if: steps.build.outcome == 'success'
@@ -191,30 +171,61 @@ jobs:
           tar czf ../../../injecttools-termux-arm64.tar.gz injecttools
           cd ../../..
           
-          sha256sum injecttools-termux-arm64.tar.gz | tee injecttools-termux-arm64.tar.gz.sha256 | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Finished: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-aarch64-linux-android.log
+          sha256sum injecttools-termux-arm64.tar.gz | tee injecttools-termux-arm64.tar.gz.sha256 | tee -a $LOG_FILE
 
       - name: Finalize build log
         if: always()
         run: |
-          echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Build status: ${{ steps.build.outcome }}" | tee -a build-logs/build-aarch64-linux-android.log
-          echo "Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "========================================" | tee -a $LOG_FILE
+          echo "Status: ${{ steps.build.outcome }}" | tee -a $LOG_FILE
+          echo "Finished: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a $LOG_FILE
 
-      - name: Commit build log to branch
+      - name: Commit build log with retry
         if: always()
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          git add build-logs/build-aarch64-linux-android.log
+          git add $LOG_FILE
           
-          if ! git diff --staged --quiet; then
-            git commit -m "Update ARM64 build log - Status: ${{ steps.build.outcome }} [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-          else
+          if git diff --staged --quiet; then
             echo "No changes to commit"
+            exit 0
           fi
+          
+          git commit -m "chore: update ARM64 build log - ${{ steps.build.outcome }} [skip ci]"
+          
+          # Retry push with exponential backoff
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "📤 Push attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+            
+            # Fetch and rebase before push
+            git fetch origin ${{ github.ref_name }}
+            git rebase origin/${{ github.ref_name }} || {
+              echo "⚠️ Rebase failed, resolving..."
+              git rebase --abort
+              git reset --soft HEAD~1
+              git pull --rebase origin ${{ github.ref_name }}
+              git add $LOG_FILE
+              git commit -m "chore: update ARM64 build log - ${{ steps.build.outcome }} [skip ci]"
+            }
+            
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "✅ Push successful!"
+              exit 0
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            WAIT_TIME=$((2 ** RETRY_COUNT))
+            echo "⚠️ Push failed, waiting ${WAIT_TIME}s before retry..."
+            sleep $WAIT_TIME
+          done
+          
+          echo "❌ Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
@@ -227,66 +238,70 @@ jobs:
 
       - name: Fail job if build failed
         if: steps.build.outcome != 'success'
-        run: |
-          echo "❌ Build failed - check build logs for details"
-          exit 1
+        run: exit 1
 
   build-armv7:
     name: Build ARMv7
     runs-on: ubuntu-latest
     needs: build-arm64
     
+    concurrency:
+      group: commit-logs-${{ github.ref }}
+      cancel-in-progress: false
+    
     steps:
-      - name: Checkout triggering branch
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Verify checkout
-        run: |
-          echo "Current branch: $(git branch --show-current)"
-          echo "Current commit: $(git rev-parse HEAD)"
-          echo "Git ref: ${{ github.ref }}"
-          echo "Git ref name: ${{ github.ref_name }}"
-          git log -1 --oneline
-
-      - name: Create build log directory
+      - name: Setup build log
         run: |
           mkdir -p build-logs
-          echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee build-logs/build-armv7-linux-androideabi.log
-          echo "Target: armv7-linux-androideabi" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
+          LOG_FILE="build-logs/build-armv7-linux-androideabi.log"
+          
+          echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee $LOG_FILE
+          echo "Target: armv7-linux-androideabi" | tee -a $LOG_FILE
+          echo "Branch: ${{ github.ref_name }}" | tee -a $LOG_FILE
+          echo "Commit: $(git rev-parse --short HEAD)" | tee -a $LOG_FILE
+          echo "Triggered by: ${{ github.event_name }}" | tee -a $LOG_FILE
+          echo "========================================" | tee -a $LOG_FILE
+          
+          echo "LOG_FILE=$LOG_FILE" >> $GITHUB_ENV
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: armv7-linux-androideabi
 
-      - name: Cache cargo dependencies (improved strategy)
+      - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/**/*.rs') }}-${{ hashFiles('Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-cargo-
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-registry-
+
+      - name: Cache target (ARMv7)
+        uses: actions/cache@v4
+        with:
+          path: target/armv7-linux-androideabi
+          key: target-armv7-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/**/*.rs') }}
+          restore-keys: target-armv7-
 
       - name: Download Android NDK
         run: |
-          echo "📥 Downloading Android NDK r26d..." | tee -a build-logs/build-armv7-linux-androideabi.log
-          wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "📥 Downloading Android NDK r26d..." | tee -a $LOG_FILE
+          wget -q https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
           
-          echo "📦 Extracting NDK..." | tee -a build-logs/build-armv7-linux-androideabi.log
-          unzip -q android-ndk-r26d-linux.zip 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "📦 Extracting NDK..." | tee -a $LOG_FILE
+          unzip -q android-ndk-r26d-linux.zip
           
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
-          echo "✅ NDK ready" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "✅ NDK ready" | tee -a $LOG_FILE
 
       - name: Configure toolchain
         run: |
@@ -296,23 +311,14 @@ jobs:
           echo "AR_armv7_linux_androideabi=${NDK_BIN}/llvm-ar" >> $GITHUB_ENV
           echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_BIN}/armv7a-linux-androideabi30-clang" >> $GITHUB_ENV
           
-          echo "🔧 Toolchain configured" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "🔧 Toolchain configured" | tee -a $LOG_FILE
 
       - name: Force clean build
         run: |
-          echo "🧹 Forcing complete clean build..." | tee -a build-logs/build-armv7-linux-androideabi.log
-          
-          # Clean target directory
-          cargo clean 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log
-          
-          # Clean cargo cache untuk project ini specifically
-          rm -rf ~/.cargo/registry/cache
-          rm -rf ~/.cargo/git/db
-          
-          # Ensure no leftover target artifacts
+          echo "🧹 Cleaning build artifacts..." | tee -a $LOG_FILE
+          cargo clean 2>&1 | tee -a $LOG_FILE
           rm -rf target/
-          
-          echo "✅ Clean complete - guaranteed fresh build" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "✅ Clean complete" | tee -a $LOG_FILE
 
       - name: Build binary
         id: build
@@ -320,64 +326,48 @@ jobs:
         run: |
           set -o pipefail
           
-          echo "🔨 Building from source..." | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "🔨 Building from source..." | tee -a $LOG_FILE
+          echo "========================================" | tee -a $LOG_FILE
           
-          # Log source state untuk traceability
-          echo "📋 Build Context:" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Git commit short: $(git rev-parse --short HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
-          
+          # Build context
           CARGO_VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "Cargo.toml version: $CARGO_VERSION" | tee -a build-logs/build-armv7-linux-androideabi.log
-          
-          # Hash all source files untuk verification
           SOURCES_HASH=$(find src -type f -name '*.rs' -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
-          echo "Source files hash: $SOURCES_HASH" | tee -a build-logs/build-armv7-linux-androideabi.log
           
-          echo "Main menu options count: $(grep -c 'println!("[0-9]' src/main.rs || echo 'N/A')" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "📋 Build Context:" | tee -a $LOG_FILE
+          echo "Cargo version: $CARGO_VERSION" | tee -a $LOG_FILE
+          echo "Sources hash: $SOURCES_HASH" | tee -a $LOG_FILE
+          echo "========================================" | tee -a $LOG_FILE
           
-          # Build dengan full logging
           BUILD_START=$(date +%s)
           
-          if cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a build-logs/build-armv7-linux-androideabi.log; then
+          if cargo build --release --target armv7-linux-androideabi 2>&1 | tee -a $LOG_FILE; then
             BUILD_END=$(date +%s)
             BUILD_DURATION=$((BUILD_END - BUILD_START))
             
-            echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
-            echo "Build completed in ${BUILD_DURATION}s" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "========================================" | tee -a $LOG_FILE
+            echo "✅ Build completed in ${BUILD_DURATION}s" | tee -a $LOG_FILE
             
-            # Verify binary exists
+            # Verify binary
             if [ ! -f target/armv7-linux-androideabi/release/injecttools ]; then
-              echo "❌ Build failed - binary not found" | tee -a build-logs/build-armv7-linux-androideabi.log
+              echo "❌ Binary not found!" | tee -a $LOG_FILE
               exit 1
             fi
             
-            # Verify binary is FRESH (built within last 5 minutes)
+            # Check freshness
             CURRENT_TIME=$(date +%s)
             BINARY_TIME=$(stat -c %Y target/armv7-linux-androideabi/release/injecttools)
             BINARY_AGE=$((CURRENT_TIME - BINARY_TIME))
             
-            echo "🔍 Build Verification:" | tee -a build-logs/build-armv7-linux-androideabi.log
-            echo "Current time: $(date -u '+%Y-%m-%d %H:%M:%S UTC') (${CURRENT_TIME})" | tee -a build-logs/build-armv7-linux-androideabi.log
-            echo "Binary mtime: $(date -u -d @${BINARY_TIME} '+%Y-%m-%d %H:%M:%S UTC') (${BINARY_TIME})" | tee -a build-logs/build-armv7-linux-androideabi.log
-            echo "Binary age: ${BINARY_AGE}s" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "🔍 Binary age: ${BINARY_AGE}s" | tee -a $LOG_FILE
             
             if [ $BINARY_AGE -gt 300 ]; then
-              echo "❌ ERROR: Binary is STALE (older than 5 minutes)!" | tee -a build-logs/build-armv7-linux-androideabi.log
-              echo "This indicates a cached/old binary was used instead of fresh compilation" | tee -a build-logs/build-armv7-linux-androideabi.log
-              echo "Expected: Binary age < 300s" | tee -a build-logs/build-armv7-linux-androideabi.log
-              echo "Actual: Binary age = ${BINARY_AGE}s" | tee -a build-logs/build-armv7-linux-androideabi.log
+              echo "❌ Binary is stale (${BINARY_AGE}s > 300s)" | tee -a $LOG_FILE
               exit 1
             fi
             
-            echo "✅ Binary freshness verified (${BINARY_AGE}s old)" | tee -a build-logs/build-armv7-linux-androideabi.log
-            echo "✅ Build successful" | tee -a build-logs/build-armv7-linux-androideabi.log
-            ls -lh target/armv7-linux-androideabi/release/injecttools | tee -a build-logs/build-armv7-linux-androideabi.log
+            ls -lh target/armv7-linux-androideabi/release/injecttools | tee -a $LOG_FILE
           else
-            echo "❌ Cargo build failed" | tee -a build-logs/build-armv7-linux-androideabi.log
+            echo "❌ Build failed" | tee -a $LOG_FILE
             exit 1
           fi
 
@@ -385,16 +375,14 @@ jobs:
         if: steps.build.outcome == 'success'
         run: |
           BEFORE=$(stat -c%s target/armv7-linux-androideabi/release/injecttools)
-          echo "Before strip: $(numfmt --to=iec-i --suffix=B $BEFORE)" | tee -a build-logs/build-armv7-linux-androideabi.log
           
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             target/armv7-linux-androideabi/release/injecttools
           
           AFTER=$(stat -c%s target/armv7-linux-androideabi/release/injecttools)
-          echo "After strip: $(numfmt --to=iec-i --suffix=B $AFTER)" | tee -a build-logs/build-armv7-linux-androideabi.log
-          
           SAVED=$((BEFORE - AFTER))
-          echo "Saved: $(numfmt --to=iec-i --suffix=B $SAVED)" | tee -a build-logs/build-armv7-linux-androideabi.log
+          
+          echo "📦 Stripped: $(numfmt --to=iec-i --suffix=B $BEFORE) → $(numfmt --to=iec-i --suffix=B $AFTER) (saved $(numfmt --to=iec-i --suffix=B $SAVED))" | tee -a $LOG_FILE
 
       - name: Package
         if: steps.build.outcome == 'success'
@@ -403,30 +391,61 @@ jobs:
           tar czf ../../../injecttools-termux-armv7.tar.gz injecttools
           cd ../../..
           
-          sha256sum injecttools-termux-armv7.tar.gz | tee injecttools-termux-armv7.tar.gz.sha256 | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Finished: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-armv7-linux-androideabi.log
+          sha256sum injecttools-termux-armv7.tar.gz | tee injecttools-termux-armv7.tar.gz.sha256 | tee -a $LOG_FILE
 
       - name: Finalize build log
         if: always()
         run: |
-          echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Build status: ${{ steps.build.outcome }}" | tee -a build-logs/build-armv7-linux-androideabi.log
-          echo "Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "========================================" | tee -a $LOG_FILE
+          echo "Status: ${{ steps.build.outcome }}" | tee -a $LOG_FILE
+          echo "Finished: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a $LOG_FILE
 
-      - name: Commit build log to branch
+      - name: Commit build log with retry
         if: always()
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          git add build-logs/build-armv7-linux-androideabi.log
+          git add $LOG_FILE
           
-          if ! git diff --staged --quiet; then
-            git commit -m "Update ARMv7 build log - Status: ${{ steps.build.outcome }} [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-          else
+          if git diff --staged --quiet; then
             echo "No changes to commit"
+            exit 0
           fi
+          
+          git commit -m "chore: update ARMv7 build log - ${{ steps.build.outcome }} [skip ci]"
+          
+          # Retry push with exponential backoff
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "📤 Push attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+            
+            # Fetch and rebase before push
+            git fetch origin ${{ github.ref_name }}
+            git rebase origin/${{ github.ref_name }} || {
+              echo "⚠️ Rebase failed, resolving..."
+              git rebase --abort
+              git reset --soft HEAD~1
+              git pull --rebase origin ${{ github.ref_name }}
+              git add $LOG_FILE
+              git commit -m "chore: update ARMv7 build log - ${{ steps.build.outcome }} [skip ci]"
+            }
+            
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "✅ Push successful!"
+              exit 0
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            WAIT_TIME=$((2 ** RETRY_COUNT))
+            echo "⚠️ Push failed, waiting ${WAIT_TIME}s before retry..."
+            sleep $WAIT_TIME
+          done
+          
+          echo "❌ Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
@@ -439,9 +458,7 @@ jobs:
 
       - name: Fail job if build failed
         if: steps.build.outcome != 'success'
-        run: |
-          echo "❌ Build failed - check build logs for details"
-          exit 1
+        run: exit 1
 
   create-release:
     name: Create Release
@@ -479,7 +496,7 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
       
-      - name: Get Cargo version for release notes
+      - name: Get Cargo version
         id: cargo_version
         run: |
           CARGO_VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
@@ -523,12 +540,14 @@ jobs:
             
             ## 🚀 Features v${{ steps.cargo_version.outputs.cargo_version }}
             
-            - ⚡ Async scanning
-            - 🌐 crt.sh integration
-            - 📦 Batch testing
-            - 📄 Export/view results
-            - ☁️ Cloudflare detection
-            - ⏹️ Ctrl+C handling
+            - ⚡ Async scanning with concurrency control
+            - 🌐 crt.sh certificate transparency integration
+            - 📦 Batch testing with progress tracking
+            - 📄 Export/view results in organized format
+            - ☁️ Cloudflare IP detection & validation
+            - 🔒 SSL/TLS certificate verification
+            - ⏹️ Graceful Ctrl+C handling
+            - 🎯 Multi-threaded DNS resolution
             
             ## 🔐 Checksums
             

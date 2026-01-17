@@ -25,17 +25,18 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout latest main branch
+      - name: Checkout triggering branch
         uses: actions/checkout@v4
         with:
-          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Verify checkout
         run: |
-          echo "Current commit: $(git rev-parse HEAD)"
           echo "Current branch: $(git branch --show-current)"
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo "Git ref: ${{ github.ref }}"
+          echo "Git ref name: ${{ github.ref_name }}"
           git log -1 --oneline
 
       - name: Create build log directory
@@ -43,6 +44,7 @@ jobs:
           mkdir -p build-logs
           echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee build-logs/build-aarch64-linux-android.log
           echo "Target: aarch64-linux-android" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-aarch64-linux-android.log
           echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
           echo "========================================" | tee -a build-logs/build-aarch64-linux-android.log
 
@@ -111,6 +113,7 @@ jobs:
           
           # Log source state untuk traceability
           echo "📋 Build Context:" | tee -a build-logs/build-aarch64-linux-android.log
+          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-aarch64-linux-android.log
           echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
           echo "Git commit short: $(git rev-parse --short HEAD)" | tee -a build-logs/build-aarch64-linux-android.log
           
@@ -198,7 +201,7 @@ jobs:
           echo "Build status: ${{ steps.build.outcome }}" | tee -a build-logs/build-aarch64-linux-android.log
           echo "Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-aarch64-linux-android.log
 
-      - name: Commit build log
+      - name: Commit build log to branch
         if: always()
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -208,7 +211,7 @@ jobs:
           
           if ! git diff --staged --quiet; then
             git commit -m "Update ARM64 build log - Status: ${{ steps.build.outcome }} [skip ci]"
-            git push origin main
+            git push origin HEAD:${{ github.ref_name }}
           else
             echo "No changes to commit"
           fi
@@ -234,17 +237,18 @@ jobs:
     needs: build-arm64
     
     steps:
-      - name: Checkout latest main branch
+      - name: Checkout triggering branch
         uses: actions/checkout@v4
         with:
-          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Verify checkout
         run: |
-          echo "Current commit: $(git rev-parse HEAD)"
           echo "Current branch: $(git branch --show-current)"
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo "Git ref: ${{ github.ref }}"
+          echo "Git ref name: ${{ github.ref_name }}"
           git log -1 --oneline
 
       - name: Create build log directory
@@ -252,6 +256,7 @@ jobs:
           mkdir -p build-logs
           echo "Build started at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee build-logs/build-armv7-linux-androideabi.log
           echo "Target: armv7-linux-androideabi" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "========================================" | tee -a build-logs/build-armv7-linux-androideabi.log
 
@@ -320,6 +325,7 @@ jobs:
           
           # Log source state untuk traceability
           echo "📋 Build Context:" | tee -a build-logs/build-armv7-linux-androideabi.log
+          echo "Branch: ${{ github.ref_name }}" | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "Git commit: $(git rev-parse HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "Git commit short: $(git rev-parse --short HEAD)" | tee -a build-logs/build-armv7-linux-androideabi.log
           
@@ -407,7 +413,7 @@ jobs:
           echo "Build status: ${{ steps.build.outcome }}" | tee -a build-logs/build-armv7-linux-androideabi.log
           echo "Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" | tee -a build-logs/build-armv7-linux-androideabi.log
 
-      - name: Commit build log
+      - name: Commit build log to branch
         if: always()
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -417,7 +423,7 @@ jobs:
           
           if ! git diff --staged --quiet; then
             git commit -m "Update ARMv7 build log - Status: ${{ steps.build.outcome }} [skip ci]"
-            git push origin main
+            git push origin HEAD:${{ github.ref_name }}
           else
             echo "No changes to commit"
           fi
@@ -446,8 +452,6 @@ jobs:
       
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
       
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -475,13 +479,19 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
       
+      - name: Get Cargo version for release notes
+        id: cargo_version
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "cargo_version=$CARGO_VERSION" >> $GITHUB_OUTPUT
+      
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: InjectTools ${{ steps.version.outputs.version }}
+          name: InjectTools v${{ steps.cargo_version.outputs.cargo_version }}
           body: |
-            # InjectTools ${{ steps.version.outputs.version }} - Termux Edition
+            # InjectTools v${{ steps.cargo_version.outputs.cargo_version }} - Termux Edition
             
             🤖 **Bug Inject Scanner for Cloudflare Subdomains** - High-performance Rust implementation
             
@@ -511,7 +521,7 @@ jobs:
             tar xzf injecttools-termux-armv7.tar.gz && mv injecttools $PREFIX/bin/ && chmod +x $PREFIX/bin/injecttools
             ```
             
-            ## 🚀 Features v2.3
+            ## 🚀 Features v${{ steps.cargo_version.outputs.cargo_version }}
             
             - ⚡ Async scanning
             - 🌐 crt.sh integration
@@ -526,10 +536,11 @@ jobs:
             $(cat release-assets/checksums.txt)
             ```
             
-            ## 📝 Build Logs
+            ## 📝 Build Info
             
-            - [ARM64 build log](https://github.com/hoshiyomiX/InjectTools/blob/main/build-logs/build-aarch64-linux-android.log)
-            - [ARMv7 build log](https://github.com/hoshiyomiX/InjectTools/blob/main/build-logs/build-armv7-linux-androideabi.log)
+            - **Branch:** ${{ github.ref_name }}
+            - **Commit:** ${{ github.sha }}
+            - **Built:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
             
             ---
             

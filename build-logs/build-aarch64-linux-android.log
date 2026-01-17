@@ -1,7 +1,7 @@
-Build started at 2026-01-17 15:48:40 UTC
+Build started at 2026-01-17 16:27:54 UTC
 Target: aarch64-linux-android
 Branch: beta
-Commit: 10bd257
+Commit: b04fe05
 Triggered by: workflow_dispatch
 ========================================
 📥 Downloading Android NDK r26d...
@@ -9,13 +9,13 @@ Triggered by: workflow_dispatch
 ✅ NDK ready
 🔧 Toolchain configured
 🧹 Cleaning build artifacts...
-[1m[92m     Removed[0m 0 files
+[1m[92m     Removed[0m 1239 files, 254.2MiB total
 ✅ Clean complete
 🔨 Building from source...
 ========================================
 📋 Build Context:
 Cargo version: 3.6.0
-Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
+Sources hash: 9598fd91ecea9cc7f673d8ec70b3da345df65c218f81453af9cc82adf6c234fb
 ========================================
 [1m[92m    Updating[0m crates.io index
 [1m[92m     Locking[0m 246 packages to latest compatible versions
@@ -27,187 +27,9 @@ Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
 [1m[92m      Adding[0m terminal_size v0.3.0 [1m[33m(available: v0.4.3)[0m
 [1m[92m      Adding[0m thiserror v1.0.69 [1m[33m(available: v2.0.17)[0m
 [1m[92m      Adding[0m toml v0.8.23 [1m[33m(available: v0.9.11+spec-1.1.0)[0m
-[1m[92m Downloading[0m crates ...
-[1m[92m  Downloaded[0m android_system_properties v0.1.5
-[1m[92m  Downloaded[0m ppv-lite86 v0.2.21
-[1m[92m  Downloaded[0m rand_chacha v0.3.1
-[1m[92m  Downloaded[0m scopeguard v1.2.0
-[1m[92m  Downloaded[0m zerofrom-derive v0.1.6
-[1m[92m  Downloaded[0m try-lock v0.2.5
-[1m[92m  Downloaded[0m zerofrom v0.1.6
-[1m[92m  Downloaded[0m strsim v0.11.1
-[1m[92m  Downloaded[0m utf8parse v0.2.2
-[1m[92m  Downloaded[0m zmij v1.0.14
-[1m[92m  Downloaded[0m yoke v0.8.1
-[1m[92m  Downloaded[0m unicode-ident v1.0.22
-[1m[92m  Downloaded[0m toml v0.8.23
-[1m[92m  Downloaded[0m zerovec-derive v0.11.2
-[1m[92m  Downloaded[0m unicode-bidi v0.3.18
-[1m[92m  Downloaded[0m url v2.5.8
-[1m[92m  Downloaded[0m zerovec v0.11.5
-[1m[92m  Downloaded[0m unicode-normalization v0.1.25
-[1m[92m  Downloaded[0m tokio-util v0.7.18
-[1m[92m  Downloaded[0m rustls-webpki v0.101.7
-[1m[92m  Downloaded[0m winnow v0.7.14
-[1m[92m  Downloaded[0m serde_json v1.0.149
-[1m[92m  Downloaded[0m nix v0.30.1
-[1m[92m  Downloaded[0m reqwest v0.11.27
-[1m[92m  Downloaded[0m webpki-roots v0.25.4
-[1m[92m  Downloaded[0m zerocopy v0.8.33
-[1m[92m  Downloaded[0m syn v2.0.114
-[1m[92m  Downloaded[0m unicode-width v0.2.2
-[1m[92m  Downloaded[0m rustls v0.21.12
-[1m[92m  Downloaded[0m idna v0.4.0
-[1m[92m  Downloaded[0m rustix v0.38.44
-[1m[92m  Downloaded[0m trust-dns-proto v0.23.2
-[1m[92m  Downloaded[0m rustix v1.1.3
-[1m[92m  Downloaded[0m regex-syntax v0.8.8
-[1m[92m  Downloaded[0m regex v1.12.2
-[1m[92m  Downloaded[0m trust-dns-resolver v0.23.2
-[1m[92m  Downloaded[0m toml_edit v0.22.27
-[1m[92m  Downloaded[0m hyper v0.14.32
-[1m[92m  Downloaded[0m tracing v0.1.44
-[1m[92m  Downloaded[0m serde v1.0.228
-[1m[92m  Downloaded[0m zerotrie v0.2.3
-[1m[92m  Downloaded[0m tracing-core v0.1.36
-[1m[92m  Downloaded[0m regex-automata v0.4.13
-[1m[92m  Downloaded[0m h2 v0.3.27
-[1m[92m  Downloaded[0m futures-util v0.3.31
-[1m[92m  Downloaded[0m clap_builder v4.5.54
-[1m[92m  Downloaded[0m libc v0.2.180
-[1m[92m  Downloaded[0m tinyvec v1.10.0
-[1m[92m  Downloaded[0m tempfile v3.24.0
-[1m[92m  Downloaded[0m socket2 v0.6.1
-[1m[92m  Downloaded[0m socket2 v0.5.10
-[1m[92m  Downloaded[0m serde_derive v1.0.228
-[1m[92m  Downloaded[0m serde_core v1.0.228
-[1m[92m  Downloaded[0m ryu v1.0.22
-[1m[92m  Downloaded[0m idna v1.1.0
-[1m[92m  Downloaded[0m tokio v1.49.0
-[1m[92m  Downloaded[0m hashbrown v0.16.1
-[1m[92m  Downloaded[0m tracing-attributes v0.1.31
-[1m[92m  Downloaded[0m tokio-rustls v0.24.1
-[1m[92m  Downloaded[0m smallvec v1.15.1
-[1m[92m  Downloaded[0m sct v0.7.1
-[1m[92m  Downloaded[0m portable-atomic v1.13.0
-[1m[92m  Downloaded[0m untrusted v0.9.0
-[1m[92m  Downloaded[0m tinystr v0.8.2
-[1m[92m  Downloaded[0m slab v0.4.11
-[1m[92m  Downloaded[0m zeroize v1.8.2
-[1m[92m  Downloaded[0m writeable v0.6.2
-[1m[92m  Downloaded[0m tokio-macros v2.6.0
-[1m[92m  Downloaded[0m signal-hook-registry v1.4.8
-[1m[92m  Downloaded[0m shlex v1.3.0
-[1m[92m  Downloaded[0m rustls-pemfile v1.0.4
-[1m[92m  Downloaded[0m rand_core v0.6.4
-[1m[92m  Downloaded[0m mio v1.1.1
-[1m[92m  Downloaded[0m indexmap v2.13.0
-[1m[92m  Downloaded[0m icu_collections v2.1.1
-[1m[92m  Downloaded[0m http v0.2.12
-[1m[92m  Downloaded[0m chrono v0.4.43
-[1m[92m  Downloaded[0m base64 v0.21.7
-[1m[92m  Downloaded[0m toml_write v0.1.2
-[1m[92m  Downloaded[0m encoding_rs v0.8.35
-[1m[92m  Downloaded[0m thiserror-impl v1.0.69
-[1m[92m  Downloaded[0m thiserror v1.0.69
-[1m[92m  Downloaded[0m terminal_size v0.3.0
-[1m[92m  Downloaded[0m synstructure v0.13.2
-[1m[92m  Downloaded[0m rand v0.8.5
-[1m[92m  Downloaded[0m memchr v2.7.6
-[1m[92m  Downloaded[0m icu_locale_core v2.1.1
-[1m[92m  Downloaded[0m resolv-conf v0.7.6
-[1m[92m  Downloaded[0m indicatif v0.17.11
-[1m[92m  Downloaded[0m icu_provider v2.1.1
-[1m[92m  Downloaded[0m icu_properties_data v2.1.2
-[1m[92m  Downloaded[0m icu_normalizer_data v2.1.1
-[1m[92m  Downloaded[0m icu_normalizer v2.1.1
-[1m[92m  Downloaded[0m futures v0.3.31
-[1m[92m  Downloaded[0m ring v0.17.14
-[1m[92m  Downloaded[0m anyhow v1.0.100
-[1m[92m  Downloaded[0m yoke-derive v0.8.1
-[1m[92m  Downloaded[0m want v0.3.1
-[1m[92m  Downloaded[0m tower-service v0.3.3
-[1m[92m  Downloaded[0m toml_datetime v0.6.11
-[1m[92m  Downloaded[0m tinyvec_macros v0.1.1
-[1m[92m  Downloaded[0m stable_deref_trait v1.2.1
-[1m[92m  Downloaded[0m shell-words v1.1.1
-[1m[92m  Downloaded[0m serde_urlencoded v0.7.1
-[1m[92m  Downloaded[0m serde_spanned v0.6.9
-[1m[92m  Downloaded[0m proc-macro2 v1.0.105
-[1m[92m  Downloaded[0m num-traits v0.2.19
-[1m[92m  Downloaded[0m log v0.4.29
-[1m[92m  Downloaded[0m icu_properties v2.1.2
-[1m[92m  Downloaded[0m hyper-rustls v0.24.2
-[1m[92m  Downloaded[0m getrandom v0.2.17
-[1m[92m  Downloaded[0m data-encoding v2.10.0
-[1m[92m  Downloaded[0m console v0.15.11
-[1m[92m  Downloaded[0m clap_derive v4.5.49
-[1m[92m  Downloaded[0m clap v4.5.54
-[1m[92m  Downloaded[0m bitflags v2.10.0
-[1m[92m  Downloaded[0m async-trait v0.1.89
-[1m[92m  Downloaded[0m anstyle-parse v0.2.7
-[1m[92m  Downloaded[0m parking_lot_core v0.9.12
-[1m[92m  Downloaded[0m parking_lot v0.12.5
-[1m[92m  Downloaded[0m once_cell v1.21.3
-[1m[92m  Downloaded[0m litemap v0.8.1
-[1m[92m  Downloaded[0m iana-time-zone v0.1.64
-[1m[92m  Downloaded[0m httparse v1.10.1
-[1m[92m  Downloaded[0m linux-raw-sys v0.4.15
-[1m[92m  Downloaded[0m displaydoc v0.2.5
-[1m[92m  Downloaded[0m autocfg v1.5.0
-[1m[92m  Downloaded[0m aho-corasick v1.1.4
-[1m[92m  Downloaded[0m utf8_iter v1.0.4
-[1m[92m  Downloaded[0m sync_wrapper v0.1.2
-[1m[92m  Downloaded[0m pin-project-lite v0.2.16
-[1m[92m  Downloaded[0m percent-encoding v2.3.2
-[1m[92m  Downloaded[0m lock_api v0.4.14
-[1m[92m  Downloaded[0m ipnetwork v0.20.0
-[1m[92m  Downloaded[0m ipnet v2.11.0
-[1m[92m  Downloaded[0m lru-cache v0.1.2
-[1m[92m  Downloaded[0m is_terminal_polyfill v1.70.2
-[1m[92m  Downloaded[0m httpdate v1.0.3
-[1m[92m  Downloaded[0m futures-task v0.3.31
-[1m[92m  Downloaded[0m futures-sink v0.3.31
-[1m[92m  Downloaded[0m futures-macro v0.3.31
-[1m[92m  Downloaded[0m form_urlencoded v1.2.2
-[1m[92m  Downloaded[0m fnv v1.0.7
-[1m[92m  Downloaded[0m linux-raw-sys v0.11.0
-[1m[92m  Downloaded[0m equivalent v1.0.2
-[1m[92m  Downloaded[0m enum-as-inner v0.6.1
-[1m[92m  Downloaded[0m clap_lex v0.7.7
-[1m[92m  Downloaded[0m anstyle-query v1.1.5
-[1m[92m  Downloaded[0m quote v1.0.43
-[1m[92m  Downloaded[0m pin-utils v0.1.0
-[1m[92m  Downloaded[0m number_prefix v0.4.0
-[1m[92m  Downloaded[0m lazy_static v1.5.0
-[1m[92m  Downloaded[0m heck v0.5.0
-[1m[92m  Downloaded[0m getrandom v0.3.4
-[1m[92m  Downloaded[0m futures-executor v0.3.31
-[1m[92m  Downloaded[0m futures-core v0.3.31
-[1m[92m  Downloaded[0m futures-channel v0.3.31
-[1m[92m  Downloaded[0m find-msvc-tools v0.1.8
-[1m[92m  Downloaded[0m fastrand v2.3.0
-[1m[92m  Downloaded[0m dialoguer v0.11.0
-[1m[92m  Downloaded[0m colored v2.2.0
-[1m[92m  Downloaded[0m colorchoice v1.0.4
-[1m[92m  Downloaded[0m cc v1.2.53
-[1m[92m  Downloaded[0m bytes v1.11.0
-[1m[92m  Downloaded[0m anstyle v1.0.13
-[1m[92m  Downloaded[0m anstream v0.6.21
-[1m[92m  Downloaded[0m potential_utf v0.1.4
-[1m[92m  Downloaded[0m mime v0.3.17
-[1m[92m  Downloaded[0m linked-hash-map v0.5.6
-[1m[92m  Downloaded[0m itoa v1.0.17
-[1m[92m  Downloaded[0m idna_adapter v1.2.1
-[1m[92m  Downloaded[0m http-body v0.4.6
-[1m[92m  Downloaded[0m futures-io v0.3.31
-[1m[92m  Downloaded[0m errno v0.3.14
-[1m[92m  Downloaded[0m ctrlc v3.5.1
-[1m[92m  Downloaded[0m cfg_aliases v0.2.1
-[1m[92m  Downloaded[0m cfg-if v1.0.4
 [1m[92m   Compiling[0m proc-macro2 v1.0.105
-[1m[92m   Compiling[0m unicode-ident v1.0.22
 [1m[92m   Compiling[0m quote v1.0.43
+[1m[92m   Compiling[0m unicode-ident v1.0.22
 [1m[92m   Compiling[0m libc v0.2.180
 [1m[92m   Compiling[0m cfg-if v1.0.4
 [1m[92m   Compiling[0m stable_deref_trait v1.2.1
@@ -216,60 +38,65 @@ Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
 [1m[92m   Compiling[0m memchr v2.7.6
 [1m[92m   Compiling[0m parking_lot_core v0.9.12
 [1m[92m   Compiling[0m once_cell v1.21.3
-[1m[92m   Compiling[0m scopeguard v1.2.0
-[1m[92m   Compiling[0m futures-sink v0.3.31
-[1m[92m   Compiling[0m futures-core v0.3.31
-[1m[92m   Compiling[0m find-msvc-tools v0.1.8
-[1m[92m   Compiling[0m bytes v1.11.0
 [1m[92m   Compiling[0m serde_core v1.0.228
 [1m[92m   Compiling[0m shlex v1.3.0
+[1m[92m   Compiling[0m bytes v1.11.0
+[1m[92m   Compiling[0m futures-core v0.3.31
+[1m[92m   Compiling[0m find-msvc-tools v0.1.8
+[1m[92m   Compiling[0m futures-sink v0.3.31
+[1m[92m   Compiling[0m scopeguard v1.2.0
 [1m[92m   Compiling[0m lock_api v0.4.14
-[1m[92m   Compiling[0m cc v1.2.53
-[1m[92m   Compiling[0m litemap v0.8.1
 [1m[92m   Compiling[0m errno v0.3.14
 [1m[92m   Compiling[0m getrandom v0.2.17
+[1m[92m   Compiling[0m cc v1.2.53
+[1m[92m   Compiling[0m litemap v0.8.1
 [1m[92m   Compiling[0m writeable v0.6.2
 [1m[92m   Compiling[0m parking_lot v0.12.5
-[1m[92m   Compiling[0m signal-hook-registry v1.4.8
 [1m[92m   Compiling[0m syn v2.0.114
+[1m[92m   Compiling[0m signal-hook-registry v1.4.8
 [1m[92m   Compiling[0m mio v1.1.1
-[1m[92m   Compiling[0m socket2 v0.6.1
 [1m[92m   Compiling[0m ring v0.17.14
+[1m[92m   Compiling[0m socket2 v0.6.1
 [1m[92m   Compiling[0m futures-channel v0.3.31
-[1m[92m   Compiling[0m serde v1.0.228
 [1m[92m   Compiling[0m icu_normalizer_data v2.1.1
-[1m[92m   Compiling[0m pin-utils v0.1.0
-[1m[92m   Compiling[0m futures-io v0.3.31
+[1m[92m   Compiling[0m serde v1.0.228
 [1m[92m   Compiling[0m slab v0.4.11
-[1m[92m   Compiling[0m icu_properties_data v2.1.2
+[1m[92m   Compiling[0m futures-io v0.3.31
 [1m[92m   Compiling[0m futures-task v0.3.31
+[1m[92m   Compiling[0m icu_properties_data v2.1.2
+[1m[92m   Compiling[0m pin-utils v0.1.0
 [1m[92m   Compiling[0m itoa v1.0.17
 [1m[92m   Compiling[0m tracing-core v0.1.36
-[1m[92m   Compiling[0m untrusted v0.9.0
-[1m[92m   Compiling[0m equivalent v1.0.2
 [1m[92m   Compiling[0m zerocopy v0.8.33
+[1m[92m   Compiling[0m untrusted v0.9.0
 [1m[92m   Compiling[0m bitflags v2.10.0
 [1m[92m   Compiling[0m hashbrown v0.16.1
+[1m[92m   Compiling[0m equivalent v1.0.2
 [1m[92m   Compiling[0m fnv v1.0.7
 [1m[92m   Compiling[0m percent-encoding v2.3.2
 [1m[92m   Compiling[0m form_urlencoded v1.2.2
 [1m[92m   Compiling[0m http v0.2.12
-[1m[92m   Compiling[0m synstructure v0.13.2
 [1m[92m   Compiling[0m indexmap v2.13.0
+[1m[92m   Compiling[0m synstructure v0.13.2
 [1m[92m   Compiling[0m rustls v0.21.12
+[1m[92m   Compiling[0m httparse v1.10.1
+[1m[92m   Compiling[0m utf8_iter v1.0.4
+[1m[92m   Compiling[0m thiserror v1.0.69
 [1m[92m   Compiling[0m heck v0.5.0
+[1m[92m   Compiling[0m tinyvec_macros v0.1.1
+[1m[92m   Compiling[0m tinyvec v1.10.0
 [1m[92m   Compiling[0m zerofrom-derive v0.1.6
 [1m[92m   Compiling[0m yoke-derive v0.8.1
 [1m[92m   Compiling[0m zerovec-derive v0.11.2
+[1m[92m   Compiling[0m displaydoc v0.2.5
 [1m[92m   Compiling[0m zerofrom v0.1.6
 [1m[92m   Compiling[0m yoke v0.8.1
-[1m[92m   Compiling[0m displaydoc v0.2.5
 [1m[92m   Compiling[0m futures-macro v0.3.31
-[1m[92m   Compiling[0m zerotrie v0.2.3
 [1m[92m   Compiling[0m tokio-macros v2.6.0
-[1m[92m   Compiling[0m futures-util v0.3.31
-[1m[92m   Compiling[0m serde_derive v1.0.228
+[1m[92m   Compiling[0m zerotrie v0.2.3
 [1m[92m   Compiling[0m zerovec v0.11.5
+[1m[92m   Compiling[0m serde_derive v1.0.228
+[1m[92m   Compiling[0m futures-util v0.3.31
 [1m[92m   Compiling[0m tokio v1.49.0
 [1m[92m   Compiling[0m tinystr v0.8.2
 [1m[92m   Compiling[0m icu_locale_core v2.1.1
@@ -279,13 +106,8 @@ Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
 [1m[92m   Compiling[0m tracing-attributes v0.1.31
 [1m[92m   Compiling[0m icu_normalizer v2.1.1
 [1m[92m   Compiling[0m icu_properties v2.1.2
-[1m[92m   Compiling[0m httparse v1.10.1
-[1m[92m   Compiling[0m tracing v0.1.44
-[1m[92m   Compiling[0m tinyvec_macros v0.1.1
-[1m[92m   Compiling[0m utf8_iter v1.0.4
-[1m[92m   Compiling[0m thiserror v1.0.69
-[1m[92m   Compiling[0m tinyvec v1.10.0
 [1m[92m   Compiling[0m ppv-lite86 v0.2.21
+[1m[92m   Compiling[0m tracing v0.1.44
 [1m[92m   Compiling[0m sct v0.7.1
 [1m[92m   Compiling[0m rustls-webpki v0.101.7
 [1m[92m   Compiling[0m thiserror-impl v1.0.69
@@ -293,67 +115,67 @@ Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
 [1m[92m   Compiling[0m idna v1.1.0
 [1m[92m   Compiling[0m tokio-util v0.7.18
 [1m[92m   Compiling[0m rand_core v0.6.4
-[1m[92m   Compiling[0m zmij v1.0.14
 [1m[92m   Compiling[0m rustix v1.1.3
+[1m[92m   Compiling[0m log v0.4.29
+[1m[92m   Compiling[0m zmij v1.0.14
 [1m[92m   Compiling[0m cfg_aliases v0.2.1
 [1m[92m   Compiling[0m autocfg v1.5.0
+[1m[92m   Compiling[0m getrandom v0.3.4
 [1m[92m   Compiling[0m utf8parse v0.2.2
 [1m[92m   Compiling[0m try-lock v0.2.5
-[1m[92m   Compiling[0m getrandom v0.3.4
-[1m[92m   Compiling[0m log v0.4.29
-[1m[92m   Compiling[0m num-traits v0.2.19
 [1m[92m   Compiling[0m want v0.3.1
 [1m[92m   Compiling[0m anstyle-parse v0.2.7
-[1m[92m   Compiling[0m h2 v0.3.27
 [1m[92m   Compiling[0m nix v0.30.1
+[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m   Compiling[0m h2 v0.3.27
 [1m[92m   Compiling[0m rand_chacha v0.3.1
 [1m[92m   Compiling[0m url v2.5.8
 [1m[92m   Compiling[0m unicode-normalization v0.1.25
 [1m[92m   Compiling[0m http-body v0.4.6
 [1m[92m   Compiling[0m socket2 v0.5.10
-[1m[92m   Compiling[0m rustix v0.38.44
-[1m[92m   Compiling[0m serde_json v1.0.149
-[1m[92m   Compiling[0m colorchoice v1.0.4
-[1m[92m   Compiling[0m is_terminal_polyfill v1.70.2
-[1m[92m   Compiling[0m anstyle v1.0.13
-[1m[92m   Compiling[0m unicode-width v0.2.2
-[1m[92m   Compiling[0m anstyle-query v1.1.5
 [1m[92m   Compiling[0m unicode-bidi v0.3.18
+[1m[92m   Compiling[0m colorchoice v1.0.4
+[1m[92m   Compiling[0m unicode-width v0.2.2
 [1m[92m   Compiling[0m httpdate v1.0.3
-[1m[92m   Compiling[0m portable-atomic v1.13.0
+[1m[92m   Compiling[0m is_terminal_polyfill v1.70.2
+[1m[92m   Compiling[0m anstyle-query v1.1.5
 [1m[92m   Compiling[0m ipnet v2.11.0
 [1m[92m   Compiling[0m linux-raw-sys v0.11.0
+[1m[92m   Compiling[0m anstyle v1.0.13
+[1m[92m   Compiling[0m portable-atomic v1.13.0
+[1m[92m   Compiling[0m rustix v0.38.44
+[1m[92m   Compiling[0m serde_json v1.0.149
 [1m[92m   Compiling[0m tower-service v0.3.3
 [1m[92m   Compiling[0m hyper v0.14.32
-[1m[92m   Compiling[0m idna v0.4.0
-[1m[92m   Compiling[0m console v0.15.11
 [1m[92m   Compiling[0m anstream v0.6.21
+[1m[92m   Compiling[0m console v0.15.11
+[1m[92m   Compiling[0m idna v0.4.0
 [1m[92m   Compiling[0m tokio-rustls v0.24.1
 [1m[92m   Compiling[0m rand v0.8.5
 [1m[92m   Compiling[0m serde_spanned v0.6.9
 [1m[92m   Compiling[0m toml_datetime v0.6.11
-[1m[92m   Compiling[0m enum-as-inner v0.6.1
 [1m[92m   Compiling[0m async-trait v0.1.89
+[1m[92m   Compiling[0m enum-as-inner v0.6.1
 [1m[92m   Compiling[0m android_system_properties v0.1.5
 [1m[92m   Compiling[0m aho-corasick v1.1.4
 [1m[92m   Compiling[0m linked-hash-map v0.5.6
-[1m[92m   Compiling[0m toml_write v0.1.2
-[1m[92m   Compiling[0m linux-raw-sys v0.4.15
 [1m[92m   Compiling[0m ryu v1.0.22
-[1m[92m   Compiling[0m clap_lex v0.7.7
-[1m[92m   Compiling[0m strsim v0.11.1
-[1m[92m   Compiling[0m winnow v0.7.14
-[1m[92m   Compiling[0m base64 v0.21.7
+[1m[92m   Compiling[0m toml_write v0.1.2
 [1m[92m   Compiling[0m data-encoding v2.10.0
-[1m[92m   Compiling[0m anyhow v1.0.100
+[1m[92m   Compiling[0m linux-raw-sys v0.4.15
+[1m[92m   Compiling[0m clap_lex v0.7.7
 [1m[92m   Compiling[0m regex-syntax v0.8.8
+[1m[92m   Compiling[0m winnow v0.7.14
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m   Compiling[0m base64 v0.21.7
 [1m[92m   Compiling[0m fastrand v2.3.0
+[1m[92m   Compiling[0m anyhow v1.0.100
 [1m[92m   Compiling[0m tempfile v3.24.0
-[1m[92m   Compiling[0m trust-dns-proto v0.23.2
-[1m[92m   Compiling[0m toml_edit v0.22.27
 [1m[92m   Compiling[0m rustls-pemfile v1.0.4
-[1m[92m   Compiling[0m clap_builder v4.5.54
+[1m[92m   Compiling[0m toml_edit v0.22.27
 [1m[92m   Compiling[0m regex-automata v0.4.13
+[1m[92m   Compiling[0m clap_builder v4.5.54
+[1m[92m   Compiling[0m trust-dns-proto v0.23.2
 [1m[92m   Compiling[0m serde_urlencoded v0.7.1
 [1m[92m   Compiling[0m lru-cache v0.1.2
 [1m[92m   Compiling[0m iana-time-zone v0.1.64
@@ -361,20 +183,20 @@ Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
 [1m[92m   Compiling[0m futures-executor v0.3.31
 [1m[92m   Compiling[0m clap_derive v4.5.49
 [1m[92m   Compiling[0m encoding_rs v0.8.35
-[1m[92m   Compiling[0m lazy_static v1.5.0
-[1m[92m   Compiling[0m number_prefix v0.4.0
-[1m[92m   Compiling[0m resolv-conf v0.7.6
-[1m[92m   Compiling[0m webpki-roots v0.25.4
-[1m[92m   Compiling[0m shell-words v1.1.1
 [1m[92m   Compiling[0m zeroize v1.8.2
-[1m[92m   Compiling[0m sync_wrapper v0.1.2
+[1m[92m   Compiling[0m shell-words v1.1.1
+[1m[92m   Compiling[0m webpki-roots v0.25.4
 [1m[92m   Compiling[0m mime v0.3.17
-[1m[92m   Compiling[0m dialoguer v0.11.0
+[1m[92m   Compiling[0m resolv-conf v0.7.6
+[1m[92m   Compiling[0m lazy_static v1.5.0
+[1m[92m   Compiling[0m sync_wrapper v0.1.2
+[1m[92m   Compiling[0m number_prefix v0.4.0
+[1m[92m   Compiling[0m colored v2.2.0
+[1m[92m   Compiling[0m indicatif v0.17.11
+[1m[92m   Compiling[0m trust-dns-resolver v0.23.2
 [1m[92m   Compiling[0m reqwest v0.11.27
 [1m[92m   Compiling[0m clap v4.5.54
-[1m[92m   Compiling[0m trust-dns-resolver v0.23.2
-[1m[92m   Compiling[0m indicatif v0.17.11
-[1m[92m   Compiling[0m colored v2.2.0
+[1m[92m   Compiling[0m dialoguer v0.11.0
 [1m[92m   Compiling[0m futures v0.3.31
 [1m[92m   Compiling[0m ctrlc v3.5.1
 [1m[92m   Compiling[0m chrono v0.4.43
@@ -382,27 +204,6 @@ Sources hash: 83497a08aa792ce7370c6f5150905092588cf69762c1564977e5776afb921286
 [1m[92m   Compiling[0m regex v1.12.2
 [1m[92m   Compiling[0m toml v0.8.23
 [1m[92m   Compiling[0m ipnetwork v0.20.0
-[1m[92m   Compiling[0m injecttools v3.6.0 (/home/runner/work/InjectTools/InjectTools)
-[1m[33mwarning[0m[1m: field `is_cloudflare` is never read[0m
-  [1m[94m--> [0msrc/scanner.rs:16:9
-   [1m[94m|[0m
-[1m[94m13[0m [1m[94m|[0m pub struct ScanResult {
-   [1m[94m|[0m            [1m[94m----------[0m [1m[94mfield in this struct[0m
-[1m[94m...[0m
-[1m[94m16[0m [1m[94m|[0m     pub is_cloudflare: bool,
-   [1m[94m|[0m         [1m[33m^^^^^^^^^^^^^[0m
-   [1m[94m|[0m
-   [1m[94m= [0m[1mnote[0m: `ScanResult` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
-   [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
-
-[1m[33mwarning[0m: `injecttools` (bin "injecttools") generated 1 warning
-[1m[92m    Finished[0m `release` profile [optimized] target(s) in 1m 13s
 ========================================
-✅ Build completed in 74s
-🔍 Binary age: 0s
--rwxr-xr-x 2 runner runner 3.0M Jan 17 15:50 target/aarch64-linux-android/release/injecttools
-📦 Stripped: 3.0MiB → 3.0MiB (saved 328B)
-84e563f3bcae07b6643778c7f5fc3e4da384da0d8dba10144aa76a9630a54bc5  injecttools-termux-arm64.tar.gz
-========================================
-Status: success
-Finished: 2026-01-17 15:50:21 UTC
+Status: cancelled
+Finished: 2026-01-17 16:29:04 UTC

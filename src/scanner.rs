@@ -40,8 +40,6 @@ fn is_private_ip(ip: &str) -> bool {
             }
         }
     }
-    // Note: Rust version usually included CGNAT (100.64-127), but V17 script doesn't explicitly show it.
-    // Keeping it strict to V17 for now implies following the script's regex.
     false
 }
 
@@ -150,6 +148,22 @@ async fn check_target_status(target: &str) -> String {
 // MAIN VALIDATION LOGIC (Menu 1: Test Single)
 // =============================================================================
 
+/// Test single target connection (Used in Menu 4: Change Target)
+pub async fn test_target(target: &str, _timeout: u64) -> anyhow::Result<()> {
+    let status_raw = check_target_status(target).await;
+    let parts: Vec<&str> = status_raw.split('|').collect();
+    let status = parts.get(0).unwrap_or(&"UNKNOWN");
+    let note = parts.get(1).unwrap_or(&"");
+
+    if *status == "ONLINE" {
+        println!("{} Target is reachable ({})", "✓".green(), note);
+        Ok(())
+    } else {
+        println!("{} Target unreachable: {}", "✗".red(), note);
+        Err(anyhow::anyhow!("Target unreachable"))
+    }
+}
+
 pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "==================== CHECKING ====================".blue());
     println!("Subdomain : {}", subdomain.yellow());
@@ -208,7 +222,7 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         let ts_full = check_target_status(target).await;
         let parts: Vec<&str> = ts_full.split('|').collect();
         let t_status = parts.get(0).unwrap_or(&"UNKNOWN");
-        let t_note = parts.get(1).unwrap_or(&"");
+        let _t_note = parts.get(1).unwrap_or(&""); // Fixed: Prefixed with underscore to suppress warning
 
         let bug_note = if *t_status == "UNREACHABLE" {
             "DIRECT_CONNECTION_BLOCKED".to_string()

@@ -2,9 +2,9 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::time::{Duration, Instant};
 use std::process::Command;
+use tokio::net::TcpStream; // Using tokio for async latency check
 
 use crate::dns;
 use crate::ui;
@@ -15,462 +15,274 @@ pub struct ScanResult {
     pub ip: String,
     pub is_cloudflare: bool,
     pub is_working: bool,
-    pub is_restricted: bool,  // NEW: for HTTP 403/404
+    pub is_restricted: bool,
     pub status_code: Option<u16>,
-    pub cf_ray: Option<String>,  // NEW: CF-Ray header
+    pub cf_ray: Option<String>,
     pub error_msg: Option<String>,
-    pub error_source: Option<String>, // NEW: "subdomain" or "target"
+    pub error_source: Option<String>,
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TCP Latency Check
-// ═══════════════════════════════════════════════════════════════
+// =============================================================================
+// HELPER FUNCTIONS (Logic V14)
+// =============================================================================
 
-fn tcp_latency_check(host: &str, port: u16, timeout_secs: u64) -> Option<u128> {
-    let addr = format!("{}:{}", host, port);
-    
-    let socket_addrs: Vec<_> = match addr.to_socket_addrs() {
-        Ok(addrs) => addrs.collect(),
-        Err(_) => return None,
-    };
-    
-    if socket_addrs.is_empty() {
-        return None;
+fn is_private_ip(ip: &str) -> bool {
+    if ip.starts_with("10.") || ip.starts_with("192.168.") || ip.starts_with("127.") {
+        return true;
     }
-    
-    let start = std::time::Instant::now();
-    match TcpStream::connect_timeout(
-        &socket_addrs[0],
-        Duration::from_secs(timeout_secs)
-    ) {
-        Ok(_) => Some(start.elapsed().as_millis()),
-        Err(_) => None,
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ICMP Ping Test
-// ═══════════════════════════════════════════════════════════════
-
-fn ping_test(host: &str, timeout_secs: u64) -> Option<u128> {
-    let output = Command::new("ping")
-        .arg("-c")
-        .arg("1")
-        .arg("-W")
-        .arg(timeout_secs.to_string())
-        .arg(host)
-        .output();
-    
-    if let Ok(result) = output {
-        if result.status.success() {
-            if let Ok(stdout) = String::from_utf8(result.stdout) {
-                if let Some(time_start) = stdout.find("time=") {
-                    let time_str = &stdout[time_start + 5..];
-                    if let Some(space_pos) = time_str.find(" ") {
-                        let time_value = &time_str[..space_pos];
-                        if let Ok(ms) = time_value.parse::<f64>() {
-                            return Some(ms as u128);
-                        }
-                    }
-                }
-                return Some(0);
+    if ip.starts_with("172.") {
+        let parts: Vec<&str> = ip.split('.').collect();
+        if let Ok(second_octet) = parts[1].parse::<u8>() {
+            if second_octet >= 16 && second_octet <= 31 {
+                return true;
             }
         }
     }
-    
-    None
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SSL/TLS Connection Test
-// ═══════════════════════════════════════════════════════════════
-
-fn test_ssl_connection(ip: &str, port: u16, servername: &str, timeout_secs: u64) -> bool {
-    let connect_addr = format!("{}:{}", ip, port);
-    
-    let output = Command::new("timeout")
-        .arg(timeout_secs.to_string())
-        .arg("openssl")
-        .arg("s_client")
-        .arg("-connect")
-        .arg(&connect_addr)
-        .arg("-servername")
-        .arg(servername)
-        .arg("-brief")
-        .stdin(std::process::Stdio::null())
-        .output();
-    
-    if let Ok(result) = output {
-        if result.status.success() {
-            if let Ok(stdout) = String::from_utf8(result.stdout) {
-                if stdout.contains("CONNECTION ESTABLISHED") 
-                    || stdout.contains("Verification: OK")
-                    || stdout.contains("Cipher:")
-                    || result.status.code() == Some(0) {
-                    return true;
-                }
-            }
-            
-            if let Ok(stderr) = String::from_utf8(result.stderr) {
-                if stderr.contains("Verify return code: 0")
-                    || stderr.contains("SSL handshake has read")
-                    || !stderr.contains("error") {
-                    return true;
-                }
-            }
-            
-            return true;
-        }
+    if ip.starts_with("100.") {
+         let parts: Vec<&str> = ip.split('.').collect();
+         if let Ok(second_octet) = parts[1].parse::<u8>() {
+             if second_octet >= 64 && second_octet <= 127 {
+                 return true; // CGNAT
+             }
+         }
     }
-    
     false
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ✨ NEW: HTTP Request Test (v3.6 Method)
-// ═══════════════════════════════════════════════════════════════
-
-#[derive(Debug)]
-struct HttpResponse {
-    status_code: Option<u16>,
-    cf_ray: Option<String>,
-    server: Option<String>,
+fn is_fake_dns_ip(ip: &str) -> bool {
+    ip.starts_with("198.18.") || ip.starts_with("198.19.")
 }
 
-fn test_http_request(ip: &str, target: &str, timeout_secs: u64) -> HttpResponse {
-    // curl -I -s --http1.1 --resolve target:443:ip --max-time 3 -k https://target/
-    let resolve_arg = format!("{}:443:{}", target, ip);
-    let url = format!("https://{}/", target);
-    
-    let output = Command::new("curl")
-        .arg("-I")                          // HEAD request
-        .arg("-s")                          // Silent
-        .arg("--http1.1")                   // Force HTTP/1.1
-        .arg("--resolve")
-        .arg(&resolve_arg)
-        .arg("-H")
-        .arg(format!("Host: {}", target))
-        .arg("-H")
-        .arg("User-Agent: Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
-        .arg("--max-time")
-        .arg(timeout_secs.to_string())
-        .arg("-k")                          // Allow insecure
-        .arg(&url)
+/// Check target health to distinguish between "Subdomain Mismatch" and "Target Dead"
+/// Returns (Status, Note)
+/// Status: ONLINE | OFFLINE | UNKNOWN
+async fn check_target_health(target: &str) -> (String, String) {
+    // 1. Resolve Target
+    let t_ip = match dns::resolve_domain_first(target).await {
+        Ok(ip) => ip,
+        Err(_) => return ("UNKNOWN".to_string(), "DNS_FAIL".to_string()),
+    };
+
+    // 2. Try Direct SSL (Target IP + Target SNI)
+    let ssl_cmd = Command::new("timeout")
+        .arg("5")
+        .arg("openssl")
+        .arg("s_client")
+        .arg("-connect")
+        .arg(format!("{}:443", t_ip))
+        .arg("-servername")
+        .arg(target)
+        .arg("-brief")
         .output();
-    
-    let mut response = HttpResponse {
-        status_code: None,
-        cf_ray: None,
-        server: None,
-    };
-    
-    if let Ok(result) = output {
-        if let Ok(stdout) = String::from_utf8(result.stdout) {
-            // Parse HTTP status code
-            if let Some(first_line) = stdout.lines().next() {
-                if first_line.starts_with("HTTP/") {
-                    let parts: Vec<&str> = first_line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        if let Ok(code) = parts[1].parse::<u16>() {
-                            response.status_code = Some(code);
-                        }
-                    }
-                }
-            }
-            
-            // Parse headers
-            for line in stdout.lines() {
-                let lower = line.to_lowercase();
-                if lower.starts_with("cf-ray:") {
-                    response.cf_ray = line.split(':').nth(1).map(|s| s.trim().to_string());
-                }
-                if lower.starts_with("server:") {
-                    response.server = line.split(':').nth(1).map(|s| s.trim().to_string());
-                }
-            }
+
+    if let Ok(output) = ssl_cmd {
+        let out_str = String::from_utf8_lossy(&output.stdout).to_string() + &String::from_utf8_lossy(&output.stderr).to_string();
+        if out_str.contains("ESTABLISHED") || out_str.contains("Verification: OK") {
+            return ("ONLINE".to_string(), "SSL_OK".to_string());
         }
     }
-    
-    response
+
+    // 3. Fallback: HTTP Port 80
+    // Curl -I http://target/
+    let curl_cmd = Command::new("curl")
+        .arg("-s")
+        .arg("-o")
+        .arg("/dev/null")
+        .arg("-w")
+        .arg("%{http_code}")
+        .arg("--connect-timeout")
+        .arg("3")
+        .arg(format!("http://{}/", target))
+        .output();
+
+    if let Ok(output) = curl_cmd {
+        let code = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if code != "000" && !code.is_empty() {
+            return ("ONLINE".to_string(), format!("HTTP_{}", code));
+        }
+    }
+
+    ("OFFLINE".to_string(), "NO_SSL_NO_HTTP".to_string())
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ✨ NEW: Comprehensive Single Test (v3.6 Flow)
-// ═══════════════════════════════════════════════════════════════
+// =============================================================================
+// MAIN VALIDATION LOGIC (Menu 1: Test Single)
+// =============================================================================
 
-pub async fn test_single(target: &str, subdomain: &str, timeout: u64) -> anyhow::Result<()> {
-    println!("\n{}", "═".repeat(60).cyan());
-    ui::center_text(&format!("BUG INJECT SCANNER v3.6"));
-    println!("{}", "═".repeat(60).cyan());
-    
-    println!("\n{} {}", "Target:".bright_black(), target.cyan());
-    println!("{} {}", "Subdomain:".bright_black(), subdomain.yellow());
-    println!("{} {}s", "Timeout:".bright_black(), timeout);
-    
-    // ═══════════════════════════════════════════════════════════════
-    // STEP 1: DNS Resolution
-    // ═══════════════════════════════════════════════════════════════
-    
-    println!("\n{}", "─".repeat(60).bright_black());
-    println!("{} {}", "[1/4]".blue(), "DNS Resolution".bold());
-    
-    let ip = match dns::resolve_domain_first(subdomain).await {
-        Ok(ip) => {
-            println!("  {} Resolved to {}", "✓".green(), ip.magenta());
-            ip
-        }
-        Err(e) => {
-            println!("  {} DNS Resolution Failed", "✗".red());
-            println!("\n{}", "═".repeat(60).red());
-            println!("{}", "❌ SUBDOMAIN ISSUE".red().bold());
-            println!("{}", "═".repeat(60).red());
-            println!("\n{} {}", "Problem:".bright_black(), "Subdomain".yellow());
-            println!("{} DNS resolution failed", "Issue:".bright_black());
-            println!("{} {}", "Error:".bright_black(), e.to_string().red());
-            println!("\n{}", "Recommendation:".bright_black());
-            println!("  • Verify subdomain is active");
-            println!("  • Try alternative bug inject subdomains");
-            println!("{}", "═".repeat(60).red());
-            return Ok(());
-        }
-    };
-    
-    // ═══════════════════════════════════════════════════════════════
-    // ✨ ENHANCED: Cloudflare Detection (IP + HTTP)
-    // ═══════════════════════════════════════════════════════════════
-    
-    println!("  {} Checking Cloudflare status...", "•".bright_black());
-    
-    let is_cf = dns::is_cloudflare_enhanced(subdomain, &ip).await;
-    
-    if is_cf {
-        println!("  {} Provider: {} (verified)", "•".bright_black(), "Cloudflare ☁️".cyan());
-    } else {
-        println!("  {} Provider: {}", "•".bright_black(), "Non-Cloudflare".yellow());
-        println!("\n{}", "═".repeat(60).yellow());
-        println!("{}", "⚠️  SUBDOMAIN ISSUE".yellow().bold());
-        println!("{}", "═".repeat(60).yellow());
-        println!("\n{} {}", "Problem:".bright_black(), "Subdomain".yellow());
-        println!("{} Non-Cloudflare IP & no CF headers", "Issue:".bright_black());
-        println!("{} Bug inject requires Cloudflare-backed subdomain", "Note:".bright_black());
-        println!("\n{}", "Verification:".bright_black());
-        println!("  • IP range check: ❌");
-        println!("  • CF-Ray header: ❌");
-        println!("{}", "═".repeat(60).yellow());
-        return Ok(());
-    }
-    
-    // ═══════════════════════════════════════════════════════════════
-    // STEP 2: TCP Connection
-    // ═══════════════════════════════════════════════════════════════
-    
-    println!("\n{} {}", "[2/4]".blue(), "TCP Connection".bold());
-    
-    if let Some(latency) = tcp_latency_check(&ip, 443, 3) {
-        println!("  {} TCP connection OK ({}ms)", "✓".green(), latency);
-    } else {
-        println!("  {} TCP connection timeout", "⚠".yellow());
-    }
-    
-    // ═══════════════════════════════════════════════════════════════
-    // STEP 3: SSL/TLS Handshake
-    // ═══════════════════════════════════════════════════════════════
-    
-    println!("\n{} {}", "[3/4]".blue(), "SSL/TLS Handshake".bold());
-    
-    if !test_ssl_connection(&ip, 443, target, timeout) {
-        println!("  {} SSL handshake failed", "✗".red());
-        println!("\n{}", "═".repeat(60).red());
-        println!("{}", "❌ SUBDOMAIN ISSUE".red().bold());
-        println!("{}", "═".repeat(60).red());
-        println!("\n{} {} or {} mismatch", "Problem:".bright_black(), 
-            "Subdomain".yellow(), "Target".cyan());
-        println!("{} SSL/TLS handshake failed", "Issue:".bright_black());
-        println!("\n{}", "Possible Causes:".bright_black());
-        println!("  • Target domain doesn't support SNI");
-        println!("  • Certificate mismatch");
-        println!("  • Target not proxied by Cloudflare");
-        println!("{}", "═".repeat(60).red());
-        return Ok(());
-    }
-    
-    println!("  {} SSL handshake successful", "✓".green());
-    println!("  {} Protocol: TLSv1.3", "•".bright_black());
-    println!("  {} Certificate verified", "•".bright_black());
-    
-    // ═══════════════════════════════════════════════════════════════
-    // STEP 4: HTTP Request (v3.6 Method)
-    // ═══════════════════════════════════════════════════════════════
-    
-    println!("\n{} {}", "[4/4]".blue(), "HTTP Request".bold());
-    
-    let http_response = test_http_request(&ip, target, 3);
-    
-    if let Some(code) = http_response.status_code {
-        let code_str = format!("{}", code);
-        let status_display = match code {
-            101 => format!("{} Switching Protocols", code_str.cyan()),
-            200 => format!("{} OK", code_str.green()),
-            301 | 302 | 303 | 307 | 308 => format!("{} Redirect", code_str.cyan()),
-            403 => format!("{} Forbidden", code_str.yellow()),
-            404 => format!("{} Not Found", code_str.yellow()),
-            530 => format!("{} Origin Error", code_str.red()),
-            _ if code >= 500 => format!("{} Server Error", code_str.red()),
-            _ => code_str,
-        };
-        
-        println!("  {} HTTP Status: {}", "✓".green(), status_display);
-    } else {
-        println!("  {} No HTTP response", "✗".red());
-    }
-    
-    if let Some(ref server) = http_response.server {
-        println!("  {} Server: {}", "•".bright_black(), server);
-    }
-    
-    if let Some(ref cf_ray) = http_response.cf_ray {
-        println!("  {} CF-Ray: {}", "•".bright_black(), cf_ray.cyan());
-    }
-    
-    // ═══════════════════════════════════════════════════════════════
-    // FINAL VERDICT (v3.6 Logic)
-    // ═══════════════════════════════════════════════════════════════
-    
-    println!("\n{}", "═".repeat(60));
-    
-    let is_working = match http_response.status_code {
-        Some(101) | Some(200) | Some(301..=308) => http_response.cf_ray.is_some(),
-        _ => false,
-    };
-    
-    let is_restricted = matches!(http_response.status_code, Some(403) | Some(404));
-    
-    if is_working {
-        // ✅ WORKING
-        println!("{}", "✅ WORKING BUG INJECT".green().bold());
-        println!("{}", "═".repeat(60).green());
-        println!("\n{}", "Summary:".bold());
-        println!("  {} {} {}", "•".bright_black(), "Target:".bright_black(), 
-            format!("{} (ONLINE)", target).green());
-        println!("  {} {} {} {}", "•".bright_black(), "Subdomain:".bright_black(), 
-            subdomain.yellow(), "(WORKING)".green());
-        println!("  {} {} {}", "•".bright_black(), "IP:".bright_black(), ip.magenta());
-        println!("  {} {} {}", "•".bright_black(), "HTTP:".bright_black(), 
-            http_response.status_code.unwrap().to_string().green());
-        if let Some(ref cf_ray) = http_response.cf_ray {
-            println!("  {} {} {}", "•".bright_black(), "CF-Ray:".bright_black(), cf_ray.cyan());
-        }
-        
-        if http_response.status_code == Some(101) {
-            println!("\n{} {}", "Protocol:".bright_black(), "HTTP 101 = WebSocket/Upgrade".cyan());
-        }
-        
-        println!("\n{}", "Usage:".bold());
-        println!("  curl --resolve {}:443:{} https://{}/", target, ip, target);
-        
-    } else if is_restricted {
-        // ⚠️ WORKING WITH RESTRICTIONS
-        println!("{}", "⚠️  WORKING WITH RESTRICTIONS".yellow().bold());
-        println!("{}", "═".repeat(60).yellow());
-        println!("\n{}", "Summary:".bold());
-        println!("  {} {} {} {}", "•".bright_black(), "Target:".bright_black(), 
-            target.cyan(), "(ONLINE - Restricted)".yellow());
-        println!("  {} {} {} {}", "•".bright_black(), "Subdomain:".bright_black(), 
-            subdomain.yellow(), "(WORKING)".green());
-        println!("  {} {} {}", "•".bright_black(), "IP:".bright_black(), ip.magenta());
-        println!("  {} {} {}", "•".bright_black(), "HTTP:".bright_black(), 
-            http_response.status_code.unwrap().to_string().yellow());
-        
-        println!("\n{}", "Status:".bold());
-        let code = http_response.status_code.unwrap();
-        if code == 403 {
-            println!("  {} HTTP 403 = Server responding, access restricted", "•".bright_black());
-            println!("  {} Bug inject working untuk establish connection", "✓".green());
-            println!("  {} Content access may need authentication", "⚠".yellow());
-        } else if code == 404 {
-            println!("  {} HTTP 404 = Server responding, path not found", "•".bright_black());
-            println!("  {} Bug inject working untuk establish connection", "✓".green());
-            println!("  {} Try specific paths (/api, /v1, etc)", "⚠".yellow());
-        }
-        
-    } else {
-        // ❌ TARGET ISSUE
-        println!("{}", "⚠️  TARGET ISSUE".yellow().bold());
-        println!("{}", "═".repeat(60).yellow());
-        println!("\n{} {}", "Problem:".bright_black(), "Target Domain".cyan());
-        println!("{} {}", "Subdomain Status:".bright_black(), "WORKING ✓".green());
-        
-        println!("\n{}", "Details:".bold());
-        println!("  {} Subdomain: {} → {}", "•".bright_black(), subdomain.yellow(), "Valid".green());
-        println!("  {} IP: {} → {}", "•".bright_black(), ip, "Cloudflare".green());
-        println!("  {} SSL: {}", "•".bright_black(), "OK".green());
-        println!("  {} Target: {} → {}", "•".bright_black(), target.cyan(), "OFFLINE".red());
-        
-        if let Some(code) = http_response.status_code {
-            println!("  {} HTTP Status: {}", "•".bright_black(), code.to_string().red());
-            
-            if code == 530 {
-                println!("\n{}", "Explanation:".bold());
-                println!("  HTTP 530 = Cloudflare can't reach origin server");
-                println!("  Origin server down atau DNS error");
-            }
-        } else {
-            println!("  {} HTTP: No response", "•".bright_black());
-        }
-        
-        println!("\n{}", "Recommendation:".bright_black());
-        println!("  • Try different target domain yang online");
-        println!("  • Subdomain {} dapat dipakai dengan target lain", subdomain.yellow());
-    }
-    
-    println!("{}", "═".repeat(60));
-    
-    Ok(())
-}
+pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow::Result<()> {
+    println!("\n{}", "==================== CHECKING ====================".blue());
+    println!("Subdomain : {}", subdomain.yellow());
+    println!("Target    : {}", target.cyan());
+    println!("------------------------------------------------");
 
-// ═══════════════════════════════════════════════════════════════
-// Test Target (unchanged)
-// ═══════════════════════════════════════════════════════════════
-
-pub async fn test_target(target: &str, timeout: u64) -> anyhow::Result<()> {
-    println!("\n{}", "Testing target host...".cyan());
-    println!("{}", "━".repeat(50).bright_black());
-    
-    let _resolved_ip = match dns::resolve_domain_first(target).await {
+    // 1. Resolve Subdomain
+    let sub_ip = match dns::resolve_domain_first(subdomain).await {
         Ok(ip) => ip,
         Err(_) => {
-            println!("\n{}", "❌ TARGET OFFLINE".red().bold());
-            println!("{}", "Reason: DNS resolution failed".bright_black());
-            return Ok(());
+             print_report(target, "UNKNOWN", subdomain, "-", "NOT_WORKING", "SUBDOMAIN_DNS_FAIL");
+             return Ok(());
         }
     };
-    
-    if let Some(_ping_time) = ping_test(target, 3) {
-        println!("\n{}", "✅ TARGET ONLINE".green().bold());
+    println!("Resolved  : {} ({})", subdomain, sub_ip.magenta());
+
+    // 2. Environment Checks
+    if is_fake_dns_ip(&sub_ip) {
+        let (ts, _) = check_target_health(target).await;
+        print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_FAKE_DNS");
         return Ok(());
     }
-    
-    if test_ssl_connection(target, 443, target, timeout) {
-        println!("\n{}", "✅ TARGET ONLINE".green().bold());
+    if is_private_ip(&sub_ip) {
+        let (ts, _) = check_target_health(target).await;
+        print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "ENV_PRIVATE_IP");
         return Ok(());
     }
-    
-    let tcp_ports = vec![443, 80, 8080];
-    
-    for port in &tcp_ports {
-        if tcp_latency_check(target, *port, 3).is_some() {
-            println!("\n{}", "✅ TARGET ONLINE".green().bold());
+    // Strict Cloudflare Check (Menu 1 uses strict V14 logic)
+    if !dns::is_cloudflare_ip(&sub_ip) {
+        let (ts, _) = check_target_health(target).await;
+        print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_NOT_CLOUDFLARE");
+        return Ok(());
+    }
+
+    // 3. Latency Check (<5ms detection for VPN Interception)
+    let start = Instant::now();
+    let tcp_check = tokio::time::timeout(Duration::from_secs(3), TcpStream::connect((sub_ip.as_str(), 443))).await;
+    let latency = start.elapsed().as_millis();
+
+    match tcp_check {
+        Ok(Ok(_)) => {
+            if latency < 5 {
+                let (ts, _) = check_target_health(target).await;
+                print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_DETECTED(LATENCY <5ms)");
+                return Ok(());
+            }
+        },
+        _ => {
+            let (ts, _) = check_target_health(target).await;
+            print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_TCP_443_BLOCKED");
             return Ok(());
         }
     }
+
+    // 4. SSL Handshake (Subdomain IP + Target SNI)
+    // We use command wrapper because openssl crate complexity is high for this specific check
+    let ssl_cmd = Command::new("timeout")
+        .arg("5")
+        .arg("openssl")
+        .arg("s_client")
+        .arg("-connect")
+        .arg(format!("{}:443", sub_ip))
+        .arg("-servername")
+        .arg(target)
+        .arg("-brief")
+        .output();
+
+    let mut ssl_success = false;
+    let mut ssl_output = String::new();
+
+    if let Ok(output) = ssl_cmd {
+        ssl_output = String::from_utf8_lossy(&output.stdout).to_string() + &String::from_utf8_lossy(&output.stderr).to_string();
+        if ssl_output.contains("ESTABLISHED") || ssl_output.contains("Verification: OK") {
+            ssl_success = true;
+        }
+    }
+
+    if !ssl_success {
+        // Handshake Failed -> Check Target Health
+        let (t_status, t_note) = check_target_health(target).await;
+        
+        let bug_note = if t_status == "OFFLINE" {
+            format!("TARGET_OFFLINE({})", t_note)
+        } else {
+            // Target is ONLINE, so it's a mismatch
+            if ssl_output.contains("errno=104") || ssl_output.contains("Connection reset") {
+                "BUG_NOT_COMPATIBLE(TLS_RESET)".to_string()
+            } else if ssl_output.contains("unexpected eof") {
+                "BUG_NOT_COMPATIBLE(EOF_PROXY?)".to_string()
+            } else if ssl_output.contains("handshake failure") {
+                "BUG_NOT_COMPATIBLE(HANDSHAKE_FAIL)".to_string()
+            } else {
+                "BUG_NOT_COMPATIBLE(SSL_FAIL)".to_string()
+            }
+        };
+
+        print_report(target, &t_status, subdomain, &sub_ip, "NOT_WORKING", &bug_note);
+        return Ok(());
+    }
+
+    // 5. HTTP Check (End-to-End)
+    // curl -I -s --http1.1 --resolve target:443:ip https://target/
+    let curl_cmd = Command::new("curl")
+        .arg("-s")
+        .arg("-I")
+        .arg("--http1.1")
+        .arg("--resolve")
+        .arg(format!("{}:443:{}", target, sub_ip))
+        .arg(format!("https://{}/", target))
+        .arg("--max-time")
+        .arg("5")
+        .arg("-k")
+        .output();
+
+    let mut http_code = "000".to_string();
+    let mut has_cf_ray = false;
+
+    if let Ok(output) = curl_cmd {
+        let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+        
+        // Extract HTTP Code
+        if let Some(line) = out_str.lines().next() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                http_code = parts[1].to_string();
+            }
+        }
+
+        // Check CF-Ray
+        if out_str.to_lowercase().contains("cf-ray:") {
+            has_cf_ray = true;
+        }
+    }
+
+    // Determine Final Status
+    let mut target_status = "ONLINE";
+    if http_code.starts_with("52") || http_code == "530" {
+        target_status = "OFFLINE";
+    }
+
+    if has_cf_ray && http_code != "000" {
+         print_report(target, target_status, subdomain, &sub_ip, "WORKING", &format!("OK_HTTP_{}_CF", http_code));
+    } else {
+         let note = if http_code == "000" { "HTTP_NO_RESPONSE".to_string() } else { format!("HTTP_{}_NO_CF", http_code) };
+         print_report(target, target_status, subdomain, &sub_ip, "NOT_WORKING", &note);
+    }
     
-    println!("\n{}", "❌ TARGET OFFLINE".red().bold());
-    println!("{}", "Reason: All connection attempts failed".bright_black());
     Ok(())
 }
 
+// Helper to print standard report (V14 Style)
+fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_status: &str, note: &str) {
+    println!("");
+    println!("{}", "==================== RESULT ====================".blue());
+    
+    // Target Status Color
+    let t_color = match t_status {
+        "ONLINE" => "green",
+        "OFFLINE" => "red",
+        _ => "yellow",
+    };
+    println!("TARGET: {} | {}", target, t_status.color(t_color));
+
+    // Bug Status Color
+    let b_color = if b_status == "WORKING" { "green" } else { "red" };
+    println!("BUG   : {} -> {} | {}", subdomain, ip, b_status.color(b_color));
+    
+    println!("NOTE  : {}", note);
+    println!("{}", "================================================".blue());
+    println!("");
+}
+
 // ═══════════════════════════════════════════════════════════════
-// ✨ ENHANCED: Batch Test with v3.6 Logic + Enhanced CF Detection
+// BATCH TEST (Preserved but compatible)
 // ═══════════════════════════════════════════════════════════════
 
 pub async fn batch_test(
@@ -498,152 +310,74 @@ pub async fn batch_test(
             pb.finish_with_message("Cancelled");
             break;
         }
+        
+        pb.set_message(format!("Scanning: {}", subdomain));
 
-        pb.set_message(format!("Testing: {}", subdomain));
+        // Use standard logic logic, but we must return ScanResult struct.
+        // For simplicity in batch mode, we stick to the core check without full verbose reports.
         
+        let mut scan_res = ScanResult {
+            subdomain: subdomain.clone(),
+            ip: String::new(),
+            is_cloudflare: false,
+            is_working: false,
+            is_restricted: false,
+            status_code: None,
+            cf_ray: None,
+            error_msg: None,
+            error_source: None,
+        };
+
         if let Ok(ip) = dns::resolve_domain_first(subdomain).await {
-            // ✨ ENHANCED: Use hybrid CF detection
-            let is_cf = dns::is_cloudflare_enhanced(subdomain, &ip).await;
+            scan_res.ip = ip.clone();
             
-            // Skip non-Cloudflare IPs
-            if !is_cf {
-                results.push(ScanResult {
-                    subdomain: subdomain.clone(),
-                    ip: ip.clone(),
-                    is_cloudflare: false,
-                    is_working: false,
-                    is_restricted: false,
-                    status_code: None,
-                    cf_ray: None,
-                    error_msg: Some("Non-Cloudflare IP".to_string()),
-                    error_source: Some("subdomain".to_string()),
-                });
-                pb.inc(1);
-                continue;
-            }
-            
-            // Test SSL
-            if !test_ssl_connection(&ip, 443, target, timeout) {
-                results.push(ScanResult {
-                    subdomain: subdomain.clone(),
-                    ip: ip.clone(),
-                    is_cloudflare: true,
-                    is_working: false,
-                    is_restricted: false,
-                    status_code: None,
-                    cf_ray: None,
-                    error_msg: Some("SSL handshake failed".to_string()),
-                    error_source: Some("subdomain".to_string()),
-                });
-                pb.inc(1);
-                continue;
-            }
-            
-            // Test HTTP
-            let http_response = test_http_request(&ip, target, 3);
-            
-            let is_working = match http_response.status_code {
-                Some(101) | Some(200) | Some(301..=308) => http_response.cf_ray.is_some(),
-                _ => false,
-            };
-            
-            let is_restricted = matches!(http_response.status_code, Some(403) | Some(404));
-            
-            let error_source = if is_working || is_restricted {
-                None
-            } else if http_response.status_code == Some(530) || http_response.status_code.is_none() {
-                Some("target".to_string())
+            // Basic checks
+            if !is_fake_dns_ip(&ip) && !is_private_ip(&ip) && dns::is_cloudflare_ip(&ip) {
+                scan_res.is_cloudflare = true;
+
+                // SSL Check (Simplified wrapper)
+                let ssl_cmd = Command::new("timeout").arg("3").arg("openssl").arg("s_client").arg("-connect").arg(format!("{}:443", ip)).arg("-servername").arg(target).arg("-brief").output();
+                let ssl_ok = match ssl_cmd {
+                    Ok(o) => String::from_utf8_lossy(&o.stdout).contains("ESTABLISHED"),
+                    Err(_) => false,
+                };
+
+                if ssl_ok {
+                    // HTTP Check
+                     let curl_cmd = Command::new("curl").arg("-s").arg("-I").arg("--http1.1").arg("--resolve").arg(format!("{}:443:{}", target, ip)).arg(format!("https://{}/", target)).arg("--max-time").arg("3").arg("-k").output();
+                     if let Ok(output) = curl_cmd {
+                         let out = String::from_utf8_lossy(&output.stdout);
+                         if out.to_lowercase().contains("cf-ray:") {
+                             scan_res.cf_ray = Some("Yes".to_string());
+                             if let Some(line) = out.lines().next() {
+                                 if let Some(code) = line.split_whitespace().nth(1) {
+                                     scan_res.status_code = code.parse().ok();
+                                     if let Some(c) = scan_res.status_code {
+                                         if c != 0 { scan_res.is_working = true; }
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                } else {
+                    scan_res.error_msg = Some("SSL Handshake Failed".to_string());
+                }
             } else {
-                Some("target".to_string())
-            };
-            
-            results.push(ScanResult {
-                subdomain: subdomain.clone(),
-                ip: ip.clone(),
-                is_cloudflare: true,
-                is_working,
-                is_restricted,
-                status_code: http_response.status_code,
-                cf_ray: http_response.cf_ray,
-                error_msg: if is_working || is_restricted { None } else {
-                    Some(format!("HTTP {}", http_response.status_code.unwrap_or(0)))
-                },
-                error_source,
-            });
+                 scan_res.error_msg = Some("Not Valid Cloudflare/VPN Detected".to_string());
+            }
+        } else {
+            scan_res.error_msg = Some("DNS Failed".to_string());
         }
         
+        results.push(scan_res);
         pb.inc(1);
-        tokio::time::sleep(Duration::from_millis(200)).await;
     }
     
-    pb.finish_with_message("Complete");
+    pb.finish_with_message("Batch scan complete");
     
-    // Display categorized results
-    let working: Vec<_> = results.iter().filter(|r| r.is_working).collect();
-    let restricted: Vec<_> = results.iter().filter(|r| r.is_restricted).collect();
-    let subdomain_issues: Vec<_> = results.iter()
-        .filter(|r| !r.is_working && !r.is_restricted && r.error_source.as_deref() == Some("subdomain"))
-        .collect();
-    let target_issues: Vec<_> = results.iter()
-        .filter(|r| !r.is_working && !r.is_restricted && r.error_source.as_deref() == Some("target"))
-        .collect();
-    
-    println!("\n{}", "═".repeat(60).cyan());
-    ui::center_text("HASIL SCAN");
-    println!("{}", "═".repeat(60).cyan());
-    
-    // Working
-    if !working.is_empty() {
-        println!("\n{} {} Working Bug Injects:", "✅".green(), working.len());
-        for result in &working {
-            let code = result.status_code.unwrap_or(0);
-            println!("  {} {} (HTTP {})", "🟢".green(), result.subdomain.green(), code);
-        }
-    }
-    
-    // Restricted
-    if !restricted.is_empty() {
-        println!("\n{} {} Working with Restrictions:", "⚠".yellow(), restricted.len());
-        for result in &restricted {
-            let code = result.status_code.unwrap_or(0);
-            println!("  {} {} (HTTP {})", "🟡".yellow(), result.subdomain.yellow(), code);
-        }
-    }
-    
-    // Subdomain issues
-    if !subdomain_issues.is_empty() {
-        println!("\n{} {} Subdomain Issues:", "⚠".yellow(), subdomain_issues.len());
-        for result in subdomain_issues.iter().take(3) {
-            println!("  {} {} ({})", "🔴".red(), result.subdomain.dimmed(), 
-                result.error_msg.as_ref().unwrap_or(&"Unknown".to_string()));
-        }
-        if subdomain_issues.len() > 3 {
-            println!("  ... dan {} lagi", subdomain_issues.len() - 3);
-        }
-    }
-    
-    // Target issues
-    if !target_issues.is_empty() {
-        println!("\n{} {} Target Issues:", "🎯".yellow(), target_issues.len());
-        println!("  {} Subdomain OK, target offline/misconfigured", "Note:".bright_black());
-        for result in target_issues.iter().take(3) {
-            println!("  {} {} (HTTP {})", "🔴".red(), result.subdomain.dimmed(), 
-                result.status_code.unwrap_or(0));
-        }
-        if target_issues.len() > 3 {
-            println!("  ... dan {} lagi", target_issues.len() - 3);
-        }
-    }
-    
-    println!("\n{}", "─".repeat(60).bright_black());
-    println!("{}", "Statistik:");
-    println!("  Total: {}", results.len());
-    println!("  Working: {} | Restricted: {} | Subdomain Issues: {} | Target Issues: {}", 
-             working.len().to_string().green(),
-             restricted.len().to_string().yellow(),
-             subdomain_issues.len().to_string().red(),
-             target_issues.len().to_string().red());
-    println!("{}", "─".repeat(60).bright_black());
-    
+    // Summary
+    let working = results.iter().filter(|r| r.is_working).count();
+    println!("\nBatch Summary: {} working out of {}", working, total);
+
     Ok(results)
 }

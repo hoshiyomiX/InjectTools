@@ -4,10 +4,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::process::Command;
-use tokio::net::TcpStream; // Using tokio for async latency check
+use tokio::net::TcpStream;
 
 use crate::dns;
-use crate::ui;
 
 #[derive(Debug, Clone)]
 pub struct ScanResult {
@@ -23,68 +22,110 @@ pub struct ScanResult {
 }
 
 // =============================================================================
-// HELPER FUNCTIONS (Logic V14)
+// HELPER FUNCTIONS (Logic V17)
 // =============================================================================
 
 fn is_private_ip(ip: &str) -> bool {
+    // V17 Regex equivalent: ^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.|^127\.
     if ip.starts_with("10.") || ip.starts_with("192.168.") || ip.starts_with("127.") {
         return true;
     }
     if ip.starts_with("172.") {
         let parts: Vec<&str> = ip.split('.').collect();
-        if let Ok(second_octet) = parts[1].parse::<u8>() {
-            if second_octet >= 16 && second_octet <= 31 {
-                return true;
+        if parts.len() > 1 {
+            if let Ok(second_octet) = parts[1].parse::<u8>() {
+                if second_octet >= 16 && second_octet <= 31 {
+                    return true;
+                }
             }
         }
     }
-    if ip.starts_with("100.") {
-         let parts: Vec<&str> = ip.split('.').collect();
-         if let Ok(second_octet) = parts[1].parse::<u8>() {
-             if second_octet >= 64 && second_octet <= 127 {
-                 return true; // CGNAT
-             }
-         }
-    }
+    // Note: Rust version usually included CGNAT (100.64-127), but V17 script doesn't explicitly show it.
+    // Keeping it strict to V17 for now implies following the script's regex.
     false
 }
 
 fn is_fake_dns_ip(ip: &str) -> bool {
+    // V17: ^198\.(18|19)\.
     ip.starts_with("198.18.") || ip.starts_with("198.19.")
 }
 
-/// Check target health to distinguish between "Subdomain Mismatch" and "Target Dead"
-/// Returns (Status, Note)
-/// Status: ONLINE | OFFLINE | UNKNOWN
-async fn check_target_health(target: &str) -> (String, String) {
-    // 1. Resolve Target
-    let t_ip = match dns::resolve_domain_first(target).await {
-        Ok(ip) => ip,
-        Err(_) => return ("UNKNOWN".to_string(), "DNS_FAIL".to_string()),
-    };
-
-    // 2. Try Direct SSL (Target IP + Target SNI)
-    let ssl_cmd = Command::new("timeout")
-        .arg("5")
-        .arg("openssl")
-        .arg("s_client")
-        .arg("-connect")
-        .arg(format!("{}:443", t_ip))
-        .arg("-servername")
-        .arg(target)
-        .arg("-brief")
-        .output();
-
-    if let Ok(output) = ssl_cmd {
-        let out_str = String::from_utf8_lossy(&output.stdout).to_string() + &String::from_utf8_lossy(&output.stderr).to_string();
-        if out_str.contains("ESTABLISHED") || out_str.contains("Verification: OK") {
-            return ("ONLINE".to_string(), "SSL_OK".to_string());
+fn is_cloudflare_ip(ip: &str) -> bool {
+    // V17 Explicit List
+    if ip.starts_with("104.") { return true; }
+    if ip.starts_with("162.158.") || ip.starts_with("162.159.") { return true; }
+    if ip.starts_with("188.114.") { return true; }
+    if ip.starts_with("198.41.") { return true; }
+    if ip.starts_with("197.234.") { return true; }
+    if ip.starts_with("190.93.") { return true; }
+    
+    // 172.64.0.0/13 -> 172.64.0.0 - 172.71.255.255
+    // V17 Regex: ^172\.(6[4-9]|7[0-1])\.
+    if ip.starts_with("172.") {
+        let parts: Vec<&str> = ip.split('.').collect();
+        if parts.len() > 1 {
+            if let Ok(second) = parts[1].parse::<u8>() {
+                if second >= 64 && second <= 71 {
+                    return true;
+                }
+            }
         }
     }
+    false
+}
 
-    // 3. Fallback: HTTP Port 80
-    // Curl -I http://target/
-    let curl_cmd = Command::new("curl")
+// Curl based SSL Handshake to match V17 "Best for TLS Fingerprint"
+fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
+    // curl -s -I --http1.1 --resolve "sni:443:ip" "https://sni/" --connect-timeout 5 -k
+    let output = Command::new("curl")
+        .arg("-s")
+        .arg("-I")
+        .arg("--http1.1")
+        .arg("--resolve")
+        .arg(format!("{}:443:{}", sni, ip))
+        .arg(format!("https://{}/", sni))
+        .arg("--connect-timeout")
+        .arg("5")
+        .arg("-k")
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let combined = format!("{}{}", stdout, stderr);
+            
+            // V17 Check: if [[ "$out" == *"HTTP/"* ]] || [[ "$out" == *"server:"* ]]; then echo "ESTABLISHED"
+            if combined.contains("HTTP/") || combined.to_lowercase().contains("server:") {
+                "ESTABLISHED".to_string()
+            } else {
+                if combined.trim().is_empty() {
+                    "FAILED: Empty Output".to_string()
+                } else {
+                    format!("FAILED: {}", combined.trim())
+                }
+            }
+        },
+        Err(e) => format!("FAILED: Exec Error {}", e)
+    }
+}
+
+async fn check_target_status(target: &str) -> String {
+    // 1. Resolve Target
+    let tip = match dns::resolve_domain_first(target).await {
+        Ok(ip) => ip,
+        Err(_) => return "UNKNOWN|DNS_FAIL".to_string(),
+    };
+
+    // 2. Check Direct SSL
+    let tssl = ssl_handshake_curl(&tip, target);
+    if tssl == "ESTABLISHED" {
+        return "ONLINE|SSL_OK".to_string();
+    }
+
+    // 3. Fallback HTTP
+    // curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "http://target/"
+    let output = Command::new("curl")
         .arg("-s")
         .arg("-o")
         .arg("/dev/null")
@@ -95,14 +136,14 @@ async fn check_target_health(target: &str) -> (String, String) {
         .arg(format!("http://{}/", target))
         .output();
 
-    if let Ok(output) = curl_cmd {
-        let code = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if let Ok(out) = output {
+        let code = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if code != "000" && !code.is_empty() {
-            return ("ONLINE".to_string(), format!("HTTP_{}", code));
+            return format!("ONLINE|HTTP_{}", code);
         }
     }
 
-    ("OFFLINE".to_string(), "NO_SSL_NO_HTTP".to_string())
+    "UNREACHABLE|NO_DIRECT_ACCESS".to_string()
 }
 
 // =============================================================================
@@ -127,152 +168,128 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
 
     // 2. Environment Checks
     if is_fake_dns_ip(&sub_ip) {
-        let (ts, _) = check_target_health(target).await;
-        print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_FAKE_DNS");
+        print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_FAKE_DNS");
         return Ok(());
     }
     if is_private_ip(&sub_ip) {
-        let (ts, _) = check_target_health(target).await;
-        print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "ENV_PRIVATE_IP");
+        print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "ENV_PRIVATE_IP");
         return Ok(());
     }
-    // Strict Cloudflare Check (Menu 1 uses strict V14 logic)
-    if !dns::is_cloudflare_ip(&sub_ip) {
-        let (ts, _) = check_target_health(target).await;
-        print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_NOT_CLOUDFLARE");
+    if !is_cloudflare_ip(&sub_ip) {
+        print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_NOT_CLOUDFLARE");
         return Ok(());
     }
 
-    // 3. Latency Check (<5ms detection for VPN Interception)
+    // 3. Latency Check (V17: <5ms detection for VPN Interception)
+    // Using 2s timeout as per V17 script (s.settimeout(2) in python snippet)
     let start = Instant::now();
-    let tcp_check = tokio::time::timeout(Duration::from_secs(3), TcpStream::connect((sub_ip.as_str(), 443))).await;
+    let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((sub_ip.as_str(), 443))).await;
     let latency = start.elapsed().as_millis();
 
     match tcp_check {
         Ok(Ok(_)) => {
             if latency < 5 {
-                let (ts, _) = check_target_health(target).await;
-                print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_DETECTED(LATENCY <5ms)");
+                print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_DETECTED(LATENCY <5ms)");
                 return Ok(());
             }
         },
         _ => {
-            let (ts, _) = check_target_health(target).await;
-            print_report(target, &ts, subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_TCP_443_BLOCKED");
+            // Timeout or Error -> TCP Blocked
+            print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_TCP_BLOCKED");
             return Ok(());
         }
     }
 
-    // 4. SSL Handshake (Subdomain IP + Target SNI)
-    // We use command wrapper because openssl crate complexity is high for this specific check
-    let ssl_cmd = Command::new("timeout")
-        .arg("5")
-        .arg("openssl")
-        .arg("s_client")
-        .arg("-connect")
-        .arg(format!("{}:443", sub_ip))
-        .arg("-servername")
-        .arg(target)
-        .arg("-brief")
-        .output();
+    // 4. Test Handshake (V17 Logic)
+    let ssl_status = ssl_handshake_curl(&sub_ip, target);
 
-    let mut ssl_success = false;
-    let mut ssl_output = String::new();
+    if ssl_status != "ESTABLISHED" {
+        // Handshake Failed
+        let ts_full = check_target_status(target).await;
+        let parts: Vec<&str> = ts_full.split('|').collect();
+        let t_status = parts.get(0).unwrap_or(&"UNKNOWN");
+        let t_note = parts.get(1).unwrap_or(&"");
 
-    if let Ok(output) = ssl_cmd {
-        ssl_output = String::from_utf8_lossy(&output.stdout).to_string() + &String::from_utf8_lossy(&output.stderr).to_string();
-        if ssl_output.contains("ESTABLISHED") || ssl_output.contains("Verification: OK") {
-            ssl_success = true;
-        }
-    }
-
-    if !ssl_success {
-        // Handshake Failed -> Check Target Health
-        let (t_status, t_note) = check_target_health(target).await;
-        
-        let bug_note = if t_status == "OFFLINE" {
-            format!("TARGET_OFFLINE({})", t_note)
+        let bug_note = if *t_status == "UNREACHABLE" {
+            "DIRECT_CONNECTION_BLOCKED".to_string()
         } else {
-            // Target is ONLINE, so it's a mismatch
-            if ssl_output.contains("errno=104") || ssl_output.contains("Connection reset") {
+            // Target is alive/online, so it's a compatibility issue
+            if ssl_status.contains("refused") {
+                "BUG_NOT_COMPATIBLE(CONN_REFUSED)".to_string()
+            } else if ssl_status.contains("reset") {
                 "BUG_NOT_COMPATIBLE(TLS_RESET)".to_string()
-            } else if ssl_output.contains("unexpected eof") {
-                "BUG_NOT_COMPATIBLE(EOF_PROXY?)".to_string()
-            } else if ssl_output.contains("handshake failure") {
-                "BUG_NOT_COMPATIBLE(HANDSHAKE_FAIL)".to_string()
+            } else if ssl_status.contains("timeout") {
+                "BUG_NOT_COMPATIBLE(TIMEOUT)".to_string()
             } else {
                 "BUG_NOT_COMPATIBLE(SSL_FAIL)".to_string()
             }
         };
 
-        print_report(target, &t_status, subdomain, &sub_ip, "NOT_WORKING", &bug_note);
+        print_report(target, t_status, subdomain, &sub_ip, "NOT_WORKING", &bug_note);
         return Ok(());
     }
 
-    // 5. HTTP Check (End-to-End)
-    // curl -I -s --http1.1 --resolve target:443:ip https://target/
-    let curl_cmd = Command::new("curl")
+    // 5. Handshake Success -> Check End-to-End HTTP
+    // curl -s -I --http1.1 --resolve ...
+    let output = Command::new("curl")
         .arg("-s")
         .arg("-I")
         .arg("--http1.1")
         .arg("--resolve")
         .arg(format!("{}:443:{}", target, sub_ip))
         .arg(format!("https://{}/", target))
-        .arg("--max-time")
+        .arg("--connect-timeout")
         .arg("5")
         .arg("-k")
         .output();
 
     let mut http_code = "000".to_string();
-    let mut has_cf_ray = false;
+    let mut cf_ray = false;
 
-    if let Ok(output) = curl_cmd {
-        let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
         
-        // Extract HTTP Code
-        if let Some(line) = out_str.lines().next() {
+        // Parse HTTP Code
+        if let Some(line) = stdout.lines().next() {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 2 {
                 http_code = parts[1].to_string();
             }
         }
-
-        // Check CF-Ray
-        if out_str.to_lowercase().contains("cf-ray:") {
-            has_cf_ray = true;
+        
+        // Parse CF-Ray
+        if stdout.to_lowercase().contains("cf-ray:") {
+            cf_ray = true;
         }
     }
 
-    // Determine Final Status
-    let mut target_status = "ONLINE";
+    let mut target_status_final = "ONLINE";
     if http_code.starts_with("52") || http_code == "530" {
-        target_status = "OFFLINE";
+        target_status_final = "OFFLINE";
     }
 
-    if has_cf_ray && http_code != "000" {
-         print_report(target, target_status, subdomain, &sub_ip, "WORKING", &format!("OK_HTTP_{}_CF", http_code));
+    if cf_ray {
+        print_report(target, target_status_final, subdomain, &sub_ip, "WORKING", &format!("OK_HTTP_{}_CF", http_code));
     } else {
-         let note = if http_code == "000" { "HTTP_NO_RESPONSE".to_string() } else { format!("HTTP_{}_NO_CF", http_code) };
-         print_report(target, target_status, subdomain, &sub_ip, "NOT_WORKING", &note);
+        let note = if http_code == "000" { "HTTP_NO_RESPONSE".to_string() } else { format!("HTTP_{}_NO_CF", http_code) };
+        print_report(target, target_status_final, subdomain, &sub_ip, "NOT_WORKING", &note);
     }
-    
+
     Ok(())
 }
 
-// Helper to print standard report (V14 Style)
 fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_status: &str, note: &str) {
     println!("");
     println!("{}", "==================== RESULT ====================".blue());
     
-    // Target Status Color
     let t_color = match t_status {
         "ONLINE" => "green",
+        "UNREACHABLE" => "red", // V17 uses Red for Unreachable
         "OFFLINE" => "red",
         _ => "yellow",
     };
     println!("TARGET: {} | {}", target, t_status.color(t_color));
 
-    // Bug Status Color
     let b_color = if b_status == "WORKING" { "green" } else { "red" };
     println!("BUG   : {} -> {} | {}", subdomain, ip, b_status.color(b_color));
     
@@ -281,14 +298,14 @@ fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_statu
     println!("");
 }
 
-// ═══════════════════════════════════════════════════════════════
-// BATCH TEST (Preserved but compatible)
-// ═══════════════════════════════════════════════════════════════
+// =============================================================================
+// BATCH TEST (Menu 2: Updated to match V17 Logic simplified)
+// =============================================================================
 
 pub async fn batch_test(
     target: &str,
     subdomains: &[String],
-    timeout: u64,
+    _timeout: u64,
     running: Arc<AtomicBool>,
 ) -> anyhow::Result<Vec<ScanResult>> {
     let total = subdomains.len();
@@ -312,9 +329,6 @@ pub async fn batch_test(
         }
         
         pb.set_message(format!("Scanning: {}", subdomain));
-
-        // Use standard logic logic, but we must return ScanResult struct.
-        // For simplicity in batch mode, we stick to the core check without full verbose reports.
         
         let mut scan_res = ScanResult {
             subdomain: subdomain.clone(),
@@ -328,54 +342,84 @@ pub async fn batch_test(
             error_source: None,
         };
 
-        if let Ok(ip) = dns::resolve_domain_first(subdomain).await {
-            scan_res.ip = ip.clone();
-            
-            // Basic checks
-            if !is_fake_dns_ip(&ip) && !is_private_ip(&ip) && dns::is_cloudflare_ip(&ip) {
-                scan_res.is_cloudflare = true;
+        match dns::resolve_domain_first(subdomain).await {
+            Ok(ip) => {
+                scan_res.ip = ip.clone();
+                
+                // V17 Env Checks
+                if is_fake_dns_ip(&ip) {
+                    scan_res.error_msg = Some("Fake DNS".to_string());
+                } else if is_private_ip(&ip) {
+                     scan_res.error_msg = Some("Private IP".to_string());
+                } else if !is_cloudflare_ip(&ip) {
+                     scan_res.error_msg = Some("Not Cloudflare".to_string());
+                } else {
+                    scan_res.is_cloudflare = true;
 
-                // SSL Check (Simplified wrapper)
-                let ssl_cmd = Command::new("timeout").arg("3").arg("openssl").arg("s_client").arg("-connect").arg(format!("{}:443", ip)).arg("-servername").arg(target).arg("-brief").output();
-                let ssl_ok = match ssl_cmd {
-                    Ok(o) => String::from_utf8_lossy(&o.stdout).contains("ESTABLISHED"),
-                    Err(_) => false,
-                };
+                    // Latency Check (<5ms check included)
+                    let start = Instant::now();
+                    let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((ip.as_str(), 443))).await;
+                    let latency = start.elapsed().as_millis();
+                    
+                    let mut tcp_ok = false;
+                    match tcp_check {
+                        Ok(Ok(_)) => {
+                            if latency >= 5 { tcp_ok = true; }
+                            else { scan_res.error_msg = Some("VPN Latency <5ms".to_string()); }
+                        },
+                        _ => { scan_res.error_msg = Some("TCP 443 Blocked".to_string()); }
+                    }
 
-                if ssl_ok {
-                    // HTTP Check
-                     let curl_cmd = Command::new("curl").arg("-s").arg("-I").arg("--http1.1").arg("--resolve").arg(format!("{}:443:{}", target, ip)).arg(format!("https://{}/", target)).arg("--max-time").arg("3").arg("-k").output();
-                     if let Ok(output) = curl_cmd {
-                         let out = String::from_utf8_lossy(&output.stdout);
-                         if out.to_lowercase().contains("cf-ray:") {
-                             scan_res.cf_ray = Some("Yes".to_string());
-                             if let Some(line) = out.lines().next() {
-                                 if let Some(code) = line.split_whitespace().nth(1) {
-                                     scan_res.status_code = code.parse().ok();
-                                     if let Some(c) = scan_res.status_code {
-                                         if c != 0 { scan_res.is_working = true; }
+                    if tcp_ok {
+                         // V17 Handshake
+                         let ssl_res = ssl_handshake_curl(&ip, target);
+                         if ssl_res == "ESTABLISHED" {
+                             // End-to-End
+                             let output = Command::new("curl")
+                                .arg("-s")
+                                .arg("-I")
+                                .arg("--http1.1")
+                                .arg("--resolve")
+                                .arg(format!("{}:443:{}", target, ip))
+                                .arg(format!("https://{}/", target))
+                                .arg("--connect-timeout")
+                                .arg("5")
+                                .arg("-k")
+                                .output();
+                            
+                             if let Ok(out) = output {
+                                 let stdout = String::from_utf8_lossy(&out.stdout);
+                                 if stdout.to_lowercase().contains("cf-ray:") {
+                                     scan_res.cf_ray = Some("Yes".to_string());
+                                     if let Some(line) = stdout.lines().next() {
+                                         if let Some(code_str) = line.split_whitespace().nth(1) {
+                                             if let Ok(c) = code_str.parse::<u16>() {
+                                                 scan_res.status_code = Some(c);
+                                                 if c != 0 { scan_res.is_working = true; }
+                                             }
+                                         }
                                      }
+                                 } else {
+                                     scan_res.error_msg = Some("No CF-Ray".to_string());
                                  }
                              }
+                         } else {
+                             scan_res.error_msg = Some("SSL Handshake Failed".to_string());
                          }
-                     }
-                } else {
-                    scan_res.error_msg = Some("SSL Handshake Failed".to_string());
+                    }
                 }
-            } else {
-                 scan_res.error_msg = Some("Not Valid Cloudflare/VPN Detected".to_string());
+            },
+            Err(_) => {
+                scan_res.error_msg = Some("DNS Fail".to_string());
             }
-        } else {
-            scan_res.error_msg = Some("DNS Failed".to_string());
         }
-        
+
         results.push(scan_res);
         pb.inc(1);
     }
     
     pb.finish_with_message("Batch scan complete");
     
-    // Summary
     let working = results.iter().filter(|r| r.is_working).count();
     println!("\nBatch Summary: {} working out of {}", working, total);
 

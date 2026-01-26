@@ -1,42 +1,42 @@
 package com.hoshiyomi.injecttools.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hoshiyomi.injecttools.core.InjectToolsKotlin
 import com.hoshiyomi.injecttools.viewmodel.ScanViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
+    onNavigateBack: () -> Unit,
     viewModel: ScanViewModel = viewModel()
 ) {
-    var target by remember { mutableStateOf("www.cloudflare.com") }
-    var subdomain by remember { mutableStateOf("") }
-    var subdomainList by remember { mutableStateOf("") }
-    var scanMode by remember { mutableStateOf("single") } // "single" or "batch"
-    
     val uiState by viewModel.uiState.collectAsState()
     val scanResults by viewModel.scanResults.collectAsState()
     val progress by viewModel.progress.collectAsState()
     
+    var target by remember { mutableStateOf("") }
+    var subdomain by remember { mutableStateOf("") }
+    var subdomainList by remember { mutableStateOf("") }
+    var isBatchMode by remember { mutableStateOf(false) }
+    
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scan Cloudflare Bug") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                title = { Text("Scan Subdomain") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, "Back")
+                    }
+                }
             )
         }
     ) { padding ->
@@ -44,84 +44,82 @@ fun ScanScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // Target Input
+            // Target input
             OutlinedTextField(
                 value = target,
                 onValueChange = { target = it },
                 label = { Text("Target Domain") },
-                placeholder = { Text("e.g., www.cloudflare.com") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                placeholder = { Text("example.com") },
+                modifier = Modifier.fillMaxWidth()
             )
             
-            // Mode Selection
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Mode switch
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                FilterChip(
-                    selected = scanMode == "single",
-                    onClick = { scanMode = "single" },
-                    label = { Text("Single Scan") },
-                    modifier = Modifier.weight(1f)
-                )
-                FilterChip(
-                    selected = scanMode == "batch",
-                    onClick = { scanMode = "batch" },
-                    label = { Text("Batch Scan") },
-                    modifier = Modifier.weight(1f)
+                Text("Batch Mode")
+                Switch(
+                    checked = isBatchMode,
+                    onCheckedChanged = { isBatchMode = it }
                 )
             }
             
+            Spacer(modifier = Modifier.height(16.dp))
+            
             // Input based on mode
-            if (scanMode == "single") {
+            if (isBatchMode) {
+                OutlinedTextField(
+                    value = subdomainList,
+                    onValueChange = { subdomainList = it },
+                    label = { Text("Subdomains (one per line)") },
+                    placeholder = { Text("sub1.example.com\nsub2.example.com") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    maxLines = 10
+                )
+            } else {
                 OutlinedTextField(
                     value = subdomain,
                     onValueChange = { subdomain = it },
                     label = { Text("Subdomain") },
-                    placeholder = { Text("e.g., blog.cloudflare.com") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            } else {
-                OutlinedTextField(
-                    value = subdomainList,
-                    onValueChange = { subdomainList = it },
-                    label = { Text("Subdomain List (one per line)") },
-                    placeholder = { Text("blog.cloudflare.com\napi.cloudflare.com\n...") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
-                    maxLines = 10
+                    placeholder = { Text("sub.example.com") },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
             
-            // Scan Button
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Scan button
             Button(
                 onClick = {
-                    if (scanMode == "single") {
-                        viewModel.testSingleSubdomain(target, subdomain)
+                    if (isBatchMode) {
+                        val subs = subdomainList.lines().filter { it.isNotBlank() }
+                        viewModel.testBatchSubdomains(target, subs)
                     } else {
-                        val subdomains = subdomainList.lines()
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                        viewModel.testBatchSubdomains(target, subdomains)
+                        viewModel.testSingleSubdomain(target, subdomain)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = uiState !is ScanViewModel.ScanUiState.Scanning
             ) {
-                Text(if (uiState is ScanViewModel.ScanUiState.Scanning) "Scanning..." else "Start Scan")
+                Icon(Icons.Default.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (isBatchMode) "Scan Batch" else "Scan Single")
             }
             
-            // Progress Bar (for batch)
-            if (uiState is ScanViewModel.ScanUiState.Scanning && scanMode == "batch") {
+            // Progress indicator
+            if (uiState is ScanViewModel.ScanUiState.Scanning && isBatchMode) {
+                Spacer(modifier = Modifier.height(16.dp))
                 LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth(),
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = "Progress: ${(progress * 100).toInt()}%",
@@ -129,76 +127,77 @@ fun ScanScreen(
                 )
             }
             
-            // Results
+            // Results display
             if (scanResults.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Results (${scanResults.count { it.isWorking }} working)",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "Results",
+                    style = MaterialTheme.typography.titleLarge
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(scanResults) { result ->
-                        ScanResultCard(result)
+                scanResults.forEach { result ->
+                    ResultCard(result)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+            
+            // Error display
+            when (val state = uiState) {
+                is ScanViewModel.ScanUiState.Error -> {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = state.message,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
                     }
                 }
+                else -> {}
             }
         }
     }
 }
 
 @Composable
-fun ScanResultCard(result: InjectToolsKotlin.ScanResult) {
+fun ResultCard(result: com.hoshiyomi.injecttools.core.InjectToolsKotlin.ScanResult) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (result.isWorking) 
-                Color(0xFF1B5E20).copy(alpha = 0.1f)
+                MaterialTheme.colorScheme.primaryContainer 
             else 
-                Color(0xFFB71C1C).copy(alpha = 0.1f)
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = result.subdomain,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Text(
-                    text = result.ip,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                if (result.errorMsg != null) {
-                    Text(
-                        text = result.errorMsg,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Red
-                    )
-                }
-                if (result.statusCode != null) {
-                    Text(
-                        text = "HTTP ${result.statusCode}${if (result.cfRay != null) " ✓ CF" else ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (result.isWorking) Color(0xFF2E7D32) else Color(0xFFC62828)
-                    )
-                }
-            }
-            
-            Icon(
-                imageVector = if (result.isWorking) Icons.Default.CheckCircle else Icons.Default.Error,
-                contentDescription = if (result.isWorking) "Working" else "Not Working",
-                tint = if (result.isWorking) Color(0xFF2E7D32) else Color(0xFFC62828),
-                modifier = Modifier.size(32.dp)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = result.subdomain,
+                style = MaterialTheme.typography.titleMedium
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "IP: ${result.ip}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (result.statusCode != null) {
+                Text(
+                    text = "Status: ${result.statusCode}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (result.errorMsg != null) {
+                Text(
+                    text = "Error: ${result.errorMsg}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }

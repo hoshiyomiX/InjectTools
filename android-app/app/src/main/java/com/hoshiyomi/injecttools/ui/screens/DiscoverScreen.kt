@@ -3,20 +3,15 @@ package com.hoshiyomi.injecttools.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hoshiyomi.injecttools.ui.viewmodel.DiscoverState
-import com.hoshiyomi.injecttools.ui.viewmodel.DiscoverViewModel
+import com.hoshiyomi.injecttools.viewmodel.DiscoverViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +19,12 @@ fun DiscoverScreen(
     onNavigateBack: () -> Unit,
     viewModel: DiscoverViewModel = viewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+    val subdomains by viewModel.subdomains.collectAsState()
+    
+    var domain by remember { mutableStateOf("") }
+    var limit by remember { mutableStateOf("100") }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -40,182 +41,81 @@ fun DiscoverScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .padding(16.dp)
         ) {
-            // Input Section
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            OutlinedTextField(
+                value = domain,
+                onValueChange = { domain = it },
+                label = { Text("Domain") },
+                placeholder = { Text("example.com") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            OutlinedTextField(
+                value = limit,
+                onValueChange = { limit = it },
+                label = { Text("Results Limit") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Button(
+                onClick = {
+                    viewModel.discoverSubdomains(domain, limit.toIntOrNull() ?: 100)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = uiState !is DiscoverViewModel.DiscoverUiState.Discovering
             ) {
-                // Info Card
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Info, null)
-                        Text(
-                            "Discover subdomains using crt.sh certificate transparency logs",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-                
-                // Domain Input
-                OutlinedTextField(
-                    value = viewModel.domain,
-                    onValueChange = { viewModel.domain = it },
-                    label = { Text("Domain") },
-                    placeholder = { Text("cloudflare.net") },
-                    leadingIcon = { Icon(Icons.Default.Star, null) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                
-                // Limit Slider
-                Column {
-                    Text(
-                        "Results Limit: ${viewModel.limit}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Slider(
-                        value = viewModel.limit.toFloat(),
-                        onValueChange = { viewModel.limit = it.toInt() },
-                        valueRange = 10f..500f,
-                        steps = 48
-                    )
-                }
-                
-                // Discover Button
-                Button(
-                    onClick = { viewModel.discover() },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = viewModel.state !is DiscoverState.Discovering
-                ) {
-                    Icon(Icons.Default.Search, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (viewModel.state is DiscoverState.Discovering) "Discovering..."
-                        else "Start Discovery"
-                    )
-                }
+                Icon(Icons.Default.Search, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Discover")
             }
             
-            Divider()
+            Spacer(modifier = Modifier.height(24.dp))
             
-            // Results Section
-            when (val currentState = viewModel.state) {
-                is DiscoverState.Discovering -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            CircularProgressIndicator()
-                            Text(
-                                "Querying crt.sh...",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
+            when (val state = uiState) {
+                is DiscoverViewModel.DiscoverUiState.Discovering -> {
+                    CircularProgressIndicator()
                 }
-                is DiscoverState.Success -> {
-                    SubdomainList(
-                        subdomains = currentState.subdomains,
-                        modifier = Modifier.fillMaxSize()
+                is DiscoverViewModel.DiscoverUiState.Success -> {
+                    Text(
+                        text = "Found ${subdomains.size} subdomains",
+                        style = MaterialTheme.typography.titleMedium
                     )
-                }
-                is DiscoverState.Error -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    LazyColumn {
+                        items(subdomains) { subdomain ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
                             ) {
-                                Icon(Icons.Default.Warning, null)
-                                Text(currentState.message)
+                                Text(
+                                    text = subdomain,
+                                    modifier = Modifier.padding(12.dp)
+                                )
                             }
                         }
                     }
                 }
-                else -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                is DiscoverViewModel.DiscoverUiState.Error -> {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
                     ) {
                         Text(
-                            "Enter a domain to start discovery",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = state.message,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun SubdomainList(
-    subdomains: List<String>,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        item {
-            Text(
-                "Found ${subdomains.size} subdomains",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-        
-        items(subdomains) { subdomain ->
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        subdomain,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                else -> {}
             }
         }
     }

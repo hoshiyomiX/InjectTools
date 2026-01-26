@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.hoshiyomi.injecttools"
-        minSdk = 30
+        minSdk = 31  // Changed from 30 to 31 for Material 3 support
         targetSdk = 34
         versionCode = 1
         versionName = "4.0.0-alpha"

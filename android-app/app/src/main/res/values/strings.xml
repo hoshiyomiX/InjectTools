@@ -1,5 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">InjectTools</string>
-    <string name="app_description">Bug Inject Scanner for Cloudflare Subdomains</string>
+    
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_scan">Scan</string>
+    <string name="nav_discover">Discover</string>
+    <string name="nav_results">Results</string>
+    <string name="nav_settings">Settings</string>
+    
+    <!-- Home Screen -->
+    <string name="home_title">InjectTools</string>
+    <string name="home_subtitle">Cloudflare Bug Scanner</string>
+    <string name="home_target_status">Target Status</string>
+    <string name="home_check_target">Check Target</string>
+    <string name="home_quick_actions">Quick Actions</string>
+    
+    <!-- Scan Screen -->
+    <string name="scan_title">Bug Scanner</string>
+    <string name="scan_target_label">Target Domain</string>
+    <string name="scan_target_hint">e.g., zoom.us</string>
+    <string name="scan_subdomain_label">Subdomain to Test</string>
+    <string name="scan_subdomain_hint">e.g., speed.cloudflare.com</string>
+    <string name="scan_timeout">Timeout (seconds)</string>
+    <string name="scan_single">Test Single</string>
+    <string name="scan_batch">Batch Scan</string>
+    <string name="scan_load_list">Load Subdomain List</string>
+    <string name="scan_in_progress">Scanning...</string>
+    <string name="scan_complete">Scan Complete</string>
+    
+    <!-- Discover Screen -->
+    <string name="discover_title">Subdomain Discovery</string>
+    <string name="discover_domain_label">Domain</string>
+    <string name="discover_domain_hint">e.g., cloudflare.com</string>
+    <string name="discover_limit_label">Max Results</string>
+    <string name="discover_start">Start Discovery</string>
+    <string name="discover_in_progress">Discovering subdomains...</string>
+    <string name="discover_complete">Discovery Complete</string>
+    <string name="discover_export">Export to Scanner</string>
+    
+    <!-- Results Screen -->
+    <string name="results_title">Scan History</string>
+    <string name="results_empty">No scan results yet</string>
+    <string name="results_working">Working</string>
+    <string name="results_not_working">Not Working</string>
+    <string name="results_error">Error</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_github">GitHub Repository</string>
+    <string name="settings_docs">Documentation</string>
+    <string name="settings_preferences">Preferences</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_system">System Default</string>
+    
+    <!-- Common -->
+    <string name="error">Error</string>
+    <string name="success">Success</string>
+    <string name="loading">Loading...</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="retry">Retry</string>
+    <string name="close">Close</string>
 </resources>

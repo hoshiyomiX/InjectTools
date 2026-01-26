@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic for testing -->
+    <!-- Allow cleartext (HTTP) traffic for testing purposes -->
+    <!-- In production, you should restrict this or use HTTPS only -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
+            <!-- Trust system certificates -->
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    
+    <!-- Debug configuration (if needed) -->
+    <debug-overrides>
+        <trust-anchors>
+            <!-- Additionally trust user-added certificates in debug builds -->
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
 </network-security-config>

@@ -1,54 +1,110 @@
 [package]
 name = "injecttools"
-version = "3.6.0"
+version = "4.0.0-alpha"
 edition = "2021"
 authors = ["hoshiyomi_id <t.me/hoshiyomi_id>"]
-description = "Bug Inject Scanner for Cloudflare Subdomains - Android/Termux Only"
+description = "Bug Inject Scanner for Cloudflare Subdomains - Android APK & Termux"
 license = "MIT"
 repository = "https://github.com/hoshiyomiX/InjectTools"
 keywords = ["android", "termux", "cloudflare", "scanner", "networking"]
 categories = ["command-line-utilities", "network-programming"]
 
+# ═════════════════════════════════════════════════════════════════
+# BUILD TARGETS
+# ═════════════════════════════════════════════════════════════════
+
+# Binary target (for Termux CLI)
+[[bin]]
+name = "injecttools"
+path = "src/main.rs"
+
+# Library target (for Android APK via JNI)
+[lib]
+name = "injecttools"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-# HTTP client - ONLY for crt.sh API (minimal features)
-# Scanner uses openssl s_client instead
+# ═════════════════════════════════════════════════════════════════
+# HTTP CLIENT - Native Rust (NO CURL DEPENDENCY)
+# ═════════════════════════════════════════════════════════════════
+
+# Hyper for HTTP/HTTPS - replaces curl for Android compatibility
+hyper = { version = "1.1", features = ["client", "http1", "http2"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "native-tokio", "ring", "tls12"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
+http-body-util = "0.1"
+
+# Reqwest - Keep for crt.sh API (lighter than hyper for simple requests)
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 
-# Async runtime
-tokio = { version = "1", features = ["full"] }
+# ═════════════════════════════════════════════════════════════════
+# ASYNC RUNTIME
+# ═════════════════════════════════════════════════════════════════
 
-# DNS resolution
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# ═════════════════════════════════════════════════════════════════
+# DNS RESOLUTION
+# ═════════════════════════════════════════════════════════════════
+
 trust-dns-resolver = "0.23"
 
-# CLI & TUI
+# ═════════════════════════════════════════════════════════════════
+# ANDROID JNI BINDINGS
+# ═════════════════════════════════════════════════════════════════
+
+jni = "0.21"
+lazy_static = "1.4"
+
+# ═════════════════════════════════════════════════════════════════
+# CLI & TUI (Termux only)
+# ═════════════════════════════════════════════════════════════════
+
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialoger = "0.11"
 terminal_size = "0.3"
 
-# Networking
+# ═════════════════════════════════════════════════════════════════
+# NETWORKING
+# ═════════════════════════════════════════════════════════════════
+
 ipnetwork = "0.20"
 
-# Serialization
+# ═════════════════════════════════════════════════════════════════
+# SERIALIZATION
+# ═════════════════════════════════════════════════════════════════
+
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
 
-# Async
-futures = "0.3"
+# ═════════════════════════════════════════════════════════════════
+# DATE/TIME
+# ═════════════════════════════════════════════════════════════════
 
-# Date/Time
 chrono = "0.4"
 
-# Error handling
+# ═════════════════════════════════════════════════════════════════
+# ERROR HANDLING
+# ═════════════════════════════════════════════════════════════════
+
 anyhow = "1.0"
 thiserror = "1.0"
 
-# Signal handling
+# ═════════════════════════════════════════════════════════════════
+# SIGNAL HANDLING (Termux only)
+# ═════════════════════════════════════════════════════════════════
+
 ctrlc = "3.4"
 
-# Regex for parsing
+# ═════════════════════════════════════════════════════════════════
+# UTILITIES
+# ═════════════════════════════════════════════════════════════════
+
 regex = "1.10"
 
 [profile.release]
@@ -56,4 +112,4 @@ opt-level = "z"       # Optimize for size
 lto = true            # Link-time optimization
 codegen-units = 1     # Single codegen unit
 strip = true          # Strip symbols
-panic = "abort"        # Abort on panic
+panic = "abort"       # Abort on panic

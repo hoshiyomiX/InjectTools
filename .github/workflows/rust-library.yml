@@ -67,10 +67,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-${{ matrix.target }}-
 
+      - name: Add NDK to PATH
+        run: |
+          echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
       - name: Configure Cargo for Android
         run: |
           mkdir -p .cargo
-          cat > .cargo/config.toml << 'EOF'
+          cat > .cargo/config.toml <<'CARGO_CONFIG'
           [target.aarch64-linux-android]
           linker = "aarch64-linux-android30-clang"
           ar = "llvm-ar"
@@ -78,11 +82,17 @@ jobs:
           [target.armv7-linux-androideabi]
           linker = "armv7a-linux-androideabi30-clang"
           ar = "llvm-ar"
-          EOF
+          CARGO_CONFIG
+          
+          echo "Cargo config created:"
+          cat .cargo/config.toml
 
-      - name: Add NDK to PATH
+      - name: Verify NDK setup
         run: |
-          echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+          echo "NDK Home: $ANDROID_NDK_HOME"
+          echo "PATH: $PATH"
+          which aarch64-linux-android30-clang || echo "ARM64 clang not found"
+          which armv7a-linux-androideabi30-clang || echo "ARMv7 clang not found"
 
       - name: Build Rust library
         run: |
@@ -115,15 +125,16 @@ jobs:
           cp target/${{ matrix.target }}/release/libinjecttools.so artifacts/jniLibs/$ABI/
           
           # Create info file
-          cat > artifacts/jniLibs/$ABI/BUILD_INFO.txt << EOF
-          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          BUILD_DATE=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
+          cat > artifacts/jniLibs/$ABI/BUILD_INFO.txt <<BUILD_INFO
+          Build Date: ${BUILD_DATE}
           Rust Target: ${{ matrix.target }}
-          Android ABI: $ABI
+          Android ABI: ${ABI}
           Commit: ${{ github.sha }}
           Branch: ${{ github.ref_name }}
           Workflow: ${{ github.workflow }}
           Run Number: ${{ github.run_number }}
-          EOF
+          BUILD_INFO
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

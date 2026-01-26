@@ -26,9 +26,6 @@ env:
   COMPILE_SDK: '34'
 
 jobs:
-  # ═══════════════════════════════════════════════════════════════════════════
-  # JOB 1: Build Rust Native Libraries
-  # ═══════════════════════════════════════════════════════════════════════════
   build-rust-libs:
     name: Build Rust Libraries
     runs-on: ubuntu-latest
@@ -82,51 +79,41 @@ jobs:
       - name: 🔧 Configure Build Environment
         run: |
           # Export NDK paths
-          export NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          export ANDROID_NDK_HOME="$NDK_HOME"
-          export TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
+          TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64"
           
           # Add to PATH
-          echo "$TOOLCHAIN/bin" >> $GITHUB_PATH
+          echo "${TOOLCHAIN_PATH}/bin" >> $GITHUB_PATH
           
           # Export to GITHUB_ENV for subsequent steps
-          echo "NDK_HOME=$NDK_HOME" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$NDK_HOME" >> $GITHUB_ENV
-          echo "TOOLCHAIN=$TOOLCHAIN" >> $GITHUB_ENV
+          echo "NDK_HOME=${NDK_PATH}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=${NDK_PATH}" >> $GITHUB_ENV
+          echo "TOOLCHAIN=${TOOLCHAIN_PATH}" >> $GITHUB_ENV
           
           # Set CC/CXX/AR for ring and other native crates
-          echo "CC_${{ matrix.target }}=$TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "CXX_${{ matrix.target }}=$TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang++" >> $GITHUB_ENV
-          echo "AR_${{ matrix.target }}=$TOOLCHAIN/bin/llvm-ar" >> $GITHUB_ENV
-          echo "RANLIB_${{ matrix.target }}=$TOOLCHAIN/bin/llvm-ranlib" >> $GITHUB_ENV
-          
-          # Alternative env var formats (some crates check these)
-          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
-          echo "CC_${TARGET_UPPER}=$TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "AR_${TARGET_UPPER}=$TOOLCHAIN/bin/llvm-ar" >> $GITHUB_ENV
+          echo "CC_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CXX_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang++" >> $GITHUB_ENV
+          echo "AR_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/llvm-ranlib" >> $GITHUB_ENV
           
           echo "Environment configured:"
-          echo "NDK_HOME=$NDK_HOME"
-          echo "TOOLCHAIN=$TOOLCHAIN"
+          echo "NDK_HOME=${NDK_PATH}"
+          echo "TOOLCHAIN=${TOOLCHAIN_PATH}"
       
       - name: 🔧 Configure Cargo for Android
         run: |
           mkdir -p .cargo
-          cat > .cargo/config.toml << 'EOF'
+          
+          TOOLCHAIN_BIN="${TOOLCHAIN}/bin"
+          cat > .cargo/config.toml <<CARGO_END
           [target.aarch64-linux-android]
-          ar = "$TOOLCHAIN/bin/llvm-ar"
-          linker = "$TOOLCHAIN/bin/aarch64-linux-android${{ matrix.api }}-clang"
+          ar = "${TOOLCHAIN_BIN}/llvm-ar"
+          linker = "${TOOLCHAIN_BIN}/aarch64-linux-android30-clang"
           
           [target.armv7-linux-androideabi]
-          ar = "$TOOLCHAIN/bin/llvm-ar"
-          linker = "$TOOLCHAIN/bin/armv7a-linux-androideabi${{ matrix.api }}-clang"
-          EOF
-          
-          # Replace $TOOLCHAIN with actual path
-          sed -i "s|\$TOOLCHAIN|$TOOLCHAIN|g" .cargo/config.toml
-          
-          # For API level, use matrix value
-          sed -i "s|\${{ matrix.api }}|${{ matrix.api }}|g" .cargo/config.toml
+          ar = "${TOOLCHAIN_BIN}/llvm-ar"
+          linker = "${TOOLCHAIN_BIN}/armv7a-linux-androideabi30-clang"
+          CARGO_END
           
           echo "Generated .cargo/config.toml:"
           cat .cargo/config.toml
@@ -135,11 +122,11 @@ jobs:
         run: |
           echo "Verifying compiler availability:"
           which ${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
-          ls -la $TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
+          ls -la ${TOOLCHAIN}/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
           
           echo "Verifying ar:"
           which llvm-ar || true
-          ls -la $TOOLCHAIN/bin/llvm-ar || true
+          ls -la ${TOOLCHAIN}/bin/llvm-ar || true
           
           echo "Environment variables:"
           env | grep -E '(CC|AR|NDK|TOOLCHAIN)' | sort
@@ -147,12 +134,6 @@ jobs:
       - name: 🏗️ Build Rust Library
         run: |
           echo "Building for ${{ matrix.target }}..."
-          
-          # Export again for this step (belt and suspenders)
-          export NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          export ANDROID_NDK_HOME="$NDK_HOME"
-          export TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
-          export PATH="$TOOLCHAIN/bin:$PATH"
           
           # Build
           cargo build --release --lib --target ${{ matrix.target }} -vv
@@ -178,9 +159,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   
-  # ═══════════════════════════════════════════════════════════════════════════
-  # JOB 2: Build Android APK
-  # ═══════════════════════════════════════════════════════════════════════════
   build-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
@@ -219,23 +197,13 @@ jobs:
           ls -lh android-app/app/src/main/jniLibs/armeabi-v7a/
           file android-app/app/src/main/jniLibs/armeabi-v7a/libinjecttools.so
       
-      - name: 🔑 Setup Keystore (if release)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android-app/keystore.jks
-          echo "KEYSTORE_PATH=../keystore.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
-      
       - name: 📝 Create local.properties
         run: |
-          cat > android-app/local.properties << EOF
+          cat > android-app/local.properties <<LOCAL_PROPS
           sdk.dir=$ANDROID_HOME
-          EOF
+          LOCAL_PROPS
       
       - name: 🏗️ Build Debug APK
-        if: "!startsWith(github.ref, 'refs/tags/v')"
         working-directory: android-app
         run: |
           chmod +x gradlew
@@ -244,29 +212,6 @@ jobs:
           # Verify output
           ls -lh app/build/outputs/apk/debug/
       
-      - name: 🏗️ Build Release APK
-        if: startsWith(github.ref, 'refs/tags/v')
-        working-directory: android-app
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace --no-daemon
-          
-          # Verify output
-          ls -lh app/build/outputs/apk/release/
-      
-      - name: ✍️ Sign Release APK
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: android-app/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "34.0.0"
-      
       - name: 📦 Rename APK
         run: |
           VERSION_TAG="${GITHUB_REF#refs/tags/}"
@@ -274,13 +219,7 @@ jobs:
             VERSION_TAG="dev-${GITHUB_SHA:0:7}"
           fi
           
-          if [ -f "android-app/app/build/outputs/apk/release/app-release-unsigned-signed.apk" ]; then
-            mv android-app/app/build/outputs/apk/release/app-release-unsigned-signed.apk \
-               InjectTools-${VERSION_TAG}.apk
-          elif [ -f "android-app/app/build/outputs/apk/release/app-release.apk" ]; then
-            mv android-app/app/build/outputs/apk/release/app-release.apk \
-               InjectTools-${VERSION_TAG}.apk
-          elif [ -f "android-app/app/build/outputs/apk/debug/app-debug.apk" ]; then
+          if [ -f "android-app/app/build/outputs/apk/debug/app-debug.apk" ]; then
             mv android-app/app/build/outputs/apk/debug/app-debug.apk \
                InjectTools-${VERSION_TAG}-debug.apk
           fi
@@ -304,76 +243,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   
-  # ═══════════════════════════════════════════════════════════════════════════
-  # JOB 3: Create GitHub Release (on tags)
-  # ═══════════════════════════════════════════════════════════════════════════
-  release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: build-apk
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: 📥 Download APK
-        uses: actions/download-artifact@v4
-        with:
-          name: InjectTools-APK
-          path: artifacts/
-      
-      - name: 📝 Generate Release Notes
-        id: release_notes
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/}"
-          
-          # Extract changelog for this version
-          awk '/^## \['"${VERSION#v}"'\]/,/^## \[/' CHANGELOG.md | \
-            sed '1d;$d' > release_notes.md
-          
-          # Add build info
-          cat >> release_notes.md << EOF
-          
-          ---
-          
-          ## 📦 Downloads
-          
-          - **APK (Universal):** InjectTools-${VERSION}.apk
-            - ARM64 (arm64-v8a)
-            - ARMv7 (armeabi-v7a)
-          
-          ## 📱 Installation
-          
-          1. Download the APK
-          2. Enable "Install from Unknown Sources"
-          3. Install and enjoy!
-          
-          ## ✅ Verified Build
-          
-          - Built: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - Commit: ${GITHUB_SHA:0:7}
-          - Branch: ${GITHUB_REF#refs/heads/}
-          EOF
-      
-      - name: 🚀 Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: artifacts/*.apk
-          body_path: release_notes.md
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-  # ═══════════════════════════════════════════════════════════════════════════
-  # JOB 4: Build Summary
-  # ═══════════════════════════════════════════════════════════════════════════
   summary:
     name: Build Summary
     runs-on: ubuntu-latest

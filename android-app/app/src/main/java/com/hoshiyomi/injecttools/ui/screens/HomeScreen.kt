@@ -6,169 +6,168 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.hoshiyomi.injecttools.core.InjectToolsNative
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
-    var target by remember { mutableStateOf("www.bca.co.id") }
-    var isCheckingTarget by remember { mutableStateOf(false) }
-    var targetStatus by remember { mutableStateOf<TargetStatus>(TargetStatus.Unknown) }
-    
-    val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
-    
+fun HomeScreen(
+    onNavigateToScan: () -> Unit,
+    onNavigateToDiscover: () -> Unit,
+    onNavigateToResults: () -> Unit,
+    onNavigateToSettings: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("InjectTools") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                actions = {
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, "Settings")
+                    }
+                }
             )
         }
-    ) { paddingValues ->
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(scrollState)
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Target Input Card
-            Card(
+            // Welcome Card
+            WelcomeCard()
+            
+            // Quick Actions
+            Text(
+                "Quick Actions",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Target Configuration",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    OutlinedTextField(
-                        value = target,
-                        onValueChange = { target = it },
-                        label = { Text("Target Domain") },
-                        placeholder = { Text("www.example.com") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Default.Language, null) }
-                    )
-                    
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                isCheckingTarget = true
-                                targetStatus = checkTarget(target)
-                                isCheckingTarget = false
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isCheckingTarget && target.isNotBlank()
-                    ) {
-                        if (isCheckingTarget) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text(if (isCheckingTarget) "Checking..." else "Check Target")
-                    }
-                }
+                ActionCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Search,
+                    title = "Scan",
+                    subtitle = "Test subdomains",
+                    onClick = onNavigateToScan
+                )
+                
+                ActionCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.LocationOn,
+                    title = "Discover",
+                    subtitle = "Find subdomains",
+                    onClick = onNavigateToDiscover
+                )
             }
             
-            // Target Status Card
-            if (targetStatus != TargetStatus.Unknown) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when (targetStatus) {
-                            TargetStatus.Online -> MaterialTheme.colorScheme.primaryContainer
-                            TargetStatus.Offline -> MaterialTheme.colorScheme.errorContainer
-                            TargetStatus.Unknown -> MaterialTheme.colorScheme.surfaceVariant
-                        }
-                    )
+            // Results Access
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onNavigateToResults
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = when (targetStatus) {
-                                TargetStatus.Online -> Icons.Default.CheckCircle
-                                TargetStatus.Offline -> Icons.Default.Cancel
-                                TargetStatus.Unknown -> Icons.Default.Help
-                            },
+                            Icons.Default.List,
                             contentDescription = null,
-                            tint = when (targetStatus) {
-                                TargetStatus.Online -> MaterialTheme.colorScheme.primary
-                                TargetStatus.Offline -> MaterialTheme.colorScheme.error
-                                TargetStatus.Unknown -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(32.dp)
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        
                         Column {
                             Text(
-                                text = "Target Status",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            Text(
-                                text = targetStatus.displayName,
+                                "View Results",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
+                            Text(
+                                "Browse scan history",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
+                    Icon(
+                        Icons.Default.KeyboardArrowRight,
+                        contentDescription = null
+                    )
                 }
             }
             
-            // Quick Actions
+            // Features
             Text(
-                text = "Quick Actions",
-                style = MaterialTheme.typography.titleMedium,
+                "Features",
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             
-            ActionCard(
-                title = "Test Subdomain",
-                description = "Test individual Cloudflare subdomain",
-                icon = Icons.Default.BugReport,
-                onClick = { /* TODO: Navigate to scan screen */ }
+            FeatureItem(
+                icon = Icons.Default.CheckCircle,
+                title = "CF Detection",
+                description = "Accurate Cloudflare IP validation"
             )
             
-            ActionCard(
-                title = "Discover Subdomains",
-                description = "Auto-discover from crt.sh & test all",
-                icon = Icons.Default.Search,
-                onClick = { /* TODO: Navigate to discover screen */ }
+            FeatureItem(
+                icon = Icons.Default.Done,
+                title = "TLS Handshake",
+                description = "Native Rust implementation"
             )
             
-            ActionCard(
-                title = "View Results",
-                description = "Browse previous scan results",
-                icon = Icons.Default.History,
-                onClick = { /* TODO: Navigate to results screen */ }
+            FeatureItem(
+                icon = Icons.Default.Star,
+                title = "Fast Scanning",
+                description = "Concurrent async processing"
+            )
+            
+            FeatureItem(
+                icon = Icons.Default.Lock,
+                title = "SELinux Safe",
+                description = "No root or dangerous permissions"
+            )
+        }
+    }
+}
+
+@Composable
+fun WelcomeCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "🔍 Bug Inject Scanner",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                "Discover Cloudflare subdomains vulnerable to HTTP injection attacks",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
     }
@@ -176,62 +175,69 @@ fun HomeScreen() {
 
 @Composable
 fun ActionCard(
-    title: String,
-    description: String,
+    modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
     onClick: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+    ElevatedCard(
+        modifier = modifier,
+        onClick = onClick
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = icon,
+                icon,
                 contentDescription = null,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
-sealed class TargetStatus(val displayName: String) {
-    object Online : TargetStatus("ONLINE")
-    object Offline : TargetStatus("OFFLINE")
-    object Unknown : TargetStatus("UNKNOWN")
-}
-
-suspend fun checkTarget(target: String): TargetStatus = withContext(Dispatchers.IO) {
-    try {
-        val isOnline = InjectToolsNative.checkTargetOnline(target)
-        if (isOnline) TargetStatus.Online else TargetStatus.Offline
-    } catch (e: Exception) {
-        TargetStatus.Unknown
+@Composable
+fun FeatureItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary
+        )
+        Column {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

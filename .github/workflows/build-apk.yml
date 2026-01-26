@@ -1,14 +1,11 @@
 name: Build Android APK
 
-# Workflow untuk build InjectTools Android APK
-# Pure Kotlin implementation - no Rust compilation required
-# Professional CI/CD pipeline dengan caching dan artifact management
-
 on:
   push:
     branches:
       - app
       - main
+      - android-apk-migration
       - 'release/**'
     paths:
       - 'android-app/**'
@@ -33,9 +30,10 @@ on:
           - release
 
 env:
-  GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true'
+  GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true'
   JAVA_VERSION: '17'
   ANDROID_SDK_VERSION: '34'
+  GRADLE_VERSION: '8.5'
 
 jobs:
   validate:
@@ -45,49 +43,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check Android project structure
-        run: |
-          echo "📁 Validating Android project structure..."
-          
-          # Check required files
-          required_files=(
-            "android-app/build.gradle.kts"
-            "android-app/settings.gradle.kts"
-            "android-app/app/build.gradle.kts"
-            "android-app/app/src/main/AndroidManifest.xml"
-          )
-          
-          missing_files=()
-          for file in "${required_files[@]}"; do
-            if [[ ! -f "$file" ]]; then
-              missing_files+=("$file")
-            fi
-          done
-          
-          if [[ ${#missing_files[@]} -gt 0 ]]; then
-            echo "❌ Missing required files:"
-            printf '  - %s\n' "${missing_files[@]}"
-            exit 1
-          fi
-          
-          echo "✅ All required files present"
 
       - name: Extract version info
         id: version
         run: |
           cd android-app/app
-          
-          # Extract version from build.gradle.kts
           VERSION_CODE=$(grep 'versionCode' build.gradle.kts | grep -oP '\d+' | head -1)
           VERSION_NAME=$(grep 'versionName' build.gradle.kts | grep -oP '"[^"]+"' | tr -d '"' | head -1)
-          
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
-          
-          echo "📦 Version: $VERSION_NAME (Code: $VERSION_CODE)"
 
     outputs:
       version_code: ${{ steps.version.outputs.version_code }}
@@ -108,58 +72,28 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
-          cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
         with:
-          api-level: ${{ env.ANDROID_SDK_VERSION }}
-          
-      - name: Grant execute permission for gradlew
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      - name: Generate Gradle Wrapper
         run: |
           cd android-app
+          gradle wrapper --gradle-version ${{ env.GRADLE_VERSION }}
           chmod +x gradlew
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            android-app/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          ls -la gradlew
 
       - name: Build Debug APK
         run: |
           cd android-app
-          echo "🔨 Building Debug APK..."
-          ./gradlew assembleDebug --stacktrace --no-daemon
-          
-          echo "✅ Build completed successfully"
+          ./gradlew assembleDebug --stacktrace
 
-      - name: Verify APK
+      - name: Rename APK
         run: |
           cd android-app/app/build/outputs/apk/debug
-          
-          if [[ ! -f app-debug.apk ]]; then
-            echo "❌ APK not found!"
-            exit 1
-          fi
-          
-          APK_SIZE=$(stat -f%z app-debug.apk 2>/dev/null || stat -c%s app-debug.apk)
-          APK_SIZE_MB=$(echo "scale=2; $APK_SIZE / 1048576" | bc)
-          
-          echo "📦 APK Size: ${APK_SIZE_MB}MB"
-          echo "📱 APK Path: app/build/outputs/apk/debug/app-debug.apk"
-
-      - name: Rename APK with version
-        run: |
-          cd android-app/app/build/outputs/apk/debug
-          VERSION=${{ needs.validate.outputs.version_name }}
-          mv app-debug.apk "InjectTools-${VERSION}-debug.apk"
-          echo "✅ Renamed to: InjectTools-${VERSION}-debug.apk"
+          mv app-debug.apk InjectTools-${{ needs.validate.outputs.version_name }}-debug.apk
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -167,18 +101,6 @@ jobs:
           name: InjectTools-${{ needs.validate.outputs.version_name }}-debug
           path: android-app/app/build/outputs/apk/debug/InjectTools-*.apk
           retention-days: 30
-
-      - name: Generate build report
-        if: always()
-        run: |
-          cd android-app
-          
-          echo "## 📊 Build Summary" > $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Variant:** Debug" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ needs.validate.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version Code:** ${{ needs.validate.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
 
   build-release:
     name: Build Release APK
@@ -195,104 +117,29 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
-          cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
         with:
-          api-level: ${{ env.ANDROID_SDK_VERSION }}
+          gradle-version: ${{ env.GRADLE_VERSION }}
 
-      - name: Grant execute permission for gradlew
+      - name: Generate Gradle Wrapper
         run: |
           cd android-app
+          gradle wrapper --gradle-version ${{ env.GRADLE_VERSION }}
           chmod +x gradlew
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            android-app/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Decode Keystore
-        if: github.event_name == 'release'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          if [[ -n "$KEYSTORE_BASE64" ]]; then
-            echo "🔐 Decoding keystore..."
-            echo $KEYSTORE_BASE64 | base64 -d > android-app/app/release-keystore.jks
-            echo "✅ Keystore decoded"
-          else
-            echo "⚠️  No keystore found, building unsigned release"
-          fi
+          ls -la gradlew
 
       - name: Build Release APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           cd android-app
-          echo "🔨 Building Release APK..."
-          
-          if [[ -f app/release-keystore.jks ]]; then
-            echo "📝 Building signed release"
-            ./gradlew assembleRelease \
-              -Pandroid.injected.signing.store.file=$(pwd)/app/release-keystore.jks \
-              -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-              -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-              -Pandroid.injected.signing.key.password=$KEY_PASSWORD \
-              --stacktrace --no-daemon
-          else
-            echo "📝 Building unsigned release"
-            ./gradlew assembleRelease --stacktrace --no-daemon
-          fi
-          
-          echo "✅ Build completed successfully"
+          ./gradlew assembleRelease --stacktrace
 
-      - name: Verify Release APK
+      - name: Rename APK
         run: |
           cd android-app/app/build/outputs/apk/release
-          
-          APK_FILE=$(ls app-release*.apk | head -1)
-          
-          if [[ ! -f "$APK_FILE" ]]; then
-            echo "❌ Release APK not found!"
-            exit 1
-          fi
-          
-          APK_SIZE=$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE")
-          APK_SIZE_MB=$(echo "scale=2; $APK_SIZE / 1048576" | bc)
-          
-          echo "📦 APK Size: ${APK_SIZE_MB}MB"
-          echo "📱 APK Path: app/build/outputs/apk/release/$APK_FILE"
-          
-          if [[ "$APK_FILE" == *"unsigned"* ]]; then
-            echo "⚠️  APK is UNSIGNED"
-          else
-            echo "✅ APK is SIGNED"
-          fi
-
-      - name: Rename Release APK
-        run: |
-          cd android-app/app/build/outputs/apk/release
-          VERSION=${{ needs.validate.outputs.version_name }}
-          
-          APK_FILE=$(ls app-release*.apk | head -1)
-          
-          if [[ "$APK_FILE" == *"unsigned"* ]]; then
-            NEW_NAME="InjectTools-${VERSION}-release-unsigned.apk"
-          else
-            NEW_NAME="InjectTools-${VERSION}-release.apk"
-          fi
-          
-          mv "$APK_FILE" "$NEW_NAME"
-          echo "✅ Renamed to: $NEW_NAME"
+          APK=$(ls app-release*.apk | head -1)
+          mv "$APK" InjectTools-${{ needs.validate.outputs.version_name }}-release.apk
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
@@ -300,70 +147,3 @@ jobs:
           name: InjectTools-${{ needs.validate.outputs.version_name }}-release
           path: android-app/app/build/outputs/apk/release/InjectTools-*.apk
           retention-days: 90
-
-      - name: Upload to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: android-app/app/build/outputs/apk/release/InjectTools-*.apk
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate build report
-        if: always()
-        run: |
-          cd android-app
-          
-          echo "## 📊 Build Summary" > $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Variant:** Release" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ needs.validate.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version Code:** ${{ needs.validate.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ -f app/release-keystore.jks ]]; then
-            echo "- **Signing:** ✅ Signed" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **Signing:** ⚠️  Unsigned" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
-
-  notify:
-    name: Build Notification
-    runs-on: ubuntu-latest
-    needs: [validate, build-debug, build-release]
-    if: always() && (needs.build-debug.result != 'skipped' || needs.build-release.result != 'skipped')
-    
-    steps:
-      - name: Determine build status
-        id: status
-        run: |
-          DEBUG_STATUS="${{ needs.build-debug.result }}"
-          RELEASE_STATUS="${{ needs.build-release.result }}"
-          
-          if [[ "$DEBUG_STATUS" == "success" ]] || [[ "$RELEASE_STATUS" == "success" ]]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "emoji=✅" >> $GITHUB_OUTPUT
-          else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=❌" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Summary
-        run: |
-          echo "## ${{ steps.status.outputs.emoji }} Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**InjectTools v${{ needs.validate.outputs.version_name }}**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ needs.build-debug.result }}" != "skipped" ]]; then
-            echo "- Debug Build: ${{ needs.build-debug.result }}" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [[ "${{ needs.build-release.result }}" != "skipped" ]]; then
-            echo "- Release Build: ${{ needs.build-release.result }}" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download artifacts from the Actions tab." >> $GITHUB_STEP_SUMMARY

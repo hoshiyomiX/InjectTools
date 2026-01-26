@@ -70,7 +70,7 @@ lazy_static = "1.4"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialouer = "0.11"
 terminal_size = "0.3"
 
 # ═════════════════════════════════════════════════════════════════
@@ -127,6 +127,11 @@ codegen-units = 1     # Single codegen unit
 strip = true          # Strip symbols
 panic = "abort"       # Abort on panic
 
+# ═════════════════════════════════════════════════════════════════
+# PATCH SECTION - Force exact versions for Android compatibility
+# ═════════════════════════════════════════════════════════════════
+
 [patch.crates-io]
-# Force all dependencies to use compatible ring version
-ring = { version = "0.17.8" }
+# Force exact ring version to avoid ambiguity
+# Using =0.17.8 ensures all dependencies use the same version
+ring = { version = "=0.17.8" }

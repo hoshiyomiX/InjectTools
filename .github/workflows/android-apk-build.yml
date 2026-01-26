@@ -38,11 +38,9 @@ jobs:
           - target: aarch64-linux-android
             arch: arm64-v8a
             api: '30'
-            cc_prefix: aarch64-linux-android
           - target: armv7-linux-androideabi
             arch: armeabi-v7a
             api: '30'
-            cc_prefix: armv7a-linux-androideabi
     
     steps:
       - name: 📥 Checkout Repository
@@ -90,13 +88,31 @@ jobs:
           echo "ANDROID_NDK_HOME=${NDK_PATH}" >> $GITHUB_ENV
           echo "TOOLCHAIN=${TOOLCHAIN_PATH}" >> $GITHUB_ENV
           
-          # Set CC/CXX/AR for ring and other native crates
-          echo "CC_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "CXX_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang++" >> $GITHUB_ENV
-          echo "AR_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/llvm-ar" >> $GITHUB_ENV
-          echo "RANLIB_${{ matrix.target }}=${TOOLCHAIN_PATH}/bin/llvm-ranlib" >> $GITHUB_ENV
+          # Determine correct compiler prefix based on target
+          if [[ "${{ matrix.target }}" == "aarch64-linux-android" ]]; then
+            CC_PREFIX="aarch64-linux-android"
+          elif [[ "${{ matrix.target }}" == "armv7-linux-androideabi" ]]; then
+            CC_PREFIX="armv7a-linux-androideabi"  # Note the 'a' after armv7
+          fi
           
-          echo "Environment configured:"
+          # Set environment variables for cc-rs and cargo
+          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+          
+          # Export CC/CXX/AR for the specific target
+          echo "CC_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CXX_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang++" >> $GITHUB_ENV
+          echo "AR_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/llvm-ranlib" >> $GITHUB_ENV
+          
+          # Also set generic CC/AR (fallback)
+          echo "CC=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "AR=${TOOLCHAIN_PATH}/bin/llvm-ar" >> $GITHUB_ENV
+          
+          # Set CARGO_TARGET_*_LINKER
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          
+          echo "Environment configured for ${{ matrix.target }}:"
+          echo "CC_PREFIX=${CC_PREFIX}"
           echo "NDK_HOME=${NDK_PATH}"
           echo "TOOLCHAIN=${TOOLCHAIN_PATH}"
       
@@ -108,11 +124,11 @@ jobs:
           cat > .cargo/config.toml <<CARGO_END
           [target.aarch64-linux-android]
           ar = "${TOOLCHAIN_BIN}/llvm-ar"
-          linker = "${TOOLCHAIN_BIN}/aarch64-linux-android30-clang"
+          linker = "${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang"
           
           [target.armv7-linux-androideabi]
           ar = "${TOOLCHAIN_BIN}/llvm-ar"
-          linker = "${TOOLCHAIN_BIN}/armv7a-linux-androideabi30-clang"
+          linker = "${TOOLCHAIN_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang"
           CARGO_END
           
           echo "Generated .cargo/config.toml:"
@@ -120,36 +136,59 @@ jobs:
       
       - name: 🔍 Verify NDK Setup
         run: |
-          echo "Verifying compiler availability:"
-          which ${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
-          ls -la ${TOOLCHAIN}/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
+          echo "=== Verifying NDK Toolchain ==="
+          echo "PATH: $PATH"
+          echo ""
           
-          echo "Verifying ar:"
-          which llvm-ar || true
-          ls -la ${TOOLCHAIN}/bin/llvm-ar || true
+          echo "Checking toolchain directory:"
+          ls -la ${TOOLCHAIN}/bin/ | grep -E '(clang|ar)' || true
+          echo ""
           
+          # Check for aarch64
+          if [[ "${{ matrix.target }}" == "aarch64-linux-android" ]]; then
+            echo "Checking aarch64-linux-android${{ matrix.api }}-clang:"
+            ls -la ${TOOLCHAIN}/bin/aarch64-linux-android${{ matrix.api }}-clang || echo "Not found!"
+            which aarch64-linux-android${{ matrix.api }}-clang || echo "Not in PATH!"
+          fi
+          
+          # Check for armv7a (note the 'a')
+          if [[ "${{ matrix.target }}" == "armv7-linux-androideabi" ]]; then
+            echo "Checking armv7a-linux-androideabi${{ matrix.api }}-clang:"
+            ls -la ${TOOLCHAIN}/bin/armv7a-linux-androideabi${{ matrix.api }}-clang || echo "Not found!"
+            which armv7a-linux-androideabi${{ matrix.api }}-clang || echo "Not in PATH!"
+          fi
+          
+          echo ""
+          echo "Checking llvm-ar:"
+          ls -la ${TOOLCHAIN}/bin/llvm-ar || echo "Not found!"
+          which llvm-ar || echo "Not in PATH!"
+          
+          echo ""
           echo "Environment variables:"
-          env | grep -E '(CC|AR|NDK|TOOLCHAIN)' | sort
+          env | grep -E '(CC|AR|NDK|TOOLCHAIN|CARGO_TARGET)' | sort
       
       - name: 🏗️ Build Rust Library
         run: |
           echo "Building for ${{ matrix.target }}..."
           
-          # Build
+          # Build with verbose output
           cargo build --release --lib --target ${{ matrix.target }} -vv
           
           # Verify output
+          echo ""
           echo "Build complete. Checking output:"
           ls -lh target/${{ matrix.target }}/release/libinjecttools.so
           file target/${{ matrix.target }}/release/libinjecttools.so
           
           # Check size (should be reasonable, not suspiciously small)
           SIZE=$(stat -c%s target/${{ matrix.target }}/release/libinjecttools.so)
-          echo "Library size: $SIZE bytes"
+          echo "Library size: $SIZE bytes ($(numfmt --to=iec-i --suffix=B $SIZE))"
           if [ $SIZE -lt 100000 ]; then
-            echo "❌ Warning: Library suspiciously small!"
+            echo "❌ Warning: Library suspiciously small (<100KB)!"
             exit 1
           fi
+          
+          echo "✅ Library build successful!"
       
       - name: 📤 Upload Native Library
         uses: actions/upload-artifact@v4
@@ -193,6 +232,7 @@ jobs:
           ls -lh android-app/app/src/main/jniLibs/arm64-v8a/
           file android-app/app/src/main/jniLibs/arm64-v8a/libinjecttools.so
           
+          echo ""
           echo "ARMv7 library:"
           ls -lh android-app/app/src/main/jniLibs/armeabi-v7a/
           file android-app/app/src/main/jniLibs/armeabi-v7a/libinjecttools.so
@@ -210,6 +250,7 @@ jobs:
           ./gradlew assembleDebug --stacktrace --no-daemon
           
           # Verify output
+          echo ""
           ls -lh app/build/outputs/apk/debug/
       
       - name: 📦 Rename APK
@@ -232,7 +273,13 @@ jobs:
             ls -lh "$APK_FILE"
             
             # Show APK details
-            unzip -l "$APK_FILE" | grep -E '(lib/|AndroidManifest.xml)' || true
+            echo ""
+            echo "Native libraries in APK:"
+            unzip -l "$APK_FILE" | grep -E 'lib/.*\.so' || echo "No .so files found!"
+            
+            echo ""
+            echo "Manifest:"
+            unzip -l "$APK_FILE" | grep AndroidManifest.xml || true
           fi
       
       - name: 📤 Upload APK Artifact
@@ -262,3 +309,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Ref:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.build-rust-libs.result }}" == "success" && "${{ needs.build-apk.result }}" == "success" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ All builds completed successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "Download APK from Artifacts above." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Build failed. Check logs above." >> $GITHUB_STEP_SUMMARY
+          fi

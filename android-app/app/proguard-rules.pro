@@ -1,19 +1,21 @@
-# Add project specific ProGuard rules here.
+# InjectTools ProGuard Rules
 
 # Keep JNI methods
 -keepclasseswithmembernames class * {
     native <methods>;
 }
 
-# Keep InjectToolsNative
+# Keep InjectToolsNative class
 -keep class com.hoshiyomi.injecttools.core.InjectToolsNative {
     *;
 }
 
+# Keep data classes for serialization
+-keep class com.hoshiyomi.injecttools.data.** { *; }
+
 # Kotlin serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
-
 -keepclassmembers class kotlinx.serialization.json.** {
     *** Companion;
 }
@@ -21,10 +23,10 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Keep data classes
--keep,allowobfuscation,allowshrinking class com.hoshiyomi.injecttools.** {
-    <fields>;
-}
-
-# Compose
+# Keep Compose
 -keep class androidx.compose.** { *; }
+-keep class androidx.navigation.** { *; }
+
+# General Android
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

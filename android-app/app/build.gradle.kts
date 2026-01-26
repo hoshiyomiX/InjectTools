@@ -7,25 +7,24 @@ plugins {
 android {
     namespace = "com.hoshiyomi.injecttools"
     compileSdk = 34
-    
+
     defaultConfig {
         applicationId = "com.hoshiyomi.injecttools"
-        minSdk = 30
+        minSdk = 26  // Android 8.0+
         targetSdk = 34
         versionCode = 1
         versionName = "4.0.0-alpha"
-        
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        
         vectorDrawables {
             useSupportLibrary = true
         }
-        
+
         ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
-    
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -34,22 +33,18 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            
-            // Signing config (use debug for now, configure later)
-            signingConfig = signingConfigs.getByName("debug")
         }
-        
         debug {
+            isMinifyEnabled = false
             applicationIdSuffix = ".debug"
-            isDebuggable = true
         }
     }
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    
+
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf(
@@ -57,16 +52,16 @@ android {
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
         )
     }
-    
+
     buildFeatures {
         compose = true
         buildConfig = true
     }
-    
+
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10"
+        kotlinCompilerExtensionVersion = "1.5.8"
     }
-    
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -79,40 +74,38 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-    
-    // Jetpack Compose
-    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
+
+    // Compose BOM
+    val composeBom = platform("androidx.compose:compose-bom:2024.01.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
-    
+    implementation("androidx.navigation:navigation-compose:2.7.6")
+
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    
+
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
-    
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
     // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    
-    // Permissions
-    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
-    
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+
+    // DataStore (for preferences)
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    
-    // Debug
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

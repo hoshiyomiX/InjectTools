@@ -5,10 +5,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::process::Command;
 use tokio::net::TcpStream;
+use serde::{Serialize, Deserialize};
 
 use crate::dns;
+use crate::http_client::HttpClient;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
     pub subdomain: String,
     pub ip: String,
@@ -72,9 +74,12 @@ fn is_cloudflare_ip(ip: &str) -> bool {
     false
 }
 
-// Curl based SSL Handshake to match V17 "Best for TLS Fingerprint"
+// =============================================================================
+// CURL-BASED FUNCTIONS (Termux Only)
+// =============================================================================
+
+#[cfg(unix)]
 fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
-    // curl -s -I --http1.1 --resolve "sni:443:ip" "https://sni/" --connect-timeout 5 -k
     let output = Command::new("curl")
         .arg("-s")
         .arg("-I")
@@ -93,7 +98,6 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let combined = format!("{}{}", stdout, stderr);
             
-            // V17 Check: if [[ "$out" == *"HTTP/"* ]] || [[ "$out" == *"server:"* ]]; then echo "ESTABLISHED"
             if combined.contains("HTTP/") || combined.to_lowercase().contains("server:") {
                 "ESTABLISHED".to_string()
             } else {
@@ -108,6 +112,7 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
     }
 }
 
+#[cfg(unix)]
 async fn check_target_status(target: &str) -> String {
     // 1. Resolve Target
     let tip = match dns::resolve_domain_first(target).await {
@@ -122,7 +127,6 @@ async fn check_target_status(target: &str) -> String {
     }
 
     // 3. Fallback HTTP
-    // curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "http://target/"
     let output = Command::new("curl")
         .arg("-s")
         .arg("-o")
@@ -145,10 +149,155 @@ async fn check_target_status(target: &str) -> String {
 }
 
 // =============================================================================
-// MAIN VALIDATION LOGIC (Menu 1: Test Single)
+// NATIVE FUNCTIONS (Android/Cross-platform)
 // =============================================================================
 
-/// Test single target connection (Used in Menu 4: Change Target)
+/// Native HTTP-based TLS handshake check (no curl)
+pub async fn ssl_handshake_native(ip: &str, sni: &str) -> bool {
+    let client = HttpClient::new();
+    client.check_tls_handshake(sni, ip).await
+}
+
+/// Native target status check (no curl)
+pub async fn check_target_status_native(target: &str) -> String {
+    // 1. Resolve Target
+    let tip = match dns::resolve_domain_first(target).await {
+        Ok(ip) => ip,
+        Err(_) => return "UNKNOWN|DNS_FAIL".to_string(),
+    };
+
+    // 2. Check reachability
+    let client = HttpClient::new();
+    let (is_reachable, status) = client.check_target_reachable(target).await;
+    
+    if is_reachable {
+        format!("ONLINE|{}", status)
+    } else {
+        format!("UNREACHABLE|{}", status)
+    }
+}
+
+/// Check if target is online (simplified)
+pub async fn check_target_online_native(target: &str) -> bool {
+    let status = check_target_status_native(target).await;
+    status.starts_with("ONLINE")
+}
+
+/// Test single subdomain (native, no curl)
+pub async fn test_single_native(
+    target: &str,
+    subdomain: &str,
+    _timeout: u64
+) -> ScanResult {
+    let mut result = ScanResult {
+        subdomain: subdomain.to_string(),
+        ip: String::new(),
+        is_cloudflare: false,
+        is_working: false,
+        is_restricted: false,
+        status_code: None,
+        cf_ray: None,
+        error_msg: None,
+        error_source: None,
+    };
+
+    // 1. Resolve Subdomain
+    let sub_ip = match dns::resolve_domain_first(subdomain).await {
+        Ok(ip) => ip,
+        Err(_) => {
+            result.error_msg = Some("DNS resolution failed".to_string());
+            return result;
+        }
+    };
+    result.ip = sub_ip.clone();
+
+    // 2. Environment Checks
+    if is_fake_dns_ip(&sub_ip) {
+        result.error_msg = Some("Fake DNS IP detected (VPN)".to_string());
+        return result;
+    }
+    if is_private_ip(&sub_ip) {
+        result.error_msg = Some("Private IP address".to_string());
+        return result;
+    }
+    if !is_cloudflare_ip(&sub_ip) {
+        result.error_msg = Some("Not a Cloudflare IP".to_string());
+        return result;
+    }
+
+    result.is_cloudflare = true;
+
+    // 3. Latency Check
+    let start = Instant::now();
+    let tcp_check = tokio::time::timeout(
+        Duration::from_secs(2),
+        TcpStream::connect((sub_ip.as_str(), 443))
+    ).await;
+    let latency = start.elapsed().as_millis();
+
+    match tcp_check {
+        Ok(Ok(_)) => {
+            if latency < 5 {
+                result.error_msg = Some("VPN detected (latency <5ms)".to_string());
+                return result;
+            }
+        },
+        _ => {
+            result.error_msg = Some("TCP port 443 blocked".to_string());
+            return result;
+        }
+    }
+
+    // 4. TLS Handshake
+    if !ssl_handshake_native(&sub_ip, target).await {
+        result.error_msg = Some("TLS handshake failed".to_string());
+        return result;
+    }
+
+    // 5. End-to-End HTTP Check
+    let client = HttpClient::new();
+    let url = format!("https://{}/", target);
+    
+    match client.head_with_ip(&url, target, &sub_ip).await {
+        Ok((status_code, has_cf_ray)) => {
+            result.status_code = Some(status_code);
+            
+            if has_cf_ray {
+                result.cf_ray = Some("Yes".to_string());
+                result.is_working = true;
+            } else {
+                result.error_msg = Some("No CF-Ray header found".to_string());
+            }
+        },
+        Err(e) => {
+            result.error_msg = Some(format!("HTTP request failed: {}", e));
+        }
+    }
+
+    result
+}
+
+/// Batch test (native, no curl)
+pub async fn batch_test_native(
+    target: &str,
+    subdomains: &[String],
+    timeout: u64
+) -> Vec<ScanResult> {
+    let mut results = Vec::new();
+    
+    for subdomain in subdomains {
+        let result = test_single_native(target, subdomain, timeout).await;
+        results.push(result);
+    }
+    
+    results
+}
+
+// =============================================================================
+// ORIGINAL FUNCTIONS (Termux CLI)
+// =============================================================================
+
+#[cfg(unix)]
 pub async fn test_target(target: &str, _timeout: u64) -> anyhow::Result<()> {
     let status_raw = check_target_status(target).await;
     let parts: Vec<&str> = status_raw.split('|').collect();
@@ -164,6 +313,7 @@ pub async fn test_target(target: &str, _timeout: u64) -> anyhow::Result<()> {
     }
 }
 
+#[cfg(unix)]
 pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow::Result<()> {
     println!("\n{}", "==================== CHECKING ====================".blue());
     println!("Subdomain : {}", subdomain.yellow());
@@ -194,8 +344,7 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         return Ok(());
     }
 
-    // 3. Latency Check (V17: <5ms detection for VPN Interception)
-    // Using 2s timeout as per V17 script (s.settimeout(2) in python snippet)
+    // 3. Latency Check
     let start = Instant::now();
     let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((sub_ip.as_str(), 443))).await;
     let latency = start.elapsed().as_millis();
@@ -208,26 +357,22 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
             }
         },
         _ => {
-            // Timeout or Error -> TCP Blocked
             print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_TCP_BLOCKED");
             return Ok(());
         }
     }
 
-    // 4. Test Handshake (V17 Logic)
+    // 4. Test Handshake
     let ssl_status = ssl_handshake_curl(&sub_ip, target);
 
     if ssl_status != "ESTABLISHED" {
-        // Handshake Failed
         let ts_full = check_target_status(target).await;
         let parts: Vec<&str> = ts_full.split('|').collect();
         let t_status = parts.get(0).unwrap_or(&"UNKNOWN");
-        let _t_note = parts.get(1).unwrap_or(&""); // Fixed: Prefixed with underscore to suppress warning
 
         let bug_note = if *t_status == "UNREACHABLE" {
             "DIRECT_CONNECTION_BLOCKED".to_string()
         } else {
-            // Target is alive/online, so it's a compatibility issue
             if ssl_status.contains("refused") {
                 "BUG_NOT_COMPATIBLE(CONN_REFUSED)".to_string()
             } else if ssl_status.contains("reset") {
@@ -243,8 +388,7 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         return Ok(());
     }
 
-    // 5. Handshake Success -> Check End-to-End HTTP
-    // curl -s -I --http1.1 --resolve ...
+    // 5. End-to-End HTTP
     let output = Command::new("curl")
         .arg("-s")
         .arg("-I")
@@ -263,7 +407,6 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
     if let Ok(out) = output {
         let stdout = String::from_utf8_lossy(&out.stdout).to_string();
         
-        // Parse HTTP Code
         if let Some(line) = stdout.lines().next() {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 2 {
@@ -271,7 +414,6 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
             }
         }
         
-        // Parse CF-Ray
         if stdout.to_lowercase().contains("cf-ray:") {
             cf_ray = true;
         }
@@ -292,13 +434,14 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
     Ok(())
 }
 
+#[cfg(unix)]
 fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_status: &str, note: &str) {
     println!("");
     println!("{}", "==================== RESULT ====================".blue());
     
     let t_color = match t_status {
         "ONLINE" => "green",
-        "UNREACHABLE" => "red", // V17 uses Red for Unreachable
+        "UNREACHABLE" => "red",
         "OFFLINE" => "red",
         _ => "yellow",
     };
@@ -312,10 +455,7 @@ fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_statu
     println!("");
 }
 
-// =============================================================================
-// BATCH TEST (Menu 2: Updated to match V17 Logic simplified)
-// =============================================================================
-
+#[cfg(unix)]
 pub async fn batch_test(
     target: &str,
     subdomains: &[String],
@@ -360,7 +500,6 @@ pub async fn batch_test(
             Ok(ip) => {
                 scan_res.ip = ip.clone();
                 
-                // V17 Env Checks
                 if is_fake_dns_ip(&ip) {
                     scan_res.error_msg = Some("Fake DNS".to_string());
                 } else if is_private_ip(&ip) {
@@ -370,7 +509,6 @@ pub async fn batch_test(
                 } else {
                     scan_res.is_cloudflare = true;
 
-                    // Latency Check (<5ms check included)
                     let start = Instant::now();
                     let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((ip.as_str(), 443))).await;
                     let latency = start.elapsed().as_millis();
@@ -385,10 +523,8 @@ pub async fn batch_test(
                     }
 
                     if tcp_ok {
-                         // V17 Handshake
                          let ssl_res = ssl_handshake_curl(&ip, target);
                          if ssl_res == "ESTABLISHED" {
-                             // End-to-End
                              let output = Command::new("curl")
                                 .arg("-s")
                                 .arg("-I")

@@ -1,0 +1,324 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - android-apk-migration
+      - main
+      - app
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - app
+      - main
+  workflow_dispatch:
+
+env:
+  # Rust configuration
+  RUST_VERSION: stable
+  NDK_VERSION: r26d
+  
+  # Android configuration
+  JAVA_VERSION: '17'
+  MIN_SDK: '30'
+  TARGET_SDK: '34'
+  COMPILE_SDK: '34'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 1: Build Rust Native Libraries
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-rust-libs:
+    name: Build Rust Libraries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-linux-android
+          - armv7-linux-androideabi
+        include:
+          - target: aarch64-linux-android
+            arch: arm64-v8a
+            api: '30'
+          - target: armv7-linux-androideabi
+            arch: armeabi-v7a
+            api: '30'
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: 🦀 Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target }}
+      
+      - name: 📦 Restore Cargo Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-
+      
+      - name: 📱 Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+          local-cache: true
+      
+      - name: 🔧 Configure Cargo for Android
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml << EOF
+          [target.aarch64-linux-android]
+          ar = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          linker = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ matrix.api }}-clang"
+          
+          [target.armv7-linux-androideabi]
+          ar = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          linker = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi${{ matrix.api }}-clang"
+          EOF
+      
+      - name: 🏗️ Build Rust Library
+        run: |
+          echo "Building for ${{ matrix.target }}..."
+          cargo build --release --lib --target ${{ matrix.target }}
+          
+          # Verify output
+          ls -lh target/${{ matrix.target }}/release/libinjecttools.so
+          file target/${{ matrix.target }}/release/libinjecttools.so
+      
+      - name: 📤 Upload Native Library
+        uses: actions/upload-artifact@v4
+        with:
+          name: libinjecttools-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/libinjecttools.so
+          if-no-files-found: error
+          retention-days: 7
+  
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 2: Build Android APK
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    needs: build-rust-libs
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: ☕ Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+      
+      - name: 📥 Download ARM64 Library
+        uses: actions/download-artifact@v4
+        with:
+          name: libinjecttools-arm64-v8a
+          path: android-app/app/src/main/jniLibs/arm64-v8a/
+      
+      - name: 📥 Download ARMv7 Library
+        uses: actions/download-artifact@v4
+        with:
+          name: libinjecttools-armeabi-v7a
+          path: android-app/app/src/main/jniLibs/armeabi-v7a/
+      
+      - name: 🔍 Verify Native Libraries
+        run: |
+          echo "ARM64 library:"
+          ls -lh android-app/app/src/main/jniLibs/arm64-v8a/
+          file android-app/app/src/main/jniLibs/arm64-v8a/libinjecttools.so
+          
+          echo "ARMv7 library:"
+          ls -lh android-app/app/src/main/jniLibs/armeabi-v7a/
+          file android-app/app/src/main/jniLibs/armeabi-v7a/libinjecttools.so
+      
+      - name: 🔑 Setup Keystore (if release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android-app/keystore.jks
+          echo "KEYSTORE_PATH=../keystore.jks" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+      
+      - name: 📝 Create local.properties
+        run: |
+          cat > android-app/local.properties << EOF
+          sdk.dir=$ANDROID_HOME
+          EOF
+      
+      - name: 🏗️ Build Debug APK
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        working-directory: android-app
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon
+          
+          # Verify output
+          ls -lh app/build/outputs/apk/debug/
+      
+      - name: 🏗️ Build Release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: android-app
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace --no-daemon
+          
+          # Verify output
+          ls -lh app/build/outputs/apk/release/
+      
+      - name: ✍️ Sign Release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: android-app/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: "34.0.0"
+      
+      - name: 📦 Rename APK
+        run: |
+          VERSION_TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$VERSION_TAG" == refs/heads/* ]]; then
+            VERSION_TAG="dev-${GITHUB_SHA:0:7}"
+          fi
+          
+          if [ -f "android-app/app/build/outputs/apk/release/app-release-unsigned-signed.apk" ]; then
+            mv android-app/app/build/outputs/apk/release/app-release-unsigned-signed.apk \
+               InjectTools-${VERSION_TAG}.apk
+          elif [ -f "android-app/app/build/outputs/apk/release/app-release.apk" ]; then
+            mv android-app/app/build/outputs/apk/release/app-release.apk \
+               InjectTools-${VERSION_TAG}.apk
+          elif [ -f "android-app/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            mv android-app/app/build/outputs/apk/debug/app-debug.apk \
+               InjectTools-${VERSION_TAG}-debug.apk
+          fi
+      
+      - name: 📊 APK Info
+        run: |
+          APK_FILE=$(find . -name "InjectTools-*.apk" -type f | head -n 1)
+          if [ -f "$APK_FILE" ]; then
+            echo "APK File: $APK_FILE"
+            ls -lh "$APK_FILE"
+            
+            # Show APK details
+            unzip -l "$APK_FILE" | grep -E '(lib/|AndroidManifest.xml)' || true
+          fi
+      
+      - name: 📤 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InjectTools-APK
+          path: InjectTools-*.apk
+          if-no-files-found: error
+          retention-days: 30
+  
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 3: Create GitHub Release (on tags)
+  # ═══════════════════════════════════════════════════════════════════════════
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-apk
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 📥 Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: InjectTools-APK
+          path: artifacts/
+      
+      - name: 📝 Generate Release Notes
+        id: release_notes
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          
+          # Extract changelog for this version
+          awk '/^## \['"${VERSION#v}"'\]/,/^## \[/' CHANGELOG.md | \
+            sed '1d;$d' > release_notes.md
+          
+          # Add build info
+          cat >> release_notes.md << EOF
+          
+          ---
+          
+          ## 📦 Downloads
+          
+          - **APK (Universal):** InjectTools-${VERSION}.apk
+            - ARM64 (arm64-v8a)
+            - ARMv7 (armeabi-v7a)
+          
+          ## 📱 Installation
+          
+          1. Download the APK
+          2. Enable "Install from Unknown Sources"
+          3. Install and enjoy!
+          
+          ## ✅ Verified Build
+          
+          - Built: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - Commit: ${GITHUB_SHA:0:7}
+          - Branch: ${GITHUB_REF#refs/heads/}
+          EOF
+      
+      - name: 🚀 Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*.apk
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 4: Build Summary
+  # ═══════════════════════════════════════════════════════════════════════════
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [build-rust-libs, build-apk]
+    if: always()
+    
+    steps:
+      - name: 📊 Generate Summary
+        run: |
+          echo "## 🏗️ Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust ARM64 | ${{ needs.build-rust-libs.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust ARMv7 | ${{ needs.build-rust-libs.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android APK | ${{ needs.build-apk.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Ref:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY

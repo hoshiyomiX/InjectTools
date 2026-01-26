@@ -38,9 +38,11 @@ jobs:
           - target: aarch64-linux-android
             arch: arm64-v8a
             api: '30'
+            cc_prefix: aarch64-linux-android
           - target: armv7-linux-androideabi
             arch: armeabi-v7a
             api: '30'
+            cc_prefix: armv7a-linux-androideabi
     
     steps:
       - name: 📥 Checkout Repository
@@ -79,56 +81,93 @@ jobs:
           # Export NDK paths
           NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
           TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64"
+          TOOLCHAIN_BIN="${TOOLCHAIN_PATH}/bin"
+          
+          echo "=== NDK Configuration ==="
+          echo "NDK_PATH: ${NDK_PATH}"
+          echo "TOOLCHAIN_PATH: ${TOOLCHAIN_PATH}"
+          echo "TOOLCHAIN_BIN: ${TOOLCHAIN_BIN}"
+          echo ""
           
           # Add to PATH
-          echo "${TOOLCHAIN_PATH}/bin" >> $GITHUB_PATH
+          echo "${TOOLCHAIN_BIN}" >> $GITHUB_PATH
           
           # Export to GITHUB_ENV for subsequent steps
           echo "NDK_HOME=${NDK_PATH}" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=${NDK_PATH}" >> $GITHUB_ENV
           echo "TOOLCHAIN=${TOOLCHAIN_PATH}" >> $GITHUB_ENV
+          echo "TOOLCHAIN_BIN=${TOOLCHAIN_BIN}" >> $GITHUB_ENV
           
-          # Determine correct compiler prefix based on target
-          if [[ "${{ matrix.target }}" == "aarch64-linux-android" ]]; then
-            CC_PREFIX="aarch64-linux-android"
-          elif [[ "${{ matrix.target }}" == "armv7-linux-androideabi" ]]; then
-            CC_PREFIX="armv7a-linux-androideabi"  # Note the 'a' after armv7
-          fi
+          # Determine correct compiler name
+          CC_NAME="${{ matrix.cc_prefix }}${{ matrix.api }}-clang"
+          CXX_NAME="${{ matrix.cc_prefix }}${{ matrix.api }}-clang++"
           
-          # Set environment variables for cc-rs and cargo
+          echo "CC_NAME=${CC_NAME}" >> $GITHUB_ENV
+          echo "CXX_NAME=${CXX_NAME}" >> $GITHUB_ENV
+          
+          # Create normalized environment variable names for cc-rs
           TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
           
-          # Export CC/CXX/AR for the specific target
-          echo "CC_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "CXX_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang++" >> $GITHUB_ENV
-          echo "AR_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/llvm-ar" >> $GITHUB_ENV
-          echo "RANLIB_${TARGET_UPPER}=${TOOLCHAIN_PATH}/bin/llvm-ranlib" >> $GITHUB_ENV
+          # Set TARGET_CC/AR (cc-rs compatibility)
+          echo "TARGET_CC=${TOOLCHAIN_BIN}/${CC_NAME}" >> $GITHUB_ENV
+          echo "TARGET_CXX=${TOOLCHAIN_BIN}/${CXX_NAME}" >> $GITHUB_ENV
+          echo "TARGET_AR=${TOOLCHAIN_BIN}/llvm-ar" >> $GITHUB_ENV
           
-          # Also set generic CC/AR (fallback)
-          echo "CC=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang" >> $GITHUB_ENV
-          echo "AR=${TOOLCHAIN_PATH}/bin/llvm-ar" >> $GITHUB_ENV
+          # Set CC_<target>/AR_<target> (specific target override)
+          echo "CC_${TARGET_UPPER}=${TOOLCHAIN_BIN}/${CC_NAME}" >> $GITHUB_ENV
+          echo "CXX_${TARGET_UPPER}=${TOOLCHAIN_BIN}/${CXX_NAME}" >> $GITHUB_ENV
+          echo "AR_${TARGET_UPPER}=${TOOLCHAIN_BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_${TARGET_UPPER}=${TOOLCHAIN_BIN}/llvm-ranlib" >> $GITHUB_ENV
+          
+          # Set generic CC/AR (fallback for ring and other crates)
+          echo "CC=${TOOLCHAIN_BIN}/${CC_NAME}" >> $GITHUB_ENV
+          echo "CXX=${TOOLCHAIN_BIN}/${CXX_NAME}" >> $GITHUB_ENV
+          echo "AR=${TOOLCHAIN_BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB=${TOOLCHAIN_BIN}/llvm-ranlib" >> $GITHUB_ENV
           
           # Set CARGO_TARGET_*_LINKER
-          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${TOOLCHAIN_PATH}/bin/${CC_PREFIX}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${TOOLCHAIN_BIN}/${CC_NAME}" >> $GITHUB_ENV
+          echo "CARGO_TARGET_${TARGET_UPPER}_AR=${TOOLCHAIN_BIN}/llvm-ar" >> $GITHUB_ENV
           
-          echo "Environment configured for ${{ matrix.target }}:"
-          echo "CC_PREFIX=${CC_PREFIX}"
-          echo "NDK_HOME=${NDK_PATH}"
-          echo "TOOLCHAIN=${TOOLCHAIN_PATH}"
+          echo ""
+          echo "=== Environment configured ==="
+          echo "TARGET_UPPER: ${TARGET_UPPER}"
+          echo "CC_NAME: ${CC_NAME}"
+      
+      - name: 🔗 Create Compiler Symlinks (ring compatibility)
+        run: |
+          # ring crate sometimes looks for generic arm-linux-androideabi-clang
+          # Create symlinks to actual compiler
+          
+          cd ${TOOLCHAIN_BIN}
+          
+          # For ARMv7, ring might look for arm-linux-androideabi-clang
+          if [[ "${{ matrix.target }}" == "armv7-linux-androideabi" ]]; then
+            if [ ! -f "arm-linux-androideabi-clang" ]; then
+              echo "Creating symlink: arm-linux-androideabi-clang -> ${CC_NAME}"
+              ln -sf "${CC_NAME}" arm-linux-androideabi-clang
+              ln -sf "${CXX_NAME}" arm-linux-androideabi-clang++
+            fi
+          fi
+          
+          echo "Toolchain bin contents:"
+          ls -la | grep -E '(clang|ar)' | head -20
       
       - name: 🔧 Configure Cargo for Android
         run: |
           mkdir -p .cargo
           
-          TOOLCHAIN_BIN="${TOOLCHAIN}/bin"
-          cat > .cargo/config.toml <<CARGO_END
+          cat > .cargo/config.toml <<'CARGO_END'
           [target.aarch64-linux-android]
-          ar = "${TOOLCHAIN_BIN}/llvm-ar"
-          linker = "${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang"
+          ar = "llvm-ar"
+          linker = "aarch64-linux-android30-clang"
           
           [target.armv7-linux-androideabi]
-          ar = "${TOOLCHAIN_BIN}/llvm-ar"
-          linker = "${TOOLCHAIN_BIN}/armv7a-linux-androideabi${{ matrix.api }}-clang"
+          ar = "llvm-ar"
+          linker = "armv7a-linux-androideabi30-clang"
+          
+          [build]
+          target-dir = "target"
           CARGO_END
           
           echo "Generated .cargo/config.toml:"
@@ -140,47 +179,55 @@ jobs:
           echo "PATH: $PATH"
           echo ""
           
-          echo "Checking toolchain directory:"
-          ls -la ${TOOLCHAIN}/bin/ | grep -E '(clang|ar)' || true
-          echo ""
-          
-          # Check for aarch64
-          if [[ "${{ matrix.target }}" == "aarch64-linux-android" ]]; then
-            echo "Checking aarch64-linux-android${{ matrix.api }}-clang:"
-            ls -la ${TOOLCHAIN}/bin/aarch64-linux-android${{ matrix.api }}-clang || echo "Not found!"
-            which aarch64-linux-android${{ matrix.api }}-clang || echo "Not in PATH!"
-          fi
-          
-          # Check for armv7a (note the 'a')
-          if [[ "${{ matrix.target }}" == "armv7-linux-androideabi" ]]; then
-            echo "Checking armv7a-linux-androideabi${{ matrix.api }}-clang:"
-            ls -la ${TOOLCHAIN}/bin/armv7a-linux-androideabi${{ matrix.api }}-clang || echo "Not found!"
-            which armv7a-linux-androideabi${{ matrix.api }}-clang || echo "Not in PATH!"
-          fi
+          echo "=== Checking Compiler ==="
+          which ${CC_NAME} || echo "❌ ${CC_NAME} not in PATH!"
+          ls -la ${TOOLCHAIN_BIN}/${CC_NAME} || echo "❌ ${CC_NAME} not found!"
           
           echo ""
-          echo "Checking llvm-ar:"
-          ls -la ${TOOLCHAIN}/bin/llvm-ar || echo "Not found!"
-          which llvm-ar || echo "Not in PATH!"
+          echo "=== Checking AR ==="
+          which llvm-ar || echo "❌ llvm-ar not in PATH!"
+          ls -la ${TOOLCHAIN_BIN}/llvm-ar || echo "❌ llvm-ar not found!"
           
           echo ""
-          echo "Environment variables:"
-          env | grep -E '(CC|AR|NDK|TOOLCHAIN|CARGO_TARGET)' | sort
+          echo "=== Testing Compiler ==="
+          ${TOOLCHAIN_BIN}/${CC_NAME} --version || echo "❌ Compiler test failed!"
+          
+          echo ""
+          echo "=== Environment Variables ==="
+          env | grep -E '(CC|CXX|AR|RANLIB|NDK|TOOLCHAIN|CARGO_TARGET)' | sort
       
       - name: 🏗️ Build Rust Library
         run: |
           echo "Building for ${{ matrix.target }}..."
+          echo ""
+          
+          # Verify environment one more time
+          echo "Build environment:"
+          echo "  CC=${CC}"
+          echo "  TARGET_CC=${TARGET_CC}"
+          echo "  AR=${AR}"
+          echo "  CARGO_TARGET linker: $(echo ${{ matrix.target }} | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
+          echo ""
           
           # Build with verbose output
-          cargo build --release --lib --target ${{ matrix.target }} -vv
+          cargo build --release --lib --target ${{ matrix.target }} -vv 2>&1 | tee build.log
+          
+          # Check if build succeeded
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "❌ Build failed!"
+            echo ""
+            echo "=== Last 50 lines of build log ==="
+            tail -50 build.log
+            exit 1
+          fi
           
           # Verify output
           echo ""
-          echo "Build complete. Checking output:"
+          echo "✅ Build complete. Checking output:"
           ls -lh target/${{ matrix.target }}/release/libinjecttools.so
           file target/${{ matrix.target }}/release/libinjecttools.so
           
-          # Check size (should be reasonable, not suspiciously small)
+          # Check size
           SIZE=$(stat -c%s target/${{ matrix.target }}/release/libinjecttools.so)
           echo "Library size: $SIZE bytes ($(numfmt --to=iec-i --suffix=B $SIZE))"
           if [ $SIZE -lt 100000 ]; then

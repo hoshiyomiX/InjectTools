@@ -30,13 +30,16 @@ crate-type = ["cdylib", "rlib"]
 # ═════════════════════════════════════════════════════════════════
 
 # Hyper for HTTP/HTTPS - replaces curl for Android compatibility
-hyper = { version = "1.1", features = ["client", "http1", "http2"] }
+hy per = { version = "1.1", features = ["client", "http1", "http2"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "native-tokio", "ring", "tls12"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
 http-body-util = "0.1"
 
 # Reqwest - Keep for crt.sh API (lighter than hyper for simple requests)
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+# Rustls - Pin to compatible version for Android
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 
 # ═════════════════════════════════════════════════════════════════
 # ASYNC RUNTIME
@@ -46,10 +49,12 @@ tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 
 # ═════════════════════════════════════════════════════════════════
-# DNS RESOLUTION
+# DNS RESOLUTION - Use hickory-resolver (formerly trust-dns)
 # ═════════════════════════════════════════════════════════════════
 
-trust-dns-resolver = "0.23"
+# hickory-resolver is the new name for trust-dns-resolver
+# More Android-friendly and actively maintained
+hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "dns-over-rustls"] }
 
 # ═════════════════════════════════════════════════════════════════
 # ANDROID JNI BINDINGS
@@ -65,7 +70,7 @@ lazy_static = "1.4"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialogu er = "0.11"
 terminal_size = "0.3"
 
 # ═════════════════════════════════════════════════════════════════
@@ -107,9 +112,21 @@ ctrlc = "3.4"
 
 regex = "1.10"
 
+# ═════════════════════════════════════════════════════════════════
+# ANDROID-SPECIFIC PATCHES
+# ═════════════════════════════════════════════════════════════════
+
+[target.'cfg(target_os = "android")'_dependencies]
+# Force compatible ring version for Android
+ring = { version = "0.17", default-features = false, features = ["alloc", "std"] }
+
 [profile.release]
 opt-level = "z"       # Optimize for size
 lto = true            # Link-time optimization
 codegen-units = 1     # Single codegen unit
 strip = true          # Strip symbols
 panic = "abort"       # Abort on panic
+
+[patch.crates-io]
+# Force all dependencies to use compatible ring version
+ring = { version = "0.17.8" }

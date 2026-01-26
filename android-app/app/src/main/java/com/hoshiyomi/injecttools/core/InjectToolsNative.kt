@@ -1,172 +1,210 @@
 package com.hoshiyomi.injecttools.core
 
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 
 /**
- * JNI Bridge to Rust Native Library
+ * JNI Bridge to Rust native library (libinjecttools.so)
  * 
- * This object provides type-safe wrappers around native Rust functions.
- * All native methods return JSON strings which are deserialized to Kotlin data classes.
+ * This object loads the native library and provides type-safe
+ * Kotlin wrappers for all JNI methods.
  */
 object InjectToolsNative {
     private const val TAG = "InjectToolsNative"
-    private const val LIB_NAME = "injecttools"
     
     private val json = Json {
         ignoreUnknownKeys = true
-        coerceInputValues = true
+        isLenient = true
     }
     
     init {
         try {
-            System.loadLibrary(LIB_NAME)
+            System.loadLibrary("injecttools")
             Log.i(TAG, "Native library loaded successfully")
         } catch (e: UnsatisfiedLinkError) {
-            Log.e(TAG, "Failed to load native library: ${e.message}")
-            throw RuntimeException("Native library not found. Did you build the Rust .so files?", e)
+            Log.e(TAG, "Failed to load native library", e)
+            throw RuntimeException("Failed to load libinjecttools.so", e)
         }
     }
     
-    // =========================================================================
-    // NATIVE DECLARATIONS
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════
+    // JNI NATIVE METHOD DECLARATIONS
+    // ═══════════════════════════════════════════════════════════════
+    
+    @JvmStatic
+    private external fun checkTargetOnline(target: String): Boolean
+    
+    @JvmStatic
+    private external fun testSubdomain(
+        target: String,
+        subdomain: String,
+        timeout: Int
+    ): String
+    
+    @JvmStatic
+    private external fun batchTest(
+        target: String,
+        subdomains: Array<String>,
+        timeout: Int
+    ): String
+    
+    @JvmStatic
+    private external fun discoverSubdomains(
+        domain: String,
+        limit: Int
+    ): String
+    
+    @JvmStatic
+    private external fun resolveDomain(domain: String): String
+    
+    @JvmStatic
+    private external fun isCloudflareIP(ip: String): Boolean
+    
+    // ═══════════════════════════════════════════════════════════════
+    // KOTLIN TYPE-SAFE WRAPPERS
+    // ═══════════════════════════════════════════════════════════════
     
     /**
      * Check if target host is online and reachable
-     * @param target Target domain (e.g., "www.bca.co.id")
-     * @return true if online, false otherwise
      */
-    @JvmStatic
-    external fun checkTargetOnline(target: String): Boolean
+    suspend fun isTargetOnline(target: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            checkTargetOnline(target)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking target: $target", e)
+            false
+        }
+    }
     
     /**
      * Test single subdomain against target
-     * @param target Target domain
-     * @param subdomain Subdomain to test
-     * @param timeout Timeout in seconds
-     * @return JSON string with ScanResult
+     * 
+     * @return ScanResult with validation details
      */
-    @JvmStatic
-    private external fun testSubdomain(target: String, subdomain: String, timeout: Int): String
+    suspend fun scanSubdomain(
+        target: String,
+        subdomain: String,
+        timeout: Int = 10
+    ): ScanResult = withContext(Dispatchers.IO) {
+        try {
+            val jsonResult = testSubdomain(target, subdomain, timeout)
+            json.decodeFromString<ScanResult>(jsonResult)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error scanning subdomain: $subdomain", e)
+            ScanResult(
+                subdomain = subdomain,
+                ip = "",
+                isCloudflare = false,
+                isWorking = false,
+                isRestricted = false,
+                errorMsg = e.message
+            )
+        }
+    }
     
     /**
      * Batch test multiple subdomains
-     * @param target Target domain
-     * @param subdomains Array of subdomains
-     * @param timeout Timeout in seconds
-     * @return JSON array string with List<ScanResult>
+     * 
+     * @return List of ScanResults
      */
-    @JvmStatic
-    private external fun batchTest(target: String, subdomains: Array<String>, timeout: Int): String
+    suspend fun scanBatch(
+        target: String,
+        subdomains: List<String>,
+        timeout: Int = 10
+    ): List<ScanResult> = withContext(Dispatchers.IO) {
+        try {
+            val jsonResult = batchTest(target, subdomains.toTypedArray(), timeout)
+            json.decodeFromString<List<ScanResult>>(jsonResult)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in batch scan", e)
+            emptyList()
+        }
+    }
     
     /**
      * Discover subdomains from crt.sh
-     * @param domain Domain to discover
-     * @param limit Maximum results (0 = unlimited)
-     * @return JSON array of subdomain strings
+     * 
+     * @return List of discovered subdomain names
      */
-    @JvmStatic
-    private external fun discoverSubdomains(domain: String, limit: Int): String
+    suspend fun discover(
+        domain: String,
+        limit: Int = 100
+    ): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val jsonResult = discoverSubdomains(domain, limit)
+            json.decodeFromString<List<String>>(jsonResult)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error discovering subdomains for: $domain", e)
+            emptyList()
+        }
+    }
     
     /**
      * Resolve domain to IP address
-     * @param domain Domain name
-     * @return IP address or empty string on error
+     * 
+     * @return IP address string or empty on error
      */
-    @JvmStatic
-    external fun resolveDomain(domain: String): String
-    
-    /**
-     * Check if IP is Cloudflare
-     * @param ip IP address
-     * @return true if Cloudflare IP
-     */
-    @JvmStatic
-    external fun isCloudflareIP(ip: String): Boolean
-    
-    // =========================================================================
-    // TYPE-SAFE KOTLIN WRAPPERS
-    // =========================================================================
-    
-    /**
-     * Test single subdomain with type-safe result
-     */
-    fun testSubdomainSafe(target: String, subdomain: String, timeout: Int = 5): Result<ScanResult> {
-        return try {
-            val jsonResult = testSubdomain(target, subdomain, timeout)
-            val result = json.decodeFromString<ScanResult>(jsonResult)
-            Result.success(result)
+    suspend fun resolve(domain: String): String = withContext(Dispatchers.IO) {
+        try {
+            resolveDomain(domain)
         } catch (e: Exception) {
-            Log.e(TAG, "testSubdomain failed", e)
-            Result.failure(e)
+            Log.e(TAG, "Error resolving domain: $domain", e)
+            ""
         }
     }
     
     /**
-     * Batch test with type-safe results
+     * Check if IP belongs to Cloudflare
      */
-    fun batchTestSafe(target: String, subdomains: List<String>, timeout: Int = 5): Result<List<ScanResult>> {
-        return try {
-            val jsonResults = batchTest(target, subdomains.toTypedArray(), timeout)
-            val results = json.decodeFromString<List<ScanResult>>(jsonResults)
-            Result.success(results)
+    suspend fun isCloudflare(ip: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            isCloudflareIP(ip)
         } catch (e: Exception) {
-            Log.e(TAG, "batchTest failed", e)
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * Discover subdomains with type-safe result
-     */
-    fun discoverSubdomainsSafe(domain: String, limit: Int = 0): Result<List<String>> {
-        return try {
-            val jsonArray = discoverSubdomains(domain, limit)
-            val subdomains = json.decodeFromString<List<String>>(jsonArray)
-            Result.success(subdomains)
-        } catch (e: Exception) {
-            Log.e(TAG, "discoverSubdomains failed", e)
-            Result.failure(e)
+            Log.e(TAG, "Error checking Cloudflare IP: $ip", e)
+            false
         }
     }
 }
 
-// =============================================================================
-// DATA CLASSES
-// =============================================================================
-
 /**
- * Result of a subdomain scan
- * Matches Rust struct in scanner.rs
+ * Scan result from native scanner
+ * Matches Rust ScanResult struct
  */
 @Serializable
 data class ScanResult(
     val subdomain: String,
     val ip: String,
-    val isCloudflare: Boolean,
-    val isWorking: Boolean,
-    val isRestricted: Boolean,
+    val isCloudflare: Boolean = false,
+    val isWorking: Boolean = false,
+    val isRestricted: Boolean = false,
     val statusCode: Int? = null,
     val cfRay: String? = null,
     val errorMsg: String? = null,
     val errorSource: String? = null
 ) {
     /**
-     * Display-friendly status
+     * Human-readable status
      */
-    val displayStatus: String
+    val status: String
         get() = when {
-            isWorking -> "✓ WORKING"
-            errorMsg != null -> "✗ ${errorMsg}"
-            else -> "✗ FAILED"
+            isWorking -> "WORKING"
+            errorMsg != null -> "ERROR"
+            !isCloudflare -> "NOT_CF"
+            else -> "SAFE"
         }
     
     /**
-     * Is this result an error?
+     * Status for UI display
      */
-    val isError: Boolean
-        get() = !isWorking
+    val displayStatus: String
+        get() = when {
+            isWorking -> "✅ Vulnerable"
+            errorMsg != null -> "❌ Error: $errorMsg"
+            !isCloudflare -> "⚠️ Not Cloudflare"
+            else -> "✅ Safe"
+        }
 }

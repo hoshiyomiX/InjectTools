@@ -86,16 +86,42 @@ jobs:
           ls -la gradlew
 
       - name: Build Debug APK
+        id: build
         run: |
           cd android-app
-          ./gradlew assembleDebug --stacktrace
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --info 2>&1 | tee build.log
+        continue-on-error: true
+
+      - name: Upload build log on failure
+        if: steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-error-log
+          path: android-app/build.log
+          retention-days: 7
+
+      - name: Display error details
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "### Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the build-error-log artifact for full details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Last 50 lines of build log:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 android-app/build.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit 1
 
       - name: Rename APK
+        if: steps.build.outcome == 'success'
         run: |
           cd android-app/app/build/outputs/apk/debug
           mv app-debug.apk InjectTools-${{ needs.validate.outputs.version_name }}-debug.apk
 
       - name: Upload Debug APK
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: InjectTools-${{ needs.validate.outputs.version_name }}-debug
@@ -131,17 +157,43 @@ jobs:
           ls -la gradlew
 
       - name: Build Release APK
+        id: build
         run: |
           cd android-app
-          ./gradlew assembleRelease --stacktrace
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace --info 2>&1 | tee build.log
+        continue-on-error: true
+
+      - name: Upload build log on failure
+        if: steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-error-log
+          path: android-app/build.log
+          retention-days: 7
+
+      - name: Display error details
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "### Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the build-error-log artifact for full details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Last 50 lines of build log:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 android-app/build.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit 1
 
       - name: Rename APK
+        if: steps.build.outcome == 'success'
         run: |
           cd android-app/app/build/outputs/apk/release
           APK=$(ls app-release*.apk | head -1)
           mv "$APK" InjectTools-${{ needs.validate.outputs.version_name }}-release.apk
 
       - name: Upload Release APK
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: InjectTools-${{ needs.validate.outputs.version_name }}-release

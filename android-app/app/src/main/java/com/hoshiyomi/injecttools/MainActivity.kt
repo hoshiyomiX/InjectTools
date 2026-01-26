@@ -14,6 +14,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // NOTE: No JNI loading needed - using pure Kotlin implementation
+        // Original: System.loadLibrary("injecttools")
+        
         setContent {
             InjectToolsTheme {
                 Surface(

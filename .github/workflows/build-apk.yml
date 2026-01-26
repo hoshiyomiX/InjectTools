@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -89,29 +91,111 @@ jobs:
         id: build
         run: |
           cd android-app
-          set -o pipefail
-          ./gradlew assembleDebug --stacktrace --info 2>&1 | tee build.log
+          
+          # Create logs directory
+          mkdir -p ../build-logs
+          
+          # Set log filename with timestamp
+          LOG_FILE="../build-logs/build-debug-$(date +%Y%m%d-%H%M%S).log"
+          
+          echo "Starting debug build..." | tee "$LOG_FILE"
+          echo "Timestamp: $(date)" | tee -a "$LOG_FILE"
+          echo "Branch: ${GITHUB_REF}" | tee -a "$LOG_FILE"
+          echo "Commit: ${GITHUB_SHA}" | tee -a "$LOG_FILE"
+          echo "" | tee -a "$LOG_FILE"
+          echo "==========================================" | tee -a "$LOG_FILE"
+          echo "" | tee -a "$LOG_FILE"
+          
+          # Run build with full debug output
+          set +e
+          ./gradlew assembleDebug --stacktrace --debug 2>&1 | tee -a "$LOG_FILE"
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          
+          echo "" | tee -a "$LOG_FILE"
+          echo "==========================================" | tee -a "$LOG_FILE"
+          echo "Build finished with exit code: $BUILD_EXIT_CODE" | tee -a "$LOG_FILE"
+          
+          # Export for next steps
+          echo "LOG_FILE=$LOG_FILE" >> $GITHUB_ENV
+          echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> $GITHUB_ENV
+          
+          exit $BUILD_EXIT_CODE
         continue-on-error: true
 
-      - name: Upload build log on failure
-        if: steps.build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-error-log
-          path: android-app/build.log
-          retention-days: 7
-
-      - name: Display error details
+      - name: Extract error details
         if: steps.build.outcome == 'failure'
         run: |
-          echo "### Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Extracting compilation errors..."
+          
+          # Extract Kotlin compilation errors
+          if grep -q "Compilation error" "$LOG_FILE"; then
+            echo "KOTLIN_ERROR=true" >> $GITHUB_ENV
+            grep -A 20 "Compilation error" "$LOG_FILE" > build-logs/kotlin-errors.txt || true
+          fi
+          
+          # Extract resource linking errors
+          if grep -q "Android resource linking failed" "$LOG_FILE"; then
+            echo "RESOURCE_ERROR=true" >> $GITHUB_ENV
+            grep -A 30 "Android resource linking failed" "$LOG_FILE" > build-logs/resource-errors.txt || true
+          fi
+          
+          # Extract general errors
+          grep -E "^e: |ERROR|FAILURE" "$LOG_FILE" > build-logs/all-errors.txt || true
+
+      - name: Commit build log to repo
+        if: steps.build.outcome == 'failure'
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          git add build-logs/
+          
+          if git diff --cached --quiet; then
+            echo "No log changes to commit"
+          else
+            git commit -m "ci: Add build failure logs [skip ci]
+            
+            Build failed at $(date)
+            Exit code: $BUILD_EXIT_CODE
+            Workflow: $GITHUB_WORKFLOW
+            Run: $GITHUB_RUN_NUMBER"
+            
+            git push origin ${{ github.ref_name }}
+          fi
+
+      - name: Display error summary
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "### 🔴 Build Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the build-error-log artifact for full details." >> $GITHUB_STEP_SUMMARY
+          echo "**Exit Code:** $BUILD_EXIT_CODE" >> $GITHUB_STEP_SUMMARY
+          echo "**Log File:** \`$LOG_FILE\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Last 50 lines of build log:" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$KOTLIN_ERROR" = "true" ]; then
+            echo "#### Kotlin Compilation Errors" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -100 build-logs/kotlin-errors.txt >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "$RESOURCE_ERROR" = "true" ]; then
+            echo "#### Resource Linking Errors" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -100 build-logs/resource-errors.txt >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "#### All Errors" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -50 android-app/build.log >> $GITHUB_STEP_SUMMARY || true
+          head -200 build-logs/all-errors.txt >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full log committed to \`build-logs/\` directory" >> $GITHUB_STEP_SUMMARY
+          
           exit 1
 
       - name: Rename APK
@@ -128,6 +212,14 @@ jobs:
           path: android-app/app/build/outputs/apk/debug/InjectTools-*.apk
           retention-days: 30
 
+      - name: Success summary
+        if: steps.build.outcome == 'success'
+        run: |
+          echo "### ✅ Build Succeeded" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**APK:** InjectTools-${{ needs.validate.outputs.version_name }}-debug.apk" >> $GITHUB_STEP_SUMMARY
+
   build-release:
     name: Build Release APK
     runs-on: ubuntu-latest
@@ -137,6 +229,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -154,35 +248,39 @@ jobs:
           cd android-app
           gradle wrapper --gradle-version ${{ env.GRADLE_VERSION }}
           chmod +x gradlew
-          ls -la gradlew
 
       - name: Build Release APK
         id: build
         run: |
           cd android-app
-          set -o pipefail
-          ./gradlew assembleRelease --stacktrace --info 2>&1 | tee build.log
+          mkdir -p ../build-logs
+          LOG_FILE="../build-logs/build-release-$(date +%Y%m%d-%H%M%S).log"
+          
+          set +e
+          ./gradlew assembleRelease --stacktrace --debug 2>&1 | tee "$LOG_FILE"
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          
+          echo "LOG_FILE=$LOG_FILE" >> $GITHUB_ENV
+          echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> $GITHUB_ENV
+          
+          exit $BUILD_EXIT_CODE
         continue-on-error: true
 
-      - name: Upload build log on failure
-        if: steps.build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-error-log
-          path: android-app/build.log
-          retention-days: 7
-
-      - name: Display error details
+      - name: Commit build log to repo
         if: steps.build.outcome == 'failure'
         run: |
-          echo "### Build Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the build-error-log artifact for full details." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Last 50 lines of build log:" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -50 android-app/build.log >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add build-logs/
+          git commit -m "ci: Add release build failure logs [skip ci]" || true
+          git push origin ${{ github.ref_name }} || true
+
+      - name: Display error summary
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "### 🔴 Release Build Failed" >> $GITHUB_STEP_SUMMARY
+          tail -200 "$LOG_FILE" >> $GITHUB_STEP_SUMMARY || true
           exit 1
 
       - name: Rename APK

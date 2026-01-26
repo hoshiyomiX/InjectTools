@@ -1,0 +1,179 @@
+name: Build Rust Library
+
+on:
+  push:
+    branches:
+      - android-apk-migration
+      - app
+      - main
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/rust-library.yml'
+  pull_request:
+    branches:
+      - android-apk-migration
+      - app
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-rust-library:
+    name: Build libinjecttools.so
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-linux-android
+          - armv7-linux-androideabi
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.target }}-
+
+      - name: Configure Cargo for Android
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml << 'EOF'
+          [target.aarch64-linux-android]
+          linker = "aarch64-linux-android30-clang"
+          ar = "llvm-ar"
+          
+          [target.armv7-linux-androideabi]
+          linker = "armv7a-linux-androideabi30-clang"
+          ar = "llvm-ar"
+          EOF
+
+      - name: Add NDK to PATH
+        run: |
+          echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Build Rust library
+        run: |
+          cargo build --release --lib --target ${{ matrix.target }}
+          
+          # Verify .so file exists
+          if [ ! -f "target/${{ matrix.target }}/release/libinjecttools.so" ]; then
+            echo "Error: libinjecttools.so not found!"
+            exit 1
+          fi
+          
+          # Print file info
+          ls -lh target/${{ matrix.target }}/release/libinjecttools.so
+          file target/${{ matrix.target }}/release/libinjecttools.so
+
+      - name: Prepare artifact directory
+        run: |
+          # Determine Android ABI name
+          if [ "${{ matrix.target }}" = "aarch64-linux-android" ]; then
+            ABI="arm64-v8a"
+          elif [ "${{ matrix.target }}" = "armv7-linux-androideabi" ]; then
+            ABI="armeabi-v7a"
+          else
+            echo "Unknown target: ${{ matrix.target }}"
+            exit 1
+          fi
+          
+          # Create jniLibs structure
+          mkdir -p artifacts/jniLibs/$ABI
+          cp target/${{ matrix.target }}/release/libinjecttools.so artifacts/jniLibs/$ABI/
+          
+          # Create info file
+          cat > artifacts/jniLibs/$ABI/BUILD_INFO.txt << EOF
+          Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Rust Target: ${{ matrix.target }}
+          Android ABI: $ABI
+          Commit: ${{ github.sha }}
+          Branch: ${{ github.ref_name }}
+          Workflow: ${{ github.workflow }}
+          Run Number: ${{ github.run_number }}
+          EOF
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libinjecttools-${{ matrix.target }}
+          path: artifacts/jniLibs/
+          retention-days: 30
+
+  # Combine all architectures into single artifact
+  combine-artifacts:
+    name: Combine All Architectures
+    runs-on: ubuntu-latest
+    needs: build-rust-library
+    
+    steps:
+      - name: Download ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libinjecttools-aarch64-linux-android
+          path: jniLibs/
+
+      - name: Download ARMv7 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libinjecttools-armv7-linux-androideabi
+          path: jniLibs/
+
+      - name: List combined files
+        run: |
+          echo "Combined jniLibs structure:"
+          tree jniLibs/ || find jniLibs/ -type f
+
+      - name: Upload combined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-jniLibs-all
+          path: jniLibs/
+          retention-days: 90
+
+      - name: Create release archive
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          cd jniLibs
+          tar -czf ../libinjecttools-android-all.tar.gz *
+          cd ..
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: libinjecttools-android-all.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

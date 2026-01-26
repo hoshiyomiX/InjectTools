@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.hoshiyomi.injecttools"
-        minSdk = 31  // Changed from 30 to 31 for Material 3 support
+        minSdk = 30
         targetSdk = 34
         versionCode = 1
         versionName = "4.0.0-alpha"
@@ -58,6 +58,7 @@ android {
 dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     

@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Base application theme for Jetpack Compose -->
-    <!-- Use AppCompat parent for better Compose compatibility -->
-    <style name="Theme.InjectTools" parent="Theme.AppCompat.Light.NoActionBar">
-        <!-- Status bar color -->
-        <item name="android:statusBarColor">@color/md_theme_light_primary</item>
-        <item name="android:windowLightStatusBar">false</item>
-        
-        <!-- Window background -->
-        <item name="android:windowBackground">@color/md_theme_light_background</item>
+    <!-- Minimal theme for Jetpack Compose apps -->
+    <!-- Most styling is handled in Compose Material3 theme -->
+    <style name="Theme.InjectTools" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

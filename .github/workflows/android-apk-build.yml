@@ -41,9 +41,11 @@ jobs:
           - target: aarch64-linux-android
             arch: arm64-v8a
             api: '30'
+            cc_prefix: aarch64-linux-android
           - target: armv7-linux-androideabi
             arch: armeabi-v7a
             api: '30'
+            cc_prefix: armv7a-linux-androideabi
     
     steps:
       - name: 📥 Checkout Repository
@@ -77,27 +79,96 @@ jobs:
           add-to-path: true
           local-cache: true
       
+      - name: 🔧 Configure Build Environment
+        run: |
+          # Export NDK paths
+          export NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          export ANDROID_NDK_HOME="$NDK_HOME"
+          export TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          
+          # Add to PATH
+          echo "$TOOLCHAIN/bin" >> $GITHUB_PATH
+          
+          # Export to GITHUB_ENV for subsequent steps
+          echo "NDK_HOME=$NDK_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$NDK_HOME" >> $GITHUB_ENV
+          echo "TOOLCHAIN=$TOOLCHAIN" >> $GITHUB_ENV
+          
+          # Set CC/CXX/AR for ring and other native crates
+          echo "CC_${{ matrix.target }}=$TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "CXX_${{ matrix.target }}=$TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang++" >> $GITHUB_ENV
+          echo "AR_${{ matrix.target }}=$TOOLCHAIN/bin/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_${{ matrix.target }}=$TOOLCHAIN/bin/llvm-ranlib" >> $GITHUB_ENV
+          
+          # Alternative env var formats (some crates check these)
+          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+          echo "CC_${TARGET_UPPER}=$TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang" >> $GITHUB_ENV
+          echo "AR_${TARGET_UPPER}=$TOOLCHAIN/bin/llvm-ar" >> $GITHUB_ENV
+          
+          echo "Environment configured:"
+          echo "NDK_HOME=$NDK_HOME"
+          echo "TOOLCHAIN=$TOOLCHAIN"
+      
       - name: 🔧 Configure Cargo for Android
         run: |
           mkdir -p .cargo
-          cat > .cargo/config.toml << EOF
+          cat > .cargo/config.toml << 'EOF'
           [target.aarch64-linux-android]
-          ar = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          linker = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ matrix.api }}-clang"
+          ar = "$TOOLCHAIN/bin/llvm-ar"
+          linker = "$TOOLCHAIN/bin/aarch64-linux-android${{ matrix.api }}-clang"
           
           [target.armv7-linux-androideabi]
-          ar = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          linker = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi${{ matrix.api }}-clang"
+          ar = "$TOOLCHAIN/bin/llvm-ar"
+          linker = "$TOOLCHAIN/bin/armv7a-linux-androideabi${{ matrix.api }}-clang"
           EOF
+          
+          # Replace $TOOLCHAIN with actual path
+          sed -i "s|\$TOOLCHAIN|$TOOLCHAIN|g" .cargo/config.toml
+          
+          # For API level, use matrix value
+          sed -i "s|\${{ matrix.api }}|${{ matrix.api }}|g" .cargo/config.toml
+          
+          echo "Generated .cargo/config.toml:"
+          cat .cargo/config.toml
+      
+      - name: 🔍 Verify NDK Setup
+        run: |
+          echo "Verifying compiler availability:"
+          which ${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
+          ls -la $TOOLCHAIN/bin/${{ matrix.cc_prefix }}${{ matrix.api }}-clang || true
+          
+          echo "Verifying ar:"
+          which llvm-ar || true
+          ls -la $TOOLCHAIN/bin/llvm-ar || true
+          
+          echo "Environment variables:"
+          env | grep -E '(CC|AR|NDK|TOOLCHAIN)' | sort
       
       - name: 🏗️ Build Rust Library
         run: |
           echo "Building for ${{ matrix.target }}..."
-          cargo build --release --lib --target ${{ matrix.target }}
+          
+          # Export again for this step (belt and suspenders)
+          export NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          export ANDROID_NDK_HOME="$NDK_HOME"
+          export TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          export PATH="$TOOLCHAIN/bin:$PATH"
+          
+          # Build
+          cargo build --release --lib --target ${{ matrix.target }} -vv
           
           # Verify output
+          echo "Build complete. Checking output:"
           ls -lh target/${{ matrix.target }}/release/libinjecttools.so
           file target/${{ matrix.target }}/release/libinjecttools.so
+          
+          # Check size (should be reasonable, not suspiciously small)
+          SIZE=$(stat -c%s target/${{ matrix.target }}/release/libinjecttools.so)
+          echo "Library size: $SIZE bytes"
+          if [ $SIZE -lt 100000 ]; then
+            echo "❌ Warning: Library suspiciously small!"
+            exit 1
+          fi
       
       - name: 📤 Upload Native Library
         uses: actions/upload-artifact@v4

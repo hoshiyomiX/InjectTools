@@ -8,6 +8,7 @@ license = "MIT"
 repository = "https://github.com/hoshiyomiX/InjectTools"
 keywords = ["android", "termux", "cloudflare", "scanner", "networking"]
 categories = ["command-line-utilities", "network-programming"]
+readme = "README.md"
 
 # ═════════════════════════════════════════════════════════════════
 # BUILD TARGETS
@@ -34,6 +35,7 @@ hyper = { version = "1.1", features = ["client", "http1", "http2"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "native-tokio", "ring", "tls12"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
 http-body-util = "0.1"
+bytes = "1.5"  # Required by hyper for body handling
 
 # Reqwest - Keep for crt.sh API (lighter than hyper for simple requests)
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
@@ -70,7 +72,7 @@ lazy_static = "1.4"
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
-dialoguer = "0.11"
+dialoger = "0.11"
 terminal_size = "0.3"
 
 # ═════════════════════════════════════════════════════════════════

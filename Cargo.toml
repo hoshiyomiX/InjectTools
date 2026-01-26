@@ -38,7 +38,7 @@ http-body-util = "0.1"
 # Reqwest - Keep for crt.sh API (lighter than hyper for simple requests)
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 
-# Rustls - Pin to compatible version for Android
+# Rustls - Compatible version for Android
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 
 # ═════════════════════════════════════════════════════════════════
@@ -113,12 +113,8 @@ ctrlc = "3.4"
 regex = "1.10"
 
 # ═════════════════════════════════════════════════════════════════
-# ANDROID-SPECIFIC PATCHES
+# BUILD PROFILE - Optimize for size and performance
 # ═════════════════════════════════════════════════════════════════
-
-[target.'cfg(target_os = "android")'.dependencies]
-# Force compatible ring version for Android
-ring = { version = "0.17", default-features = false, features = ["alloc", "std"] }
 
 [profile.release]
 opt-level = "z"       # Optimize for size
@@ -126,12 +122,3 @@ lto = true            # Link-time optimization
 codegen-units = 1     # Single codegen unit
 strip = true          # Strip symbols
 panic = "abort"       # Abort on panic
-
-# ═════════════════════════════════════════════════════════════════
-# PATCH SECTION - Force exact versions for Android compatibility
-# ═════════════════════════════════════════════════════════════════
-
-[patch.crates-io]
-# Force exact ring version to avoid ambiguity
-# Using =0.17.8 ensures all dependencies use the same version
-ring = { version = "=0.17.8" }

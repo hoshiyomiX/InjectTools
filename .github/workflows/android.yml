@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -26,6 +28,8 @@ jobs:
         
     - name: Build with Gradle
       shell: bash
+      continue-on-error: true
+      id: gradle_build
       run: |
         set -o pipefail
         if ! gradle assembleDebug --stacktrace 2>&1 | tee build.log; then
@@ -37,15 +41,18 @@ jobs:
         fi
 
     - name: Upload APK
-      if: success()
+      if: steps.gradle_build.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
 
-    - name: Upload Build Error Log
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-error-log
-        path: build-error.log
+    - name: Push Build Error Log
+      if: steps.gradle_build.outcome == 'failure'
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add build-error.log
+        git commit -m "Add build-error.log from failed build"
+        git push
+        exit 1

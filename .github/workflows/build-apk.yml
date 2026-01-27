@@ -90,23 +90,25 @@ jobs:
       - name: Build Debug APK
         id: build
         run: |
-          cd android-app
+          # Get absolute paths
+          WORKSPACE_DIR="$GITHUB_WORKSPACE"
+          LOG_DIR="$WORKSPACE_DIR/build-logs"
+          LOG_FILE="$LOG_DIR/build-debug-$(date +%Y%m%d-%H%M%S).log"
           
           # Create logs directory
-          mkdir -p ../build-logs
-          
-          # Set log filename with timestamp
-          LOG_FILE="../build-logs/build-debug-$(date +%Y%m%d-%H%M%S).log"
+          mkdir -p "$LOG_DIR"
           
           echo "Starting debug build..." | tee "$LOG_FILE"
           echo "Timestamp: $(date)" | tee -a "$LOG_FILE"
           echo "Branch: ${GITHUB_REF}" | tee -a "$LOG_FILE"
           echo "Commit: ${GITHUB_SHA}" | tee -a "$LOG_FILE"
+          echo "Log file: $LOG_FILE" | tee -a "$LOG_FILE"
           echo "" | tee -a "$LOG_FILE"
           echo "==========================================" | tee -a "$LOG_FILE"
           echo "" | tee -a "$LOG_FILE"
           
-          # Run build with full debug output
+          # Build
+          cd android-app
           set +e
           ./gradlew assembleDebug --stacktrace --debug 2>&1 | tee -a "$LOG_FILE"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
@@ -118,6 +120,7 @@ jobs:
           
           # Export for next steps
           echo "LOG_FILE=$LOG_FILE" >> $GITHUB_ENV
+          echo "LOG_DIR=$LOG_DIR" >> $GITHUB_ENV
           echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> $GITHUB_ENV
           
           exit $BUILD_EXIT_CODE
@@ -128,20 +131,26 @@ jobs:
         run: |
           echo "Extracting compilation errors..."
           
+          # Verify log file exists
+          if [ ! -f "$LOG_FILE" ]; then
+            echo "ERROR: Log file not found: $LOG_FILE"
+            exit 0
+          fi
+          
           # Extract Kotlin compilation errors
           if grep -q "Compilation error" "$LOG_FILE"; then
             echo "KOTLIN_ERROR=true" >> $GITHUB_ENV
-            grep -A 20 "Compilation error" "$LOG_FILE" > build-logs/kotlin-errors.txt || true
+            grep -A 20 "Compilation error" "$LOG_FILE" > "$LOG_DIR/kotlin-errors.txt" || true
           fi
           
           # Extract resource linking errors
           if grep -q "Android resource linking failed" "$LOG_FILE"; then
             echo "RESOURCE_ERROR=true" >> $GITHUB_ENV
-            grep -A 30 "Android resource linking failed" "$LOG_FILE" > build-logs/resource-errors.txt || true
+            grep -A 30 "Android resource linking failed" "$LOG_FILE" > "$LOG_DIR/resource-errors.txt" || true
           fi
           
           # Extract general errors
-          grep -E "^e: |ERROR|FAILURE" "$LOG_FILE" > build-logs/all-errors.txt || true
+          grep -E "^e: |ERROR|FAILURE" "$LOG_FILE" > "$LOG_DIR/all-errors.txt" || echo "No explicit errors found" > "$LOG_DIR/all-errors.txt"
 
       - name: Commit build log to repo
         if: steps.build.outcome == 'failure'
@@ -149,11 +158,14 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           
+          # Add all log files
           git add build-logs/
           
+          # Check if there are changes
           if git diff --cached --quiet; then
             echo "No log changes to commit"
           else
+            # Commit
             git commit -m "ci: Add build failure logs [skip ci]
             
             Build failed at $(date)
@@ -161,7 +173,10 @@ jobs:
             Workflow: $GITHUB_WORKFLOW
             Run: $GITHUB_RUN_NUMBER"
             
-            git push origin ${{ github.ref_name }}
+            # Push to current branch
+            BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+            echo "Pushing to branch: $BRANCH_NAME"
+            git push origin "HEAD:$BRANCH_NAME" || echo "Failed to push logs (non-critical)"
           fi
 
       - name: Display error summary
@@ -173,25 +188,25 @@ jobs:
           echo "**Log File:** \`$LOG_FILE\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "$KOTLIN_ERROR" = "true" ]; then
+          if [ "$KOTLIN_ERROR" = "true" ] && [ -f "$LOG_DIR/kotlin-errors.txt" ]; then
             echo "#### Kotlin Compilation Errors" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            head -100 build-logs/kotlin-errors.txt >> $GITHUB_STEP_SUMMARY || true
+            head -100 "$LOG_DIR/kotlin-errors.txt" >> $GITHUB_STEP_SUMMARY || true
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "$RESOURCE_ERROR" = "true" ]; then
+          if [ "$RESOURCE_ERROR" = "true" ] && [ -f "$LOG_DIR/resource-errors.txt" ]; then
             echo "#### Resource Linking Errors" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            head -100 build-logs/resource-errors.txt >> $GITHUB_STEP_SUMMARY || true
+            head -100 "$LOG_DIR/resource-errors.txt" >> $GITHUB_STEP_SUMMARY || true
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
-          echo "#### All Errors" >> $GITHUB_STEP_SUMMARY
+          echo "#### Last 200 Lines of Build Log" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          head -200 build-logs/all-errors.txt >> $GITHUB_STEP_SUMMARY || true
+          tail -200 "$LOG_FILE" >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Full log committed to \`build-logs/\` directory" >> $GITHUB_STEP_SUMMARY
@@ -252,16 +267,20 @@ jobs:
       - name: Build Release APK
         id: build
         run: |
-          cd android-app
-          mkdir -p ../build-logs
-          LOG_FILE="../build-logs/build-release-$(date +%Y%m%d-%H%M%S).log"
+          WORKSPACE_DIR="$GITHUB_WORKSPACE"
+          LOG_DIR="$WORKSPACE_DIR/build-logs"
+          LOG_FILE="$LOG_DIR/build-release-$(date +%Y%m%d-%H%M%S).log"
           
+          mkdir -p "$LOG_DIR"
+          
+          cd android-app
           set +e
           ./gradlew assembleRelease --stacktrace --debug 2>&1 | tee "$LOG_FILE"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           set -e
           
           echo "LOG_FILE=$LOG_FILE" >> $GITHUB_ENV
+          echo "LOG_DIR=$LOG_DIR" >> $GITHUB_ENV
           echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> $GITHUB_ENV
           
           exit $BUILD_EXIT_CODE
@@ -273,14 +292,20 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           git add build-logs/
-          git commit -m "ci: Add release build failure logs [skip ci]" || true
-          git push origin ${{ github.ref_name }} || true
+          
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: Add release build failure logs [skip ci]" || true
+            BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+            git push origin "HEAD:$BRANCH_NAME" || true
+          fi
 
       - name: Display error summary
         if: steps.build.outcome == 'failure'
         run: |
           echo "### 🔴 Release Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           tail -200 "$LOG_FILE" >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
           exit 1
 
       - name: Rename APK

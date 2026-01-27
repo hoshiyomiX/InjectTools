@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hoshiyomi.injecttools.core.InjectToolsKotlin
+import com.hoshiyomi.injecttools.core.LogManager
 import com.hoshiyomi.injecttools.ui.viewmodels.ScanViewModel
 import com.hoshiyomi.injecttools.ui.viewmodels.ScanUiState
 
@@ -22,6 +23,8 @@ fun ScanScreen(
     onNavigateBack: () -> Unit,
     viewModel: ScanViewModel = viewModel()
 ) {
+    LogManager.i("ScanScreen", "Composable rendered")
+    
     val uiState by viewModel.uiState.collectAsState()
     val results by viewModel.results.collectAsState()
     
@@ -72,10 +75,27 @@ fun ScanScreen(
             // Scan button
             Button(
                 onClick = {
-                    val subs = subdomainList.lines()
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                    viewModel.startScan(target, subs)
+                    try {
+                        LogManager.i("ScanScreen", "Scan button CLICKED")
+                        LogManager.d("ScanScreen", "Target input: '$target'")
+                        LogManager.d("ScanScreen", "Subdomain input: ${subdomainList.length} chars")
+                        
+                        val subs = subdomainList.lines()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                        
+                        LogManager.i("ScanScreen", "Parsed ${subs.size} subdomains")
+                        subs.forEachIndexed { i, sub ->
+                            LogManager.d("ScanScreen", "  Sub[$i]: $sub")
+                        }
+                        
+                        LogManager.i("ScanScreen", "Calling viewModel.startScan()")
+                        viewModel.startScan(target, subs)
+                        LogManager.i("ScanScreen", "viewModel.startScan() returned")
+                        
+                    } catch (e: Exception) {
+                        LogManager.e("ScanScreen", "Button onClick EXCEPTION", e)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = uiState !is ScanUiState.Scanning

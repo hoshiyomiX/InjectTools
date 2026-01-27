@@ -93,13 +93,17 @@ object InjectToolsKotlin {
 
     suspend fun resolveDomain(domain: String): String? = withContext(Dispatchers.IO) {
         try {
-            LogManager.d(TAG, "Resolving domain: $domain")
+            LogManager.d(TAG, "Resolving: $domain")
             val addresses = InetAddress.getAllByName(domain)
             val ip = addresses.firstOrNull()?.hostAddress
-            LogManager.i(TAG, "Resolved $domain -> $ip")
+            if (ip != null) {
+                LogManager.i(TAG, "Resolved $domain -> $ip")
+            } else {
+                LogManager.w(TAG, "No IP found for $domain")
+            }
             ip
         } catch (e: Exception) {
-            LogManager.e(TAG, "DNS resolution failed for $domain", e)
+            LogManager.e(TAG, "DNS failed for $domain: ${e.message}")
             null
         }
     }
@@ -110,7 +114,7 @@ object InjectToolsKotlin {
 
     private suspend fun checkTLSHandshake(ip: String, sni: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            LogManager.d(TAG, "TLS handshake: $ip (SNI: $sni)")
+            LogManager.d(TAG, "TLS check: $ip with SNI=$sni")
             val socket = Socket()
             socket.connect(InetSocketAddress(ip, 443), 5000)
             
@@ -126,13 +130,21 @@ object InjectToolsKotlin {
             sslSocket.sslParameters = sslParams
             
             sslSocket.startHandshake()
+            val session = sslSocket.session
+            val isValid = session != null && session.isValid
+            
             sslSocket.close()
             socket.close()
             
-            LogManager.i(TAG, "TLS handshake SUCCESS: $ip")
-            true
+            if (isValid) {
+                LogManager.i(TAG, "✅ TLS OK: $ip accepts SNI=$sni")
+            } else {
+                LogManager.w(TAG, "❌ TLS FAIL: $ip rejected SNI=$sni")
+            }
+            
+            isValid
         } catch (e: Exception) {
-            LogManager.w(TAG, "TLS handshake FAILED: $ip - ${e.message}")
+            LogManager.w(TAG, "❌ TLS FAIL: $ip with SNI=$sni - ${e.message}")
             false
         }
     }
@@ -147,7 +159,7 @@ object InjectToolsKotlin {
         ip: String
     ): Pair<Int, Boolean> = withContext(Dispatchers.IO) {
         try {
-            LogManager.d(TAG, "HTTP HEAD: $url (IP: $ip)")
+            LogManager.d(TAG, "HTTP HEAD: $url via $ip")
             val customClient = OkHttpClient.Builder()
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
@@ -171,62 +183,20 @@ object InjectToolsKotlin {
 
             val response = customClient.newCall(request).execute()
             val statusCode = response.code
-            val hasCfRay = response.header("cf-ray") != null
+            val cfRay = response.header("cf-ray")
+            val hasCfRay = cfRay != null
             
-            LogManager.i(TAG, "HTTP response: $statusCode, CF-Ray: $hasCfRay")
+            if (hasCfRay) {
+                LogManager.i(TAG, "✅ HTTP $statusCode with CF-Ray: $cfRay")
+            } else {
+                LogManager.w(TAG, "⚠️ HTTP $statusCode but no CF-Ray header")
+            }
+            
             response.close()
-            
             Pair(statusCode, hasCfRay)
         } catch (e: Exception) {
-            LogManager.e(TAG, "HTTP request failed", e)
+            LogManager.e(TAG, "HTTP failed: ${e.message}")
             Pair(0, false)
-        }
-    }
-
-    // =============================================================================
-    // TARGET STATUS CHECK
-    // =============================================================================
-
-    suspend fun checkTargetOnline(target: String): Boolean {
-        return try {
-            LogManager.i(TAG, "Checking if target is online: $target")
-            val ip = resolveDomain(target)
-            
-            if (ip == null) {
-                LogManager.w(TAG, "Target DNS resolution failed: $target")
-                return false
-            }
-            
-            LogManager.d(TAG, "Target IP: $ip")
-            
-            // Try TLS handshake first (most reliable)
-            if (checkTLSHandshake(ip, target)) {
-                LogManager.i(TAG, "Target is ONLINE (TLS handshake success)")
-                return true
-            }
-            
-            // Fallback: Try HTTP
-            try {
-                val request = Request.Builder()
-                    .url("https://$target/")
-                    .head()
-                    .build()
-                
-                val response = httpClient.newCall(request).execute()
-                val code = response.code
-                response.close()
-                
-                val isOnline = code in 200..599  // Any response means online
-                LogManager.i(TAG, "Target is ${if (isOnline) "ONLINE" else "OFFLINE"} (HTTP $code)")
-                isOnline
-            } catch (e: Exception) {
-                LogManager.w(TAG, "HTTP fallback failed: ${e.message}")
-                // Even if HTTP fails, if we got an IP, consider it potentially reachable
-                true
-            }
-        } catch (e: Exception) {
-            LogManager.e(TAG, "Target check failed", e)
-            false
         }
     }
 
@@ -239,7 +209,10 @@ object InjectToolsKotlin {
         subdomain: String,
         timeout: Int = 5
     ): ScanResult = withContext(Dispatchers.IO) {
-        LogManager.i(TAG, "Testing subdomain: $subdomain for target: $target")
+        LogManager.i(TAG, "\n========================================")
+        LogManager.i(TAG, "Testing: $subdomain")
+        LogManager.i(TAG, "Target: $target")
+        LogManager.i(TAG, "========================================")
         
         var result = ScanResult(
             subdomain = subdomain,
@@ -257,24 +230,41 @@ object InjectToolsKotlin {
             // 1. Resolve Subdomain
             val subIP = resolveDomain(subdomain)
             if (subIP == null) {
-                return@withContext result.copy(errorMsg = "DNS resolution failed")
+                LogManager.e(TAG, "SKIP: DNS resolution failed")
+                return@withContext result.copy(
+                    errorMsg = "DNS resolution failed",
+                    errorSource = "dns"
+                )
             }
             result = result.copy(ip = subIP)
 
             // 2. Environment Checks
             if (isFakeDnsIP(subIP)) {
-                return@withContext result.copy(errorMsg = "Fake DNS IP detected (VPN)")
+                LogManager.e(TAG, "SKIP: Fake DNS IP (VPN active)")
+                return@withContext result.copy(
+                    errorMsg = "Fake DNS IP detected (VPN active)",
+                    errorSource = "environment"
+                )
             }
             
             if (isPrivateIP(subIP)) {
-                return@withContext result.copy(errorMsg = "Private IP address")
+                LogManager.e(TAG, "SKIP: Private IP address")
+                return@withContext result.copy(
+                    errorMsg = "Private IP address",
+                    errorSource = "environment"
+                )
             }
             
             if (!isCloudflareIP(subIP)) {
-                return@withContext result.copy(errorMsg = "Not a Cloudflare IP")
+                LogManager.w(TAG, "SKIP: Not a Cloudflare IP range")
+                return@withContext result.copy(
+                    errorMsg = "Not a Cloudflare IP",
+                    errorSource = "cloudflare_check"
+                )
             }
 
             result = result.copy(isCloudflare = true)
+            LogManager.i(TAG, "✓ IP is Cloudflare range")
 
             // 3. TCP Latency Check (Port 443)
             val startTime = System.currentTimeMillis()
@@ -287,23 +277,31 @@ object InjectToolsKotlin {
                 LogManager.d(TAG, "TCP latency: ${latency}ms")
                 
                 if (latency < 5) {
+                    LogManager.e(TAG, "SKIP: VPN detected (latency <5ms)")
                     return@withContext result.copy(
-                        errorMsg = "VPN detected (latency <5ms)"
+                        errorMsg = "VPN detected (latency <5ms)",
+                        errorSource = "latency_check"
                     )
                 }
+                LogManager.i(TAG, "✓ TCP latency OK")
             } catch (e: Exception) {
-                LogManager.w(TAG, "TCP connection failed", e)
+                LogManager.e(TAG, "SKIP: TCP port 443 unreachable - ${e.message}")
                 return@withContext result.copy(
-                    errorMsg = "TCP port 443 blocked"
+                    errorMsg = "TCP port 443 blocked",
+                    errorSource = "tcp_check"
                 )
             }
 
-            // 4. TLS Handshake
+            // 4. TLS Handshake with Target SNI
+            // Ini yang menentukan target valid atau tidak!
             if (!checkTLSHandshake(subIP, target)) {
+                LogManager.e(TAG, "SKIP: TLS handshake failed (target might be invalid or subdomain misconfigured)")
                 return@withContext result.copy(
-                    errorMsg = "TLS handshake failed"
+                    errorMsg = "TLS handshake failed",
+                    errorSource = "tls_handshake"
                 )
             }
+            LogManager.i(TAG, "✓ TLS handshake SUCCESS (target is valid!)")
 
             // 5. End-to-End HTTP Check
             val url = "https://$target/"
@@ -316,21 +314,24 @@ object InjectToolsKotlin {
                     cfRay = "Yes",
                     isWorking = true
                 )
-                LogManager.i(TAG, "✅ Subdomain WORKING: $subdomain")
+                LogManager.i(TAG, "🎉 WORKING SUBDOMAIN FOUND!")
             } else {
+                LogManager.w(TAG, "⚠️ HTTP OK but no CF-Ray header")
                 result = result.copy(
-                    errorMsg = "No CF-Ray header found"
+                    errorMsg = "No CF-Ray header (might be restricted)",
+                    errorSource = "http_check"
                 )
-                LogManager.w(TAG, "❌ Subdomain NOT working: $subdomain")
             }
 
         } catch (e: Exception) {
-            LogManager.e(TAG, "Scan error for $subdomain", e)
+            LogManager.e(TAG, "Unexpected error: ${e.message}", e)
             result = result.copy(
-                errorMsg = "Scan failed: ${e.message}"
+                errorMsg = "Scan failed: ${e.message}",
+                errorSource = "exception"
             )
         }
 
+        LogManager.i(TAG, "Result: ${if (result.isWorking) "WORKING ✅" else "NOT WORKING ❌"}")
         result
     }
 
@@ -343,10 +344,23 @@ object InjectToolsKotlin {
         subdomains: List<String>,
         timeout: Int = 5
     ): List<ScanResult> = withContext(Dispatchers.IO) {
-        LogManager.i(TAG, "Starting batch test: ${subdomains.size} subdomains")
-        subdomains.map { subdomain ->
+        LogManager.i(TAG, "\n========================================")
+        LogManager.i(TAG, "BATCH SCAN STARTED")
+        LogManager.i(TAG, "Target: $target")
+        LogManager.i(TAG, "Subdomains: ${subdomains.size}")
+        LogManager.i(TAG, "========================================\n")
+        
+        val results = subdomains.map { subdomain ->
             testSubdomain(target, subdomain, timeout)
         }
+        
+        val workingCount = results.count { it.isWorking }
+        LogManager.i(TAG, "\n========================================")
+        LogManager.i(TAG, "BATCH SCAN COMPLETED")
+        LogManager.i(TAG, "Working: $workingCount / ${results.size}")
+        LogManager.i(TAG, "========================================\n")
+        
+        results
     }
 
     // =============================================================================
@@ -385,10 +399,10 @@ object InjectToolsKotlin {
             }
 
             val result = subdomains.take(limit).toList()
-            LogManager.i(TAG, "Discovered ${result.size} subdomains")
+            LogManager.i(TAG, "Discovered ${result.size} unique subdomains")
             result
         } catch (e: Exception) {
-            LogManager.e(TAG, "crt.sh discovery failed", e)
+            LogManager.e(TAG, "crt.sh discovery failed: ${e.message}", e)
             emptyList()
         }
     }

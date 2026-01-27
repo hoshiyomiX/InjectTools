@@ -1,7 +1,11 @@
 package com.hoshiyomi.injecttools.core
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import okhttp3.Dns
 import okhttp3.OkHttpClient
@@ -20,10 +24,13 @@ object InjectToolsKotlin {
     private const val TAG = "InjectToolsCore"
     
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .followRedirects(false)
         .build()
+
+    // Cache OkHttpClient instances to prevent memory leaks
+    private val clientCache = mutableMapOf<String, OkHttpClient>()
 
     @Serializable
     data class ScanResult(
@@ -87,60 +94,51 @@ object InjectToolsKotlin {
     }
 
     private suspend fun checkTLSHandshake(ip: String, sni: String): Boolean = withContext(Dispatchers.IO) {
-        var socket: Socket? = null
-        var sslSocket: SSLSocket? = null
         try {
             LogManager.d(TAG, "TLS check: $ip with SNI=$sni")
             
-            socket = Socket()
-            socket.connect(InetSocketAddress(ip, 443), 5000)
-            
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-            
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
-            
-            sslSocket = sslContext.socketFactory.createSocket(
-                socket, sni, 443, true
-            ) as SSLSocket
-            
-            val sslParams = sslSocket.sslParameters
-            sslParams.serverNames = listOf(javax.net.ssl.SNIHostName(sni))
-            sslSocket.sslParameters = sslParams
-            
-            sslSocket.startHandshake()
-            val session = sslSocket.session
-            val isValid = session?.isValid == true
-            
-            if (isValid) {
-                LogManager.i(TAG, "TLS OK: $ip accepts SNI=$sni")
-            } else {
-                LogManager.w(TAG, "TLS FAIL: $ip rejected SNI=$sni")
+            // Use .use {} for automatic resource cleanup
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(ip, 443), 5000)
+                
+                val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                })
+                
+                val sslContext = SSLContext.getInstance("TLS")
+                sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+                
+                (sslContext.socketFactory.createSocket(socket, sni, 443, true) as SSLSocket).use { sslSocket ->
+                    val sslParams = sslSocket.sslParameters
+                    sslParams.serverNames = listOf(javax.net.ssl.SNIHostName(sni))
+                    sslSocket.sslParameters = sslParams
+                    
+                    sslSocket.startHandshake()
+                    val session = sslSocket.session
+                    val isValid = session?.isValid == true
+                    
+                    if (isValid) {
+                        LogManager.i(TAG, "TLS OK: $ip accepts SNI=$sni")
+                    } else {
+                        LogManager.w(TAG, "TLS FAIL: $ip rejected SNI=$sni")
+                    }
+                    
+                    isValid
+                }
             }
-            
-            isValid
         } catch (e: Exception) {
             LogManager.w(TAG, "TLS FAIL: $ip - ${e.message}")
             false
-        } finally {
-            try {
-                sslSocket?.close()
-                socket?.close()
-            } catch (e: Exception) {
-                // Ignore close errors
-            }
         }
     }
 
-    private suspend fun headWithIP(url: String, host: String, ip: String): Pair<Int, Boolean> = withContext(Dispatchers.IO) {
-        try {
-            LogManager.d(TAG, "HTTP HEAD: $url via $ip")
-            
-            val customClient = OkHttpClient.Builder()
+    private fun getClientForIP(host: String, ip: String): OkHttpClient {
+        val key = "$host:$ip"
+        return clientCache.getOrPut(key) {
+            LogManager.d(TAG, "Creating new OkHttpClient for $key")
+            OkHttpClient.Builder()
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
                 .followRedirects(false)
@@ -158,6 +156,15 @@ object InjectToolsKotlin {
                     }
                 })
                 .build()
+        }
+    }
+
+    private suspend fun headWithIP(url: String, host: String, ip: String): Pair<Int, Boolean> = withContext(Dispatchers.IO) {
+        try {
+            LogManager.d(TAG, "HTTP HEAD: $url via $ip")
+            
+            // Use cached client instead of creating new one
+            val customClient = getClientForIP(host, ip)
 
             val request = Request.Builder()
                 .url(url)
@@ -221,9 +228,9 @@ object InjectToolsKotlin {
             LogManager.i(TAG, "IP is Cloudflare")
 
             val startTime = System.currentTimeMillis()
-            var socket: Socket? = null
-            try {
-                socket = Socket()
+            
+            // Use .use {} for automatic socket cleanup
+            Socket().use { socket ->
                 socket.connect(InetSocketAddress(subIP, 443), 2000)
                 val latency = System.currentTimeMillis() - startTime
                 
@@ -231,13 +238,6 @@ object InjectToolsKotlin {
                     return@withContext result.copy(errorMsg = "VPN detected", errorSource = "latency_check")
                 }
                 LogManager.i(TAG, "TCP OK: ${latency}ms")
-            } catch (e: Exception) {
-                LogManager.e(TAG, "TCP failed")
-                return@withContext result.copy(errorMsg = "Port 443 blocked", errorSource = "tcp_check")
-            } finally {
-                try {
-                    socket?.close()
-                } catch (e: Exception) {}
             }
 
             if (!checkTLSHandshake(subIP, target)) {
@@ -279,14 +279,40 @@ object InjectToolsKotlin {
         try {
             LogManager.i(TAG, "Batch scan started: ${subdomains.size} subdomains")
             
-            val results = subdomains.map { subdomain ->
-                testSubdomain(target, subdomain, timeout)
+            // Process in parallel chunks of 10 to prevent ANR
+            val results = subdomains.chunked(10).flatMap { chunk ->
+                chunk.map { subdomain ->
+                    async {
+                        try {
+                            // Add explicit timeout per subdomain
+                            withTimeout((timeout * 1000L) + 2000L) {
+                                testSubdomain(target, subdomain, timeout)
+                            }
+                        } catch (e: TimeoutCancellationException) {
+                            LogManager.w(TAG, "Subdomain $subdomain timed out")
+                            ScanResult(
+                                subdomain = subdomain,
+                                ip = "",
+                                isCloudflare = false,
+                                isWorking = false,
+                                isRestricted = false,
+                                statusCode = null,
+                                cfRay = null,
+                                errorMsg = "Scan timeout",
+                                errorSource = "timeout"
+                            )
+                        }
+                    }
+                }.awaitAll()
             }
             
             val workingCount = results.count { it.isWorking }
             LogManager.i(TAG, "Batch completed: $workingCount / ${results.size} working")
             
             results
+        } catch (e: TimeoutCancellationException) {
+            LogManager.e(TAG, "Batch scan timeout")
+            emptyList()
         } catch (e: Exception) {
             LogManager.e(TAG, "Batch test failed", e)
             emptyList()
@@ -301,9 +327,21 @@ object InjectToolsKotlin {
             val request = Request.Builder()
                 .url(url)
                 .get()
+                .addHeader("User-Agent", "InjectTools-Android/1.0")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
+            // Add explicit timeout for crt.sh API call
+            val response = withTimeout(15000L) {
+                val call = httpClient.newCall(request)
+                call.execute()
+            }
+
+            if (!response.isSuccessful) {
+                LogManager.w(TAG, "crt.sh returned HTTP ${response.code}")
+                response.close()
+                return@withContext emptyList()
+            }
+
             val body = response.body?.string() ?: "[]"
             response.close()
 
@@ -325,9 +363,18 @@ object InjectToolsKotlin {
             val result = subdomains.take(limit).toList()
             LogManager.i(TAG, "Discovered ${result.size} subdomains")
             result
+        } catch (e: TimeoutCancellationException) {
+            LogManager.e(TAG, "crt.sh API timeout after 15s")
+            emptyList()
         } catch (e: Exception) {
             LogManager.e(TAG, "Discovery failed: ${e.message}", e)
             emptyList()
         }
+    }
+
+    // Clear cache to prevent memory accumulation
+    fun clearClientCache() {
+        LogManager.i(TAG, "Clearing OkHttpClient cache (${clientCache.size} entries)")
+        clientCache.clear()
     }
 }

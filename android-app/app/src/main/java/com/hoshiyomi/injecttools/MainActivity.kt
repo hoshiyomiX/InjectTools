@@ -1,150 +1,133 @@
 package com.hoshiyomi.injecttools
 
-import android.Manifest
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.os.StrictMode
+import android.util.Log
+import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
-import androidx.core.content.ContextCompat
-import com.hoshiyomi.injecttools.core.LogManager
-import com.hoshiyomi.injecttools.ui.InjectToolsApp
-import com.hoshiyomi.injecttools.ui.theme.InjectToolsTheme
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+// import androidx.activity.compose.setContent
+// import androidx.compose.material3.Text
+// import com.hoshiyomi.injecttools.ui.theme.InjectToolsTheme
 
+/**
+ * MINIMAL TEST VERSION - For crash diagnosis
+ * 
+ * This version progressively tests each component:
+ * 1. Activity lifecycle
+ * 2. Android logging
+ * 3. Simple View inflation
+ * 4. Compose UI (commented out)
+ * 
+ * Monitor with: adb logcat | grep MINIMAL_TEST
+ */
 class MainActivity : ComponentActivity() {
     
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        LogManager.i("MainActivity", "Storage permission granted: $isGranted")
-        if (!isGranted) {
-            LogManager.w("MainActivity", "Storage permission denied, using app-specific storage")
-        }
+    companion object {
+        private const val TAG = "MINIMAL_TEST"
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        Log.e(TAG, "============================================")
+        Log.e(TAG, "=== MINIMAL TEST START ===")
+        Log.e(TAG, "============================================")
         
-        LogManager.i("MainActivity", "onCreate called")
-        
-        // Install global crash handler FIRST
-        setupGlobalCrashHandler()
-        
-        // Enable StrictMode in debug builds
-        if (isDebugMode()) {
-            setupStrictMode()
-        }
-        
-        // Request storage permission for Android 10 and below
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                LogManager.i("MainActivity", "Requesting storage permission")
-                permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            } else {
-                LogManager.i("MainActivity", "Storage permission already granted")
+        try {
+            Log.e(TAG, "[1/6] Calling super.onCreate()...")
+            super.onCreate(savedInstanceState)
+            Log.e(TAG, "[1/6] ✅ super.onCreate() SUCCESS")
+            
+            Log.e(TAG, "[2/6] Testing basic Kotlin operations...")
+            val testString = "Hello Kotlin"
+            val testInt = 123
+            val testList = listOf(1, 2, 3)
+            Log.e(TAG, "[2/6] ✅ Kotlin works: $testString, $testInt, ${testList.size} items")
+            
+            Log.e(TAG, "[3/6] Testing Android logging infrastructure...")
+            Log.v(TAG, "Verbose log works")
+            Log.d(TAG, "Debug log works")
+            Log.i(TAG, "Info log works")
+            Log.w(TAG, "Warning log works")
+            Log.e(TAG, "[3/6] ✅ All log levels work")
+            
+            Log.e(TAG, "[4/6] Testing View inflation...")
+            val textView = TextView(this).apply {
+                text = "InjectTools Minimal Test\n\nIf you see this, basic Activity works!\n\nCheck logcat for details."
+                textSize = 16f
+                setPadding(32, 32, 32, 32)
             }
-        } else {
-            LogManager.i("MainActivity", "Android 11+, no storage permission needed")
-        }
-        
-        setContent {
-            InjectToolsTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    InjectToolsApp()
-                }
+            Log.e(TAG, "[4/6] ✅ TextView created")
+            
+            Log.e(TAG, "[5/6] Setting content view...")
+            setContentView(textView)
+            Log.e(TAG, "[5/6] ✅ setContentView SUCCESS")
+            
+            Log.e(TAG, "[6/6] Testing thread info...")
+            Log.e(TAG, "  Thread: ${Thread.currentThread().name}")
+            Log.e(TAG, "  Thread ID: ${Thread.currentThread().id}")
+            Log.e(TAG, "  Is main thread: ${Thread.currentThread() == android.os.Looper.getMainLooper().thread}")
+            Log.e(TAG, "[6/6] ✅ Thread info retrieved")
+            
+            Log.e(TAG, "")
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "=== ✅✅✅ MINIMAL TEST SUCCESS ✅✅✅ ===")
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "")
+            Log.e(TAG, "Next steps:")
+            Log.e(TAG, "1. If you see this, basic Activity works fine")
+            Log.e(TAG, "2. Uncomment Compose code to test Jetpack Compose")
+            Log.e(TAG, "3. Restore original MainActivity from .backup file")
+            Log.e(TAG, "")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "")
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "=== ❌❌❌ CRASH DETECTED ❌❌❌ ===")
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "Exception: ${e.javaClass.name}")
+            Log.e(TAG, "Message: ${e.message}")
+            Log.e(TAG, "Stack trace:")
+            e.stackTrace.forEach { element ->
+                Log.e(TAG, "  at $element")
             }
+            Log.e(TAG, "============================================")
+            throw e
         }
-        
-        LogManager.i("MainActivity", "UI setup completed")
     }
     
-    private fun isDebugMode(): Boolean {
-        return (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    override fun onStart() {
+        super.onStart()
+        Log.e(TAG, "[LIFECYCLE] onStart() called")
     }
     
-    private fun setupGlobalCrashHandler() {
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                LogManager.e("CRASH", "Uncaught exception on thread: ${thread.name}", throwable)
-                
-                // Save to file before app dies
-                val crashDir = File("/sdcard/InjectTools")
-                if (!crashDir.exists()) {
-                    crashDir.mkdirs()
-                }
-                
-                val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-                val crashFile = File(crashDir, "crash_$timestamp.log")
-                
-                val crashReport = buildString {
-                    appendLine("=== InjectTools Crash Report ===")
-                    appendLine("Time: $timestamp")
-                    appendLine("Thread: ${thread.name}")
-                    appendLine("Exception: ${throwable.javaClass.name}")
-                    appendLine("Message: ${throwable.message}")
-                    appendLine("\nStack Trace:")
-                    appendLine(throwable.stackTraceToString())
-                    appendLine("\nCaused by:")
-                    var cause = throwable.cause
-                    while (cause != null) {
-                        appendLine("  ${cause.javaClass.name}: ${cause.message}")
-                        cause.stackTrace.take(5).forEach { 
-                            appendLine("    at $it")
-                        }
-                        cause = cause.cause
-                    }
-                }
-                
-                crashFile.writeText(crashReport)
-                LogManager.i("CRASH", "Crash log saved to: ${crashFile.absolutePath}")
-                
-            } catch (e: Exception) {
-                // If crash handler itself crashes, at least try to log it
-                android.util.Log.e("CRASH_HANDLER", "Failed to save crash log", e)
-            } finally {
-                // Call original handler
-                defaultHandler?.uncaughtException(thread, throwable)
-            }
-        }
-        
-        LogManager.i("MainActivity", "Global crash handler installed")
+    override fun onResume() {
+        super.onResume()
+        Log.e(TAG, "[LIFECYCLE] onResume() called")
+        Log.e(TAG, "[LIFECYCLE] Activity is now visible and interactive")
     }
     
-    private fun setupStrictMode() {
-        StrictMode.setThreadPolicy(
-            StrictMode.ThreadPolicy.Builder()
-                .detectAll()
-                .penaltyLog()
-                .build()
-        )
-        
-        StrictMode.setVmPolicy(
-            StrictMode.VmPolicy.Builder()
-                .detectAll()
-                .penaltyLog()
-                .build()
-        )
-        
-        LogManager.i("MainActivity", "StrictMode enabled (debug build)")
+    override fun onPause() {
+        Log.e(TAG, "[LIFECYCLE] onPause() called")
+        super.onPause()
+    }
+    
+    override fun onStop() {
+        Log.e(TAG, "[LIFECYCLE] onStop() called")
+        super.onStop()
+    }
+    
+    override fun onDestroy() {
+        Log.e(TAG, "[LIFECYCLE] onDestroy() called")
+        super.onDestroy()
     }
 }
+
+/* 
+ * PHASE 2: Uncomment this to test Compose
+ * 
+ * Replace the setContentView(textView) above with:
+ * 
+ * setContent {
+ *     InjectToolsTheme {
+ *         Text("Compose Test")
+ *     }
+ * }
+ */

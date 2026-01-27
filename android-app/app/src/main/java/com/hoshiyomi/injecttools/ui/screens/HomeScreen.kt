@@ -72,6 +72,7 @@ fun HomeScreen(
             }
             
             // Results Access
+            @Suppress("DEPRECATION")
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onNavigateToResults
@@ -128,7 +129,7 @@ fun HomeScreen(
             FeatureItem(
                 icon = Icons.Default.Done,
                 title = "TLS Handshake",
-                description = "Native Rust implementation"
+                description = "Native Kotlin implementation"
             )
             
             FeatureItem(
@@ -173,6 +174,7 @@ fun WelcomeCard() {
     }
 }
 
+@Suppress("DEPRECATION")
 @Composable
 fun ActionCard(
     modifier: Modifier = Modifier,

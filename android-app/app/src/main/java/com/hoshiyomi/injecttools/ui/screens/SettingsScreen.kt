@@ -179,8 +179,8 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InfoRow("Native Library", "libinjecttools.so")
-                    InfoRow("Rust Core", "Hyper + Rustls")
+                    InfoRow("Core Library", "Pure Kotlin")
+                    InfoRow("Network", "OkHttp + Coroutines")
                     InfoRow("UI Framework", "Jetpack Compose")
                     InfoRow("Min SDK", "Android 8.0 (API 26)")
                 }
@@ -189,6 +189,7 @@ fun SettingsScreen(
     }
 }
 
+@Suppress("DEPRECATION")
 @Composable
 fun SettingItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

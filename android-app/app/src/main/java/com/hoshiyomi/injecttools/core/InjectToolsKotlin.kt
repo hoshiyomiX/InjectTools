@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.InetAddress
@@ -153,13 +154,15 @@ object InjectToolsKotlin {
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
                 .followRedirects(false)
-                .dns { hostname ->
-                    if (hostname == host) {
-                        listOf(InetAddress.getByName(ip))
-                    } else {
-                        InetAddress.getAllByName(hostname).toList()
+                .dns(object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> {
+                        return if (hostname == host) {
+                            listOf(InetAddress.getByName(ip))
+                        } else {
+                            InetAddress.getAllByName(hostname).toList()
+                        }
                     }
-                }
+                })
                 .build()
 
             val request = Request.Builder()

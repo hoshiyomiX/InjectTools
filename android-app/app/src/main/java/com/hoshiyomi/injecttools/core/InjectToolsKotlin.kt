@@ -1,6 +1,5 @@
 package com.hoshiyomi.injecttools.core
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -20,7 +19,7 @@ import javax.net.ssl.SSLSocket
  * No JNI/native library dependency required
  */
 object InjectToolsKotlin {
-    private const val TAG = "InjectToolsKotlin"
+    private const val TAG = "InjectToolsCore"
     
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -46,7 +45,6 @@ object InjectToolsKotlin {
     // =============================================================================
 
     private fun isPrivateIP(ip: String): Boolean {
-        // Regex equivalent: ^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.|^127\.
         if (ip.startsWith("10.") || 
             ip.startsWith("192.168.") || 
             ip.startsWith("127.")) {
@@ -66,12 +64,10 @@ object InjectToolsKotlin {
     }
 
     private fun isFakeDnsIP(ip: String): Boolean {
-        // Regex: ^198\.(18|19)\.
         return ip.startsWith("198.18.") || ip.startsWith("198.19.")
     }
 
     fun isCloudflareIP(ip: String): Boolean {
-        // V17 Explicit List
         if (ip.startsWith("104.")) return true
         if (ip.startsWith("162.158.") || ip.startsWith("162.159.")) return true
         if (ip.startsWith("188.114.")) return true
@@ -79,8 +75,6 @@ object InjectToolsKotlin {
         if (ip.startsWith("197.234.")) return true
         if (ip.startsWith("190.93.")) return true
         
-        // 172.64.0.0/13 -> 172.64.0.0 - 172.71.255.255
-        // Regex: ^172\.(6[4-9]|7[0-1])\.
         if (ip.startsWith("172.")) {
             val parts = ip.split(".")
             if (parts.size > 1) {
@@ -99,10 +93,13 @@ object InjectToolsKotlin {
 
     suspend fun resolveDomain(domain: String): String? = withContext(Dispatchers.IO) {
         try {
+            LogManager.d(TAG, "Resolving domain: $domain")
             val addresses = InetAddress.getAllByName(domain)
-            addresses.firstOrNull()?.hostAddress
+            val ip = addresses.firstOrNull()?.hostAddress
+            LogManager.i(TAG, "Resolved $domain -> $ip")
+            ip
         } catch (e: Exception) {
-            Log.e(TAG, "DNS resolution failed for $domain: ${e.message}")
+            LogManager.e(TAG, "DNS resolution failed for $domain", e)
             null
         }
     }
@@ -113,6 +110,7 @@ object InjectToolsKotlin {
 
     private suspend fun checkTLSHandshake(ip: String, sni: String): Boolean = withContext(Dispatchers.IO) {
         try {
+            LogManager.d(TAG, "TLS handshake: $ip (SNI: $sni)")
             val socket = Socket()
             socket.connect(InetSocketAddress(ip, 443), 5000)
             
@@ -123,7 +121,6 @@ object InjectToolsKotlin {
                 socket, sni, 443, true
             ) as SSLSocket
             
-            // Set SNI
             val sslParams = sslSocket.sslParameters
             sslParams.serverNames = listOf(javax.net.ssl.SNIHostName(sni))
             sslSocket.sslParameters = sslParams
@@ -132,9 +129,10 @@ object InjectToolsKotlin {
             sslSocket.close()
             socket.close()
             
+            LogManager.i(TAG, "TLS handshake SUCCESS: $ip")
             true
         } catch (e: Exception) {
-            Log.d(TAG, "TLS handshake failed for $ip ($sni): ${e.message}")
+            LogManager.w(TAG, "TLS handshake FAILED: $ip - ${e.message}")
             false
         }
     }
@@ -149,7 +147,7 @@ object InjectToolsKotlin {
         ip: String
     ): Pair<Int, Boolean> = withContext(Dispatchers.IO) {
         try {
-            // Custom DNS: Force specific IP for host
+            LogManager.d(TAG, "HTTP HEAD: $url (IP: $ip)")
             val customClient = OkHttpClient.Builder()
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
@@ -175,11 +173,12 @@ object InjectToolsKotlin {
             val statusCode = response.code
             val hasCfRay = response.header("cf-ray") != null
             
+            LogManager.i(TAG, "HTTP response: $statusCode, CF-Ray: $hasCfRay")
             response.close()
             
             Pair(statusCode, hasCfRay)
         } catch (e: Exception) {
-            Log.e(TAG, "HTTP request failed: ${e.message}")
+            LogManager.e(TAG, "HTTP request failed", e)
             Pair(0, false)
         }
     }
@@ -190,26 +189,43 @@ object InjectToolsKotlin {
 
     suspend fun checkTargetOnline(target: String): Boolean {
         return try {
-            val ip = resolveDomain(target) ?: return false
+            LogManager.i(TAG, "Checking if target is online: $target")
+            val ip = resolveDomain(target)
             
-            // Check TLS handshake
+            if (ip == null) {
+                LogManager.w(TAG, "Target DNS resolution failed: $target")
+                return false
+            }
+            
+            LogManager.d(TAG, "Target IP: $ip")
+            
+            // Try TLS handshake first (most reliable)
             if (checkTLSHandshake(ip, target)) {
+                LogManager.i(TAG, "Target is ONLINE (TLS handshake success)")
                 return true
             }
             
-            // Fallback: HTTP check
-            val request = Request.Builder()
-                .url("http://$target/")
-                .head()
-                .build()
-            
-            val response = httpClient.newCall(request).execute()
-            val code = response.code
-            response.close()
-            
-            code != 0
+            // Fallback: Try HTTP
+            try {
+                val request = Request.Builder()
+                    .url("https://$target/")
+                    .head()
+                    .build()
+                
+                val response = httpClient.newCall(request).execute()
+                val code = response.code
+                response.close()
+                
+                val isOnline = code in 200..599  // Any response means online
+                LogManager.i(TAG, "Target is ${if (isOnline) "ONLINE" else "OFFLINE"} (HTTP $code)")
+                isOnline
+            } catch (e: Exception) {
+                LogManager.w(TAG, "HTTP fallback failed: ${e.message}")
+                // Even if HTTP fails, if we got an IP, consider it potentially reachable
+                true
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Target check failed: ${e.message}")
+            LogManager.e(TAG, "Target check failed", e)
             false
         }
     }
@@ -223,6 +239,8 @@ object InjectToolsKotlin {
         subdomain: String,
         timeout: Int = 5
     ): ScanResult = withContext(Dispatchers.IO) {
+        LogManager.i(TAG, "Testing subdomain: $subdomain for target: $target")
+        
         var result = ScanResult(
             subdomain = subdomain,
             ip = "",
@@ -266,12 +284,15 @@ object InjectToolsKotlin {
                 val latency = System.currentTimeMillis() - startTime
                 socket.close()
                 
+                LogManager.d(TAG, "TCP latency: ${latency}ms")
+                
                 if (latency < 5) {
                     return@withContext result.copy(
                         errorMsg = "VPN detected (latency <5ms)"
                     )
                 }
             } catch (e: Exception) {
+                LogManager.w(TAG, "TCP connection failed", e)
                 return@withContext result.copy(
                     errorMsg = "TCP port 443 blocked"
                 )
@@ -295,14 +316,16 @@ object InjectToolsKotlin {
                     cfRay = "Yes",
                     isWorking = true
                 )
+                LogManager.i(TAG, "✅ Subdomain WORKING: $subdomain")
             } else {
                 result = result.copy(
                     errorMsg = "No CF-Ray header found"
                 )
+                LogManager.w(TAG, "❌ Subdomain NOT working: $subdomain")
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Scan error for $subdomain: ${e.message}")
+            LogManager.e(TAG, "Scan error for $subdomain", e)
             result = result.copy(
                 errorMsg = "Scan failed: ${e.message}"
             )
@@ -320,6 +343,7 @@ object InjectToolsKotlin {
         subdomains: List<String>,
         timeout: Int = 5
     ): List<ScanResult> = withContext(Dispatchers.IO) {
+        LogManager.i(TAG, "Starting batch test: ${subdomains.size} subdomains")
         subdomains.map { subdomain ->
             testSubdomain(target, subdomain, timeout)
         }
@@ -334,6 +358,7 @@ object InjectToolsKotlin {
         limit: Int = 100
     ): List<String> = withContext(Dispatchers.IO) {
         try {
+            LogManager.i(TAG, "Discovering subdomains for: $domain")
             val url = "https://crt.sh/?q=%25.$domain&output=json"
             val request = Request.Builder()
                 .url(url)
@@ -344,13 +369,11 @@ object InjectToolsKotlin {
             val body = response.body?.string() ?: "[]"
             response.close()
 
-            // Simple JSON parsing (assuming format: [{"name_value": "sub.domain.com"}, ...])
             val subdomains = mutableSetOf<String>()
             val regex = "\"name_value\"\\s*:\\s*\"([^\"]+)\"".toRegex()
             
             regex.findAll(body).forEach { match ->
                 val nameValue = match.groupValues[1]
-                // Handle wildcard and multiple names
                 nameValue.split("\n").forEach { name ->
                     val cleanName = name.trim().removePrefix("*.")
                     if (cleanName.isNotEmpty() && 
@@ -361,9 +384,11 @@ object InjectToolsKotlin {
                 }
             }
 
-            subdomains.take(limit).toList()
+            val result = subdomains.take(limit).toList()
+            LogManager.i(TAG, "Discovered ${result.size} subdomains")
+            result
         } catch (e: Exception) {
-            Log.e(TAG, "crt.sh discovery failed: ${e.message}")
+            LogManager.e(TAG, "crt.sh discovery failed", e)
             emptyList()
         }
     }

@@ -2,6 +2,7 @@ package com.hoshiyomi.injecttools.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hoshiyomi.injecttools.core.LogManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +80,7 @@ fun SettingsScreen(
                                 "Version 4.0.0-alpha",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontFamily = FontFamily.Monospace
-            )
+                            )
                         }
                     }
                     
@@ -88,6 +90,41 @@ fun SettingsScreen(
                     )
                 }
             }
+            
+            // Debug Tools
+            Text(
+                "Debug Tools",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            SettingItem(
+                icon = Icons.Default.List,
+                title = "Copy Debug Logs",
+                subtitle = "${LogManager.getLogCount()} log entries",
+                onClick = {
+                    LogManager.copyToClipboard(context)
+                    Toast.makeText(
+                        context,
+                        "Logs copied to clipboard",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+            
+            SettingItem(
+                icon = Icons.Default.Delete,
+                title = "Clear Logs",
+                subtitle = "Remove all debug logs",
+                onClick = {
+                    LogManager.clear()
+                    Toast.makeText(
+                        context,
+                        "Logs cleared",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
             
             // Developer Info
             Text(

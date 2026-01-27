@@ -25,11 +25,27 @@ jobs:
         gradle-version: '8.5'
         
     - name: Build with Gradle
+      shell: bash
       run: |
-        gradle assembleDebug --stacktrace > build.log 2>&1 || { grep -A 50 "FAILURE: " build.log; exit 1; }
+        set -o pipefail
+        if ! gradle assembleDebug --stacktrace 2>&1 | tee build.log; then
+          echo "Build failed. Extracting error log..."
+          sed -n '/FAILURE: /,/https:\/\/help.gradle.org/p' build.log > build-error.log
+          echo "=== CONTENT OF build-error.log ==="
+          cat build-error.log
+          exit 1
+        fi
 
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
+
+    - name: Upload Build Error Log
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-error-log
+        path: build-error.log

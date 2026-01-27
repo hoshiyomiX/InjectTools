@@ -75,7 +75,7 @@ object Scanner {
             isCf = isCloudflareIp(ip)
 
             // 2. SSL/TLS Connection with SNI
-            val factory = SSLSocketFactory.getDefault()
+            val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
             val socket = Socket(ip, 443)
             socket.soTimeout = timeoutMs
             

@@ -3,6 +3,7 @@ package com.hoshiyomi.injecttools.core
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.os.Environment
 import android.util.Log
 import java.io.File
@@ -21,6 +22,7 @@ object LogManager {
     
     private var logFile: File? = null
     private var fileWriter: FileWriter? = null
+    private var initialized = false
     
     data class LogEntry(
         val timestamp: Long,
@@ -47,8 +49,22 @@ object LogManager {
     }
     
     fun init(context: Context) {
+        if (initialized) return
+        
         try {
-            val logDir = File(Environment.getExternalStorageDirectory(), "InjectTools")
+            // Use app-specific external files dir (no permission needed Android 10+)
+            val logDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.getExternalFilesDir(null)?.let { File(it, "logs") }
+                    ?: File(context.filesDir, "logs")
+            } else {
+                // Android 9 and below - try external storage first
+                try {
+                    File(Environment.getExternalStorageDirectory(), "InjectTools")
+                } catch (e: Exception) {
+                    File(context.filesDir, "logs")
+                }
+            }
+            
             if (!logDir.exists()) {
                 logDir.mkdirs()
             }
@@ -64,12 +80,14 @@ object LogManager {
             fileWriter?.write("\n=== InjectTools Debug Session Started ===\n")
             fileWriter?.write("Time: ${fileDateFormat.format(Date())}\n")
             fileWriter?.write("Path: ${logFile!!.absolutePath}\n")
+            fileWriter?.write("Android: ${Build.VERSION.SDK_INT}\n")
             fileWriter?.write("==========================================\n\n")
             fileWriter?.flush()
             
+            initialized = true
             Log.i(TAG, "File logging enabled: ${logFile!!.absolutePath}")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to init file logging: ${e.message}")
+            Log.e(TAG, "Failed to init file logging: ${e.message}", e)
         }
     }
     
@@ -106,11 +124,13 @@ object LogManager {
             }
             
             // Write to file immediately (live logging)
-            try {
-                fileWriter?.write(entry.formatForFile() + "\n")
-                fileWriter?.flush()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to write to file: ${e.message}")
+            if (initialized && fileWriter != null) {
+                try {
+                    fileWriter?.write(entry.formatForFile() + "\n")
+                    fileWriter?.flush()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to write to file: ${e.message}")
+                }
             }
             
         } catch (e: Exception) {
@@ -126,6 +146,7 @@ object LogManager {
             sb.appendLine("Total entries: ${logs.size}")
             if (logFile != null && logFile!!.exists()) {
                 sb.appendLine("File: ${logFile!!.absolutePath}")
+                sb.appendLine("File size: ${logFile!!.length()} bytes")
             }
             sb.appendLine("")
             

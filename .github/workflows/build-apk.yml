@@ -146,19 +146,19 @@ jobs:
             echo "KOTLIN_ERROR=true" >> $GITHUB_ENV
           fi
           
+          # Extract 'e:' prefixed errors (Kotlin compiler)
+          if grep -q "^e: " "$FULL_LOG"; then
+            echo "### COMPILER ERRORS (e:)" >> "$ERROR_LOG"
+            grep "^e: " "$FULL_LOG" | head -30 >> "$ERROR_LOG" || true
+            echo "" >> "$ERROR_LOG"
+          fi
+          
           # Extract resource errors
           if grep -q "resource.*not found\|Android resource linking failed" "$FULL_LOG"; then
             echo "### RESOURCE ERRORS" >> "$ERROR_LOG"
             grep -B 2 -A 10 "resource.*not found\|Android resource linking failed" "$FULL_LOG" | head -50 >> "$ERROR_LOG" || true
             echo "" >> "$ERROR_LOG"
             echo "RESOURCE_ERROR=true" >> $GITHUB_ENV
-          fi
-          
-          # Extract 'e:' prefixed errors (Kotlin compiler)
-          if grep -q "^e: " "$FULL_LOG"; then
-            echo "### COMPILER ERRORS (e:)" >> "$ERROR_LOG"
-            grep "^e: " "$FULL_LOG" | head -30 >> "$ERROR_LOG" || true
-            echo "" >> "$ERROR_LOG"
           fi
           
           # Extract task failures
@@ -170,9 +170,8 @@ jobs:
           
           echo "==========================================" >> "$ERROR_LOG"
           echo "" >> "$ERROR_LOG"
-          echo "Full log available in: full-build-$TIMESTAMP.log" >> "$ERROR_LOG"
+          echo "Full log: full-build-$(date +%Y%m%d-%H%M%S).log (not committed)" >> "$ERROR_LOG"
           
-          # Show what we extracted
           echo "Critical errors extracted ($(wc -l < "$ERROR_LOG") lines)"
 
       - name: Display error summary
@@ -188,34 +187,62 @@ jobs:
           cat "$ERROR_LOG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "$FULL_LOG" ]; then
-            FULL_SIZE=$(du -h "$FULL_LOG" | cut -f1)
-            echo "📄 Full log size: $FULL_SIZE" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
 
       - name: Commit error log to repo
         if: steps.build.outcome == 'failure'
         run: |
+          echo "=== COMMITTING ERROR LOG ==="
+          echo "Error log path: $ERROR_LOG"
+          
+          # Verify file exists
+          if [ ! -f "$ERROR_LOG" ]; then
+            echo "ERROR: Log file does not exist!"
+            exit 0
+          fi
+          
+          echo "File size: $(du -h "$ERROR_LOG" | cut -f1)"
+          echo "File preview:"
+          head -20 "$ERROR_LOG"
+          echo ""
+          
+          # Git config
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           
-          # Only commit critical errors, not full log
-          git add "$ERROR_LOG" || true
+          # Show git status before
+          echo "Git status before add:"
+          git status
           
-          if ! git diff --cached --quiet; then
-            git commit -m "ci: Add critical build errors [skip ci]
+          # Add file
+          git add "$ERROR_LOG"
+          
+          # Check if file was staged
+          echo "Git status after add:"
+          git status
+          
+          # Commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            echo "Committing error log..."
+            git commit -m "ci: Build failure log [skip ci]
+
+Timestamp: $(date)
+Exit code: $BUILD_EXIT_CODE
+File: $(basename "$ERROR_LOG")"
             
-            Build failed at $(date)
-            Exit code: $BUILD_EXIT_CODE
-            Extracted errors only (not full debug log)"
-            
+            # Push
             BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-            git push origin "HEAD:$BRANCH_NAME" || echo "⚠️ Failed to push error log (non-critical)"
+            echo "Pushing to branch: $BRANCH_NAME"
+            
+            if git push origin "HEAD:$BRANCH_NAME"; then
+              echo "✅ Error log committed and pushed successfully"
+            else
+              echo "⚠️ Push failed (permissions?)"
+            fi
           fi
           
-          # Always fail the step after logging
+          # Always fail after logging
           exit 1
 
       - name: Rename APK
@@ -299,12 +326,12 @@ jobs:
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-          git add "$ERROR_LOG" || true
+          [ -f "$ERROR_LOG" ] && git add "$ERROR_LOG" || true
           git commit -m "ci: Release build errors [skip ci]" || true
           BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
           git push origin "HEAD:$BRANCH_NAME" || true
           
-          cat "$ERROR_LOG"
+          [ -f "$ERROR_LOG" ] && cat "$ERROR_LOG"
           exit 1
 
       - name: Rename APK

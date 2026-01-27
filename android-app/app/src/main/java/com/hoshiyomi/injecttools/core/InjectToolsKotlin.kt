@@ -9,15 +9,13 @@ import okhttp3.Request
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
-/**
- * Pure Kotlin implementation of InjectTools scanner
- * 100% logic parity with Rust scanner.rs
- * No JNI/native library dependency required
- */
 object InjectToolsKotlin {
     private const val TAG = "InjectToolsCore"
     
@@ -40,24 +38,13 @@ object InjectToolsKotlin {
         val errorSource: String?
     )
 
-    // =============================================================================
-    // HELPER FUNCTIONS (Logic from scanner.rs V17)
-    // =============================================================================
-
     private fun isPrivateIP(ip: String): Boolean {
-        if (ip.startsWith("10.") || 
-            ip.startsWith("192.168.") || 
-            ip.startsWith("127.")) {
-            return true
-        }
-        
+        if (ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("127.")) return true
         if (ip.startsWith("172.")) {
             val parts = ip.split(".")
             if (parts.size > 1) {
                 val secondOctet = parts[1].toIntOrNull() ?: 0
-                if (secondOctet in 16..31) {
-                    return true
-                }
+                if (secondOctet in 16..31) return true
             }
         }
         return false
@@ -74,22 +61,15 @@ object InjectToolsKotlin {
         if (ip.startsWith("198.41.")) return true
         if (ip.startsWith("197.234.")) return true
         if (ip.startsWith("190.93.")) return true
-        
         if (ip.startsWith("172.")) {
             val parts = ip.split(".")
             if (parts.size > 1) {
                 val second = parts[1].toIntOrNull() ?: 0
-                if (second in 64..71) {
-                    return true
-                }
+                if (second in 64..71) return true
             }
         }
         return false
     }
-
-    // =============================================================================
-    // DNS RESOLUTION
-    // =============================================================================
 
     suspend fun resolveDomain(domain: String): String? = withContext(Dispatchers.IO) {
         try {
@@ -98,8 +78,6 @@ object InjectToolsKotlin {
             val ip = addresses.firstOrNull()?.hostAddress
             if (ip != null) {
                 LogManager.i(TAG, "Resolved $domain -> $ip")
-            } else {
-                LogManager.w(TAG, "No IP found for $domain")
             }
             ip
         } catch (e: Exception) {
@@ -108,20 +86,25 @@ object InjectToolsKotlin {
         }
     }
 
-    // =============================================================================
-    // TLS HANDSHAKE CHECK
-    // =============================================================================
-
     private suspend fun checkTLSHandshake(ip: String, sni: String): Boolean = withContext(Dispatchers.IO) {
+        var socket: Socket? = null
+        var sslSocket: SSLSocket? = null
         try {
             LogManager.d(TAG, "TLS check: $ip with SNI=$sni")
-            val socket = Socket()
+            
+            socket = Socket()
             socket.connect(InetSocketAddress(ip, 443), 5000)
             
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, null, null)
+            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
             
-            val sslSocket = sslContext.socketFactory.createSocket(
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+            
+            sslSocket = sslContext.socketFactory.createSocket(
                 socket, sni, 443, true
             ) as SSLSocket
             
@@ -131,45 +114,46 @@ object InjectToolsKotlin {
             
             sslSocket.startHandshake()
             val session = sslSocket.session
-            val isValid = session != null && session.isValid
-            
-            sslSocket.close()
-            socket.close()
+            val isValid = session?.isValid == true
             
             if (isValid) {
-                LogManager.i(TAG, "✅ TLS OK: $ip accepts SNI=$sni")
+                LogManager.i(TAG, "TLS OK: $ip accepts SNI=$sni")
             } else {
-                LogManager.w(TAG, "❌ TLS FAIL: $ip rejected SNI=$sni")
+                LogManager.w(TAG, "TLS FAIL: $ip rejected SNI=$sni")
             }
             
             isValid
         } catch (e: Exception) {
-            LogManager.w(TAG, "❌ TLS FAIL: $ip with SNI=$sni - ${e.message}")
+            LogManager.w(TAG, "TLS FAIL: $ip - ${e.message}")
             false
+        } finally {
+            try {
+                sslSocket?.close()
+                socket?.close()
+            } catch (e: Exception) {
+                // Ignore close errors
+            }
         }
     }
 
-    // =============================================================================
-    // HTTP REQUEST WITH CUSTOM IP
-    // =============================================================================
-
-    private suspend fun headWithIP(
-        url: String, 
-        host: String, 
-        ip: String
-    ): Pair<Int, Boolean> = withContext(Dispatchers.IO) {
+    private suspend fun headWithIP(url: String, host: String, ip: String): Pair<Int, Boolean> = withContext(Dispatchers.IO) {
         try {
             LogManager.d(TAG, "HTTP HEAD: $url via $ip")
+            
             val customClient = OkHttpClient.Builder()
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
                 .followRedirects(false)
                 .dns(object : Dns {
                     override fun lookup(hostname: String): List<InetAddress> {
-                        return if (hostname == host) {
-                            listOf(InetAddress.getByName(ip))
-                        } else {
-                            InetAddress.getAllByName(hostname).toList()
+                        return try {
+                            if (hostname == host) {
+                                listOf(InetAddress.getByName(ip))
+                            } else {
+                                InetAddress.getAllByName(hostname).toList()
+                            }
+                        } catch (e: Exception) {
+                            emptyList()
                         }
                     }
                 })
@@ -187,9 +171,7 @@ object InjectToolsKotlin {
             val hasCfRay = cfRay != null
             
             if (hasCfRay) {
-                LogManager.i(TAG, "✅ HTTP $statusCode with CF-Ray: $cfRay")
-            } else {
-                LogManager.w(TAG, "⚠️ HTTP $statusCode but no CF-Ray header")
+                LogManager.i(TAG, "HTTP $statusCode with CF-Ray")
             }
             
             response.close()
@@ -200,180 +182,122 @@ object InjectToolsKotlin {
         }
     }
 
-    // =============================================================================
-    // SINGLE SUBDOMAIN TEST (Main Logic from scanner.rs)
-    // =============================================================================
-
-    suspend fun testSubdomain(
-        target: String,
-        subdomain: String,
-        timeout: Int = 5
-    ): ScanResult = withContext(Dispatchers.IO) {
-        LogManager.i(TAG, "\n========================================")
-        LogManager.i(TAG, "Testing: $subdomain")
-        LogManager.i(TAG, "Target: $target")
-        LogManager.i(TAG, "========================================")
-        
-        var result = ScanResult(
-            subdomain = subdomain,
-            ip = "",
-            isCloudflare = false,
-            isWorking = false,
-            isRestricted = false,
-            statusCode = null,
-            cfRay = null,
-            errorMsg = null,
-            errorSource = null
-        )
-
+    suspend fun testSubdomain(target: String, subdomain: String, timeout: Int = 5): ScanResult = withContext(Dispatchers.IO) {
         try {
-            // 1. Resolve Subdomain
+            LogManager.i(TAG, "Testing: $subdomain")
+            
+            var result = ScanResult(
+                subdomain = subdomain,
+                ip = "",
+                isCloudflare = false,
+                isWorking = false,
+                isRestricted = false,
+                statusCode = null,
+                cfRay = null,
+                errorMsg = null,
+                errorSource = null
+            )
+
             val subIP = resolveDomain(subdomain)
             if (subIP == null) {
-                LogManager.e(TAG, "SKIP: DNS resolution failed")
-                return@withContext result.copy(
-                    errorMsg = "DNS resolution failed",
-                    errorSource = "dns"
-                )
+                LogManager.e(TAG, "DNS failed")
+                return@withContext result.copy(errorMsg = "DNS resolution failed", errorSource = "dns")
             }
             result = result.copy(ip = subIP)
 
-            // 2. Environment Checks
             if (isFakeDnsIP(subIP)) {
-                LogManager.e(TAG, "SKIP: Fake DNS IP (VPN active)")
-                return@withContext result.copy(
-                    errorMsg = "Fake DNS IP detected (VPN active)",
-                    errorSource = "environment"
-                )
+                return@withContext result.copy(errorMsg = "Fake DNS IP (VPN)", errorSource = "environment")
             }
             
             if (isPrivateIP(subIP)) {
-                LogManager.e(TAG, "SKIP: Private IP address")
-                return@withContext result.copy(
-                    errorMsg = "Private IP address",
-                    errorSource = "environment"
-                )
+                return@withContext result.copy(errorMsg = "Private IP", errorSource = "environment")
             }
             
             if (!isCloudflareIP(subIP)) {
-                LogManager.w(TAG, "SKIP: Not a Cloudflare IP range")
-                return@withContext result.copy(
-                    errorMsg = "Not a Cloudflare IP",
-                    errorSource = "cloudflare_check"
-                )
+                return@withContext result.copy(errorMsg = "Not Cloudflare IP", errorSource = "cloudflare_check")
             }
 
             result = result.copy(isCloudflare = true)
-            LogManager.i(TAG, "✓ IP is Cloudflare range")
+            LogManager.i(TAG, "IP is Cloudflare")
 
-            // 3. TCP Latency Check (Port 443)
             val startTime = System.currentTimeMillis()
-            val socket = Socket()
+            var socket: Socket? = null
             try {
+                socket = Socket()
                 socket.connect(InetSocketAddress(subIP, 443), 2000)
                 val latency = System.currentTimeMillis() - startTime
-                socket.close()
-                
-                LogManager.d(TAG, "TCP latency: ${latency}ms")
                 
                 if (latency < 5) {
-                    LogManager.e(TAG, "SKIP: VPN detected (latency <5ms)")
-                    return@withContext result.copy(
-                        errorMsg = "VPN detected (latency <5ms)",
-                        errorSource = "latency_check"
-                    )
+                    return@withContext result.copy(errorMsg = "VPN detected", errorSource = "latency_check")
                 }
-                LogManager.i(TAG, "✓ TCP latency OK")
+                LogManager.i(TAG, "TCP OK: ${latency}ms")
             } catch (e: Exception) {
-                LogManager.e(TAG, "SKIP: TCP port 443 unreachable - ${e.message}")
-                return@withContext result.copy(
-                    errorMsg = "TCP port 443 blocked",
-                    errorSource = "tcp_check"
-                )
+                LogManager.e(TAG, "TCP failed")
+                return@withContext result.copy(errorMsg = "Port 443 blocked", errorSource = "tcp_check")
+            } finally {
+                try {
+                    socket?.close()
+                } catch (e: Exception) {}
             }
 
-            // 4. TLS Handshake with Target SNI
-            // Ini yang menentukan target valid atau tidak!
             if (!checkTLSHandshake(subIP, target)) {
-                LogManager.e(TAG, "SKIP: TLS handshake failed (target might be invalid or subdomain misconfigured)")
-                return@withContext result.copy(
-                    errorMsg = "TLS handshake failed",
-                    errorSource = "tls_handshake"
-                )
+                LogManager.e(TAG, "TLS failed")
+                return@withContext result.copy(errorMsg = "TLS handshake failed", errorSource = "tls_handshake")
             }
-            LogManager.i(TAG, "✓ TLS handshake SUCCESS (target is valid!)")
+            LogManager.i(TAG, "TLS SUCCESS")
 
-            // 5. End-to-End HTTP Check
             val url = "https://$target/"
             val (statusCode, hasCfRay) = headWithIP(url, target, subIP)
             
             result = result.copy(statusCode = statusCode)
             
             if (hasCfRay) {
-                result = result.copy(
-                    cfRay = "Yes",
-                    isWorking = true
-                )
-                LogManager.i(TAG, "🎉 WORKING SUBDOMAIN FOUND!")
+                result = result.copy(cfRay = "Yes", isWorking = true)
+                LogManager.i(TAG, "WORKING SUBDOMAIN!")
             } else {
-                LogManager.w(TAG, "⚠️ HTTP OK but no CF-Ray header")
-                result = result.copy(
-                    errorMsg = "No CF-Ray header (might be restricted)",
-                    errorSource = "http_check"
-                )
+                result = result.copy(errorMsg = "No CF-Ray header", errorSource = "http_check")
             }
 
+            result
         } catch (e: Exception) {
-            LogManager.e(TAG, "Unexpected error: ${e.message}", e)
-            result = result.copy(
+            LogManager.e(TAG, "Scan error: ${e.message}", e)
+            ScanResult(
+                subdomain = subdomain,
+                ip = "",
+                isCloudflare = false,
+                isWorking = false,
+                isRestricted = false,
+                statusCode = null,
+                cfRay = null,
                 errorMsg = "Scan failed: ${e.message}",
                 errorSource = "exception"
             )
         }
-
-        LogManager.i(TAG, "Result: ${if (result.isWorking) "WORKING ✅" else "NOT WORKING ❌"}")
-        result
     }
 
-    // =============================================================================
-    // BATCH TEST
-    // =============================================================================
-
-    suspend fun batchTest(
-        target: String,
-        subdomains: List<String>,
-        timeout: Int = 5
-    ): List<ScanResult> = withContext(Dispatchers.IO) {
-        LogManager.i(TAG, "\n========================================")
-        LogManager.i(TAG, "BATCH SCAN STARTED")
-        LogManager.i(TAG, "Target: $target")
-        LogManager.i(TAG, "Subdomains: ${subdomains.size}")
-        LogManager.i(TAG, "========================================\n")
-        
-        val results = subdomains.map { subdomain ->
-            testSubdomain(target, subdomain, timeout)
+    suspend fun batchTest(target: String, subdomains: List<String>, timeout: Int = 5): List<ScanResult> = withContext(Dispatchers.IO) {
+        try {
+            LogManager.i(TAG, "Batch scan started: ${subdomains.size} subdomains")
+            
+            val results = subdomains.map { subdomain ->
+                testSubdomain(target, subdomain, timeout)
+            }
+            
+            val workingCount = results.count { it.isWorking }
+            LogManager.i(TAG, "Batch completed: $workingCount / ${results.size} working")
+            
+            results
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Batch test failed", e)
+            emptyList()
         }
-        
-        val workingCount = results.count { it.isWorking }
-        LogManager.i(TAG, "\n========================================")
-        LogManager.i(TAG, "BATCH SCAN COMPLETED")
-        LogManager.i(TAG, "Working: $workingCount / ${results.size}")
-        LogManager.i(TAG, "========================================\n")
-        
-        results
     }
 
-    // =============================================================================
-    // CRT.SH SUBDOMAIN DISCOVERY
-    // =============================================================================
-
-    suspend fun discoverSubdomains(
-        domain: String,
-        limit: Int = 100
-    ): List<String> = withContext(Dispatchers.IO) {
+    suspend fun discoverSubdomains(domain: String, limit: Int = 100): List<String> = withContext(Dispatchers.IO) {
         try {
             LogManager.i(TAG, "Discovering subdomains for: $domain")
             val url = "https://crt.sh/?q=%25.$domain&output=json"
+            
             val request = Request.Builder()
                 .url(url)
                 .get()
@@ -399,10 +323,10 @@ object InjectToolsKotlin {
             }
 
             val result = subdomains.take(limit).toList()
-            LogManager.i(TAG, "Discovered ${result.size} unique subdomains")
+            LogManager.i(TAG, "Discovered ${result.size} subdomains")
             result
         } catch (e: Exception) {
-            LogManager.e(TAG, "crt.sh discovery failed: ${e.message}", e)
+            LogManager.e(TAG, "Discovery failed: ${e.message}", e)
             emptyList()
         }
     }

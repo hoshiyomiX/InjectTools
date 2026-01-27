@@ -41,50 +41,59 @@ object LogManager {
         log(Level.ERROR, tag, message, throwable)
     
     private fun log(level: Level, tag: String, message: String, throwable: Throwable? = null) {
-        val entry = LogEntry(
-            timestamp = System.currentTimeMillis(),
-            level = level,
-            tag = tag,
-            message = message,
-            throwable = throwable
-        )
-        
-        // Add to queue
-        logs.offer(entry)
-        
-        // Trim if too large
-        while (logs.size > MAX_LOGS) {
-            logs.poll()
-        }
-        
-        // Also log to Android logcat
-        when (level) {
-            Level.VERBOSE -> Log.v(TAG, "$tag: $message", throwable)
-            Level.DEBUG -> Log.d(TAG, "$tag: $message", throwable)
-            Level.INFO -> Log.i(TAG, "$tag: $message", throwable)
-            Level.WARN -> Log.w(TAG, "$tag: $message", throwable)
-            Level.ERROR -> Log.e(TAG, "$tag: $message", throwable)
+        try {
+            val entry = LogEntry(
+                timestamp = System.currentTimeMillis(),
+                level = level,
+                tag = tag,
+                message = message,
+                throwable = throwable
+            )
+            
+            logs.offer(entry)
+            
+            while (logs.size > MAX_LOGS) {
+                logs.poll()
+            }
+            
+            when (level) {
+                Level.VERBOSE -> Log.v(TAG, "$tag: $message", throwable)
+                Level.DEBUG -> Log.d(TAG, "$tag: $message", throwable)
+                Level.INFO -> Log.i(TAG, "$tag: $message", throwable)
+                Level.WARN -> Log.w(TAG, "$tag: $message", throwable)
+                Level.ERROR -> Log.e(TAG, "$tag: $message", throwable)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "LogManager failed: ${e.message}")
         }
     }
     
     fun getAllLogs(): String {
-        val sb = StringBuilder()
-        sb.appendLine("=== InjectTools Debug Logs ===")
-        sb.appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
-        sb.appendLine("Total entries: ${logs.size}")
-        sb.appendLine("")
-        
-        logs.forEach { entry ->
-            sb.appendLine(entry.format())
+        return try {
+            val sb = StringBuilder()
+            sb.appendLine("=== InjectTools Debug Logs ===")
+            sb.appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
+            sb.appendLine("Total entries: ${logs.size}")
+            sb.appendLine("")
+            
+            logs.forEach { entry ->
+                sb.appendLine(entry.format())
+            }
+            
+            sb.toString()
+        } catch (e: Exception) {
+            "Failed to generate logs: ${e.message}"
         }
-        
-        return sb.toString()
     }
     
     fun copyToClipboard(context: Context) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("InjectTools Logs", getAllLogs())
-        clipboard.setPrimaryClip(clip)
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("InjectTools Logs", getAllLogs())
+            clipboard.setPrimaryClip(clip)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy logs: ${e.message}")
+        }
     }
     
     fun clear() {

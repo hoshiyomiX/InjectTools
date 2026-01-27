@@ -1,0 +1,298 @@
+name: Android CI
+
+on:
+  push:
+    branches: [android-apk-migration]
+    paths:
+      - 'android-app/**'
+      - '.github/workflows/android-ci.yml'
+  pull_request:
+    branches: [android-apk-migration]
+    paths:
+      - 'android-app/**'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type to compile'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+
+env:
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true'
+
+jobs:
+  # Job 1: Extract version and validate
+  version-check:
+    name: Version Check
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version_name: ${{ steps.version.outputs.version_name }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      is_minimal_test: ${{ steps.detect.outputs.is_minimal_test }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from build.gradle.kts
+        id: version
+        run: |
+          cd android-app/app
+          VERSION_CODE=$(grep 'versionCode' build.gradle.kts | grep -oP '\d+' | head -1)
+          VERSION_NAME=$(grep 'versionName' build.gradle.kts | grep -oP '"[^"]+"' | tr -d '"' | head -1)
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "### Version Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version Name**: $VERSION_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version Code**: $VERSION_CODE" >> $GITHUB_STEP_SUMMARY
+
+      - name: Detect minimal test mode
+        id: detect
+        run: |
+          if grep -q "MINIMAL_TEST" android-app/app/src/main/java/com/hoshiyomi/injecttools/MainActivity.kt; then
+            echo "is_minimal_test=true" >> $GITHUB_OUTPUT
+            echo "⚠️ **Minimal Test Mode Detected**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "is_minimal_test=false" >> $GITHUB_OUTPUT
+            echo "✅ **Full Build Mode**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Job 2: Build Debug APK
+  build-debug:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    needs: version-check
+    if: |
+      github.event_name != 'workflow_dispatch' || 
+      github.event.inputs.build_type == 'debug' || 
+      github.event.inputs.build_type == 'both'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+          gradle-home-cache-cleanup: true
+
+      - name: Grant execute permission for gradlew
+        run: |
+          cd android-app
+          chmod +x gradlew
+
+      - name: Run Gradle Wrapper Validation
+        uses: gradle/actions/wrapper-validation@v3
+
+      - name: Run lint checks
+        id: lint
+        run: |
+          cd android-app
+          ./gradlew lintDebug --continue || true
+        continue-on-error: true
+
+      - name: Build Debug APK
+        id: build_debug
+        run: |
+          cd android-app
+          echo "::group::Building Debug APK"
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build-debug.log
+          BUILD_STATUS=${PIPESTATUS[0]}
+          echo "::endgroup::"
+          echo "build_status=$BUILD_STATUS" >> $GITHUB_OUTPUT
+          exit $BUILD_STATUS
+        continue-on-error: true
+
+      - name: Upload build logs (on failure)
+        if: steps.build_debug.outputs.build_status != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-debug-${{ github.run_number }}
+          path: android-app/build-debug.log
+          retention-days: 7
+
+      - name: Get APK info
+        if: steps.build_debug.outputs.build_status == '0'
+        id: apk_info
+        run: |
+          cd android-app/app/build/outputs/apk/debug
+          APK_SIZE=$(du -h app-debug.apk | cut -f1)
+          APK_PATH=$(pwd)/app-debug.apk
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+
+      - name: Rename APK with version
+        if: steps.build_debug.outputs.build_status == '0'
+        run: |
+          cd android-app/app/build/outputs/apk/debug
+          SUFFIX=""
+          if [ "${{ needs.version-check.outputs.is_minimal_test }}" = "true" ]; then
+            SUFFIX="-minimal-test"
+          fi
+          mv app-debug.apk InjectTools-${{ needs.version-check.outputs.version_name }}${SUFFIX}-debug.apk
+
+      - name: Upload Debug APK
+        if: steps.build_debug.outputs.build_status == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: InjectTools-${{ needs.version-check.outputs.version_name }}-debug
+          path: android-app/app/build/outputs/apk/debug/InjectTools-*.apk
+          retention-days: 30
+
+      - name: Upload lint report
+        if: steps.lint.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report-debug
+          path: android-app/app/build/reports/lint-results-debug.html
+          retention-days: 7
+
+      - name: Build Summary
+        run: |
+          echo "## 📦 Debug Build" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.build_debug.outputs.build_status }}" = "0" ]; then
+            echo "### ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version**: ${{ needs.version-check.outputs.version_name }} (code: ${{ needs.version-check.outputs.version_code }})" >> $GITHUB_STEP_SUMMARY
+            echo "- **APK Size**: ${{ steps.apk_info.outputs.apk_size }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Build Type**: Debug" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ needs.version-check.outputs.is_minimal_test }}" = "true" ]; then
+              echo "- **Mode**: ⚠️ Minimal Test" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- **Mode**: ✅ Full Build" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Download artifact from the Actions run summary." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Check the build logs artifact for details." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  # Job 3: Build Release APK (optional)
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    needs: version-check
+    if: |
+      github.event.inputs.build_type == 'release' || 
+      github.event.inputs.build_type == 'both'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
+        run: |
+          cd android-app
+          chmod +x gradlew
+
+      - name: Build Release APK
+        id: build_release
+        run: |
+          cd android-app
+          echo "::group::Building Release APK"
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee build-release.log
+          BUILD_STATUS=${PIPESTATUS[0]}
+          echo "::endgroup::"
+          echo "build_status=$BUILD_STATUS" >> $GITHUB_OUTPUT
+          exit $BUILD_STATUS
+        continue-on-error: true
+
+      - name: Upload build logs (on failure)
+        if: steps.build_release.outputs.build_status != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-release-${{ github.run_number }}
+          path: android-app/build-release.log
+          retention-days: 7
+
+      - name: Rename APK with version
+        if: steps.build_release.outputs.build_status == '0'
+        run: |
+          cd android-app/app/build/outputs/apk/release
+          # Handle both signed and unsigned APKs
+          for apk in app-release*.apk; do
+            if [ -f "$apk" ]; then
+              mv "$apk" InjectTools-${{ needs.version-check.outputs.version_name }}-release.apk
+              break
+            fi
+          done
+
+      - name: Upload Release APK
+        if: steps.build_release.outputs.build_status == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: InjectTools-${{ needs.version-check.outputs.version_name }}-release
+          path: android-app/app/build/outputs/apk/release/InjectTools-*.apk
+          retention-days: 90
+
+      - name: Build Summary
+        run: |
+          echo "## 📦 Release Build" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.build_release.outputs.build_status }}" = "0" ]; then
+            echo "### ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version**: ${{ needs.version-check.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Build Type**: Release" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  # Job 4: Comment on PR with download links
+  pr-comment:
+    name: PR Comment
+    runs-on: ubuntu-latest
+    needs: [version-check, build-debug]
+    if: github.event_name == 'pull_request' && needs.build-debug.result == 'success'
+    
+    steps:
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ needs.version-check.outputs.version_name }}';
+            const isMinimalTest = '${{ needs.version-check.outputs.is_minimal_test }}' === 'true';
+            const runId = context.runId;
+            const repo = context.repo;
+            
+            let body = `## 📦 Build Successful\n\n`;
+            body += `**Version**: ${version}\n`;
+            if (isMinimalTest) {
+              body += `**Mode**: ⚠️ Minimal Test Build\n`;
+            }
+            body += `\n### Download APK\n`;
+            body += `Download from [Actions Run #${runId}](https://github.com/${repo.owner}/${repo.repo}/actions/runs/${runId})\n`;
+            body += `\n---\n`;
+            body += `*Build triggered by commit ${context.sha.substring(0, 7)}*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: repo.owner,
+              repo: repo.repo,
+              body: body
+            });

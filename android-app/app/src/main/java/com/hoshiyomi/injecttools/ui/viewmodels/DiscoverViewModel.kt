@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hoshiyomi.injecttools.core.InjectToolsKotlin
 import com.hoshiyomi.injecttools.core.LogManager
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,20 +17,34 @@ class DiscoverViewModel : ViewModel() {
     private val _subdomains = MutableStateFlow<List<String>>(emptyList())
     val subdomains: StateFlow<List<String>> = _subdomains.asStateFlow()
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        LogManager.e("DiscoverViewModel", "Coroutine exception caught!", throwable)
+        _uiState.value = DiscoverUiState.Error("Crash: ${throwable.message}")
+    }
+
+    init {
+        LogManager.i("DiscoverViewModel", "ViewModel initialized")
+    }
+
     fun discoverSubdomains(domain: String, limit: Int = 100) {
         if (domain.isBlank()) {
+            LogManager.w("DiscoverViewModel", "Domain is blank")
             _uiState.value = DiscoverUiState.Error("Domain tidak boleh kosong")
             return
         }
 
-        viewModelScope.launch {
+        LogManager.i("DiscoverViewModel", "Starting discovery for: $domain (limit=$limit)")
+
+        viewModelScope.launch(exceptionHandler) {
             try {
                 _uiState.value = DiscoverUiState.Discovering
                 _subdomains.value = emptyList()
                 
-                LogManager.i("DiscoverViewModel", "Discovering subdomains for: $domain")
+                LogManager.i("DiscoverViewModel", "Calling InjectToolsKotlin.discoverSubdomains...")
                 
                 val discovered = InjectToolsKotlin.discoverSubdomains(domain, limit)
+                
+                LogManager.i("DiscoverViewModel", "Discovery returned: ${discovered.size} subdomains")
                 
                 _subdomains.value = discovered
                 
@@ -49,6 +64,7 @@ class DiscoverViewModel : ViewModel() {
     }
 
     fun reset() {
+        LogManager.i("DiscoverViewModel", "Resetting state")
         _uiState.value = DiscoverUiState.Idle
         _subdomains.value = emptyList()
     }

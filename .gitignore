@@ -1,43 +1,7 @@
-# Rust build artifacts
-/target/
-Cargo.lock
-
-# Release artifacts (exclude from repo, only in GitHub Releases)
-*.tar.gz
-*.tar.gz.sha256
-*.zip
-
-# Build logs are INCLUDED (tracked in build-logs/)
-# Don't ignore: build-logs/*.log
-
-# Rust debug
-**/*.rs.bk
-*.pdb
-
-# IDE
+.gradle/
 .idea/
-.vscode/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Temporary files
-*.tmp
-*.temp
-
-# Android NDK (CI only)
-android-ndk-*/
-
-# Config (user-specific)
-config.toml
-*.local
-
-# Results (user data)
-results/
-*.txt
-!README*.txt
-
-# Cache
-cache/
-.cargo/
+build/
+app/build/
+local.properties
+*.iml
+*.log

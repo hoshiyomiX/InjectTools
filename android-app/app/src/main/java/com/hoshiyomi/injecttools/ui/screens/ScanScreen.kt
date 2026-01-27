@@ -66,7 +66,7 @@ fun ScanScreen(
                 Text("Batch Mode")
                 Switch(
                     checked = isBatchMode,
-                    onCheckedChanged = { isBatchMode = it }
+                    onCheckedChange = { isBatchMode = it }
                 )
             }
             

@@ -89,161 +89,14 @@ jobs:
       - name: Build Debug APK
         id: build
         run: |
-          WORKSPACE_DIR="$GITHUB_WORKSPACE"
-          LOG_DIR="$WORKSPACE_DIR/build-logs"
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          FULL_LOG="$LOG_DIR/full-build-$TIMESTAMP.log"
-          ERROR_LOG="$LOG_DIR/critical-errors-$TIMESTAMP.txt"
-          
-          mkdir -p "$LOG_DIR"
-          
-          echo "=== InjectTools Android Build ==="
-          echo "Timestamp: $(date)"
-          echo "Branch: ${GITHUB_REF}"
-          echo "Commit: ${GITHUB_SHA}"
-          echo ""
-          
           cd android-app
           set +e
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee "$FULL_LOG"
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          ./gradlew assembleDebug --stacktrace
+          BUILD_EXIT_CODE=$?
           set -e
-          
-          echo "LOG_DIR=$LOG_DIR" >> $GITHUB_ENV
-          echo "FULL_LOG=$FULL_LOG" >> $GITHUB_ENV
-          echo "ERROR_LOG=$ERROR_LOG" >> $GITHUB_ENV
           echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> $GITHUB_ENV
-          
           exit $BUILD_EXIT_CODE
         continue-on-error: true
-
-      - name: Extract critical errors
-        if: steps.build.outcome == 'failure'
-        run: |
-          echo "=== EXTRACTING CRITICAL ERRORS ==="
-          
-          # Initialize error log
-          echo "InjectTools Build Failure Report" > "$ERROR_LOG"
-          echo "Timestamp: $(date)" >> "$ERROR_LOG"
-          echo "Exit Code: $BUILD_EXIT_CODE" >> "$ERROR_LOG"
-          echo "" >> "$ERROR_LOG"
-          echo "==========================================" >> "$ERROR_LOG"
-          echo "" >> "$ERROR_LOG"
-          
-          # Extract FAILURE section
-          if grep -q "FAILURE: Build failed" "$FULL_LOG"; then
-            echo "### FAILURE SECTION" >> "$ERROR_LOG"
-            grep -A 30 "FAILURE: Build failed" "$FULL_LOG" | head -40 >> "$ERROR_LOG" || true
-            echo "" >> "$ERROR_LOG"
-            echo "GRADLE_FAILURE=true" >> $GITHUB_ENV
-          fi
-          
-          # Extract Kotlin compilation errors
-          if grep -q "Compilation error" "$FULL_LOG"; then
-            echo "### KOTLIN COMPILATION ERRORS" >> "$ERROR_LOG"
-            grep -B 5 -A 15 "Compilation error" "$FULL_LOG" | head -50 >> "$ERROR_LOG" || true
-            echo "" >> "$ERROR_LOG"
-            echo "KOTLIN_ERROR=true" >> $GITHUB_ENV
-          fi
-          
-          # Extract 'e:' prefixed errors (Kotlin compiler)
-          if grep -q "^e: " "$FULL_LOG"; then
-            echo "### COMPILER ERRORS (e:)" >> "$ERROR_LOG"
-            grep "^e: " "$FULL_LOG" | head -30 >> "$ERROR_LOG" || true
-            echo "" >> "$ERROR_LOG"
-          fi
-          
-          # Extract resource errors
-          if grep -q "resource.*not found\|Android resource linking failed" "$FULL_LOG"; then
-            echo "### RESOURCE ERRORS" >> "$ERROR_LOG"
-            grep -B 2 -A 10 "resource.*not found\|Android resource linking failed" "$FULL_LOG" | head -50 >> "$ERROR_LOG" || true
-            echo "" >> "$ERROR_LOG"
-            echo "RESOURCE_ERROR=true" >> $GITHUB_ENV
-          fi
-          
-          # Extract task failures
-          if grep -q "Task.*FAILED" "$FULL_LOG"; then
-            echo "### FAILED TASKS" >> "$ERROR_LOG"
-            grep "Task.*FAILED" "$FULL_LOG" | head -20 >> "$ERROR_LOG" || true
-            echo "" >> "$ERROR_LOG"
-          fi
-          
-          echo "==========================================" >> "$ERROR_LOG"
-          echo "" >> "$ERROR_LOG"
-          echo "Full log: full-build-$(date +%Y%m%d-%H%M%S).log (not committed)" >> "$ERROR_LOG"
-          
-          echo "Critical errors extracted ($(wc -l < "$ERROR_LOG") lines)"
-
-      - name: Display error summary
-        if: steps.build.outcome == 'failure'
-        run: |
-          echo "# 🔴 Build Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Exit Code:** $BUILD_EXIT_CODE" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "## Critical Errors" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat "$ERROR_LOG" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-      - name: Commit error log to repo
-        if: steps.build.outcome == 'failure'
-        run: |
-          echo "=== COMMITTING ERROR LOG ==="
-          echo "Error log path: $ERROR_LOG"
-          
-          # Verify file exists
-          if [ ! -f "$ERROR_LOG" ]; then
-            echo "ERROR: Log file does not exist!"
-            exit 0
-          fi
-          
-          echo "File size: $(du -h "$ERROR_LOG" | cut -f1)"
-          echo "File preview:"
-          head -20 "$ERROR_LOG"
-          echo ""
-          
-          # Git config
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          
-          # Show git status before
-          echo "Git status before add:"
-          git status
-          
-          # Add file
-          git add "$ERROR_LOG"
-          
-          # Check if file was staged
-          echo "Git status after add:"
-          git status
-          
-          # Commit if there are changes
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            echo "Committing error log..."
-            git commit -m "ci: Build failure log [skip ci]
-
-Timestamp: $(date)
-Exit code: $BUILD_EXIT_CODE
-File: $(basename "$ERROR_LOG")"
-            
-            # Push
-            BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-            echo "Pushing to branch: $BRANCH_NAME"
-            
-            if git push origin "HEAD:$BRANCH_NAME"; then
-              echo "✅ Error log committed and pushed successfully"
-            else
-              echo "⚠️ Push failed (permissions?)"
-            fi
-          fi
-          
-          # Always fail after logging
-          exit 1
 
       - name: Rename APK
         if: steps.build.outcome == 'success'
@@ -259,13 +112,16 @@ File: $(basename "$ERROR_LOG")"
           path: android-app/app/build/outputs/apk/debug/InjectTools-*.apk
           retention-days: 30
 
-      - name: Success summary
-        if: steps.build.outcome == 'success'
+      - name: Build summary
         run: |
-          echo "# ✅ Build Succeeded" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.validate.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**APK:** InjectTools-${{ needs.validate.outputs.version_name }}-debug.apk" >> $GITHUB_STEP_SUMMARY
+          if [ "$BUILD_EXIT_CODE" = "0" ]; then
+            echo "# Build Succeeded" >> $GITHUB_STEP_SUMMARY
+            echo "**Version:** ${{ needs.validate.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "# Build Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Exit Code:** $BUILD_EXIT_CODE" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
 
   build-release:
     name: Build Release APK
@@ -276,8 +132,6 @@ File: $(basename "$ERROR_LOG")"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -297,52 +151,17 @@ File: $(basename "$ERROR_LOG")"
           chmod +x gradlew
 
       - name: Build Release APK
-        id: build
         run: |
-          WORKSPACE_DIR="$GITHUB_WORKSPACE"
-          LOG_DIR="$WORKSPACE_DIR/build-logs"
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          ERROR_LOG="$LOG_DIR/critical-errors-release-$TIMESTAMP.txt"
-          
-          mkdir -p "$LOG_DIR"
-          
           cd android-app
-          set +e
-          ./gradlew assembleRelease --stacktrace 2>&1 | tee /tmp/build.log
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          set -e
-          
-          if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            grep -A 30 "FAILURE: Build failed" /tmp/build.log > "$ERROR_LOG" || true
-            echo "ERROR_LOG=$ERROR_LOG" >> $GITHUB_ENV
-          fi
-          
-          echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> $GITHUB_ENV
-          exit $BUILD_EXIT_CODE
-        continue-on-error: true
-
-      - name: Commit error log
-        if: steps.build.outcome == 'failure'
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          [ -f "$ERROR_LOG" ] && git add "$ERROR_LOG" || true
-          git commit -m "ci: Release build errors [skip ci]" || true
-          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          git push origin "HEAD:$BRANCH_NAME" || true
-          
-          [ -f "$ERROR_LOG" ] && cat "$ERROR_LOG"
-          exit 1
+          ./gradlew assembleRelease --stacktrace
 
       - name: Rename APK
-        if: steps.build.outcome == 'success'
         run: |
           cd android-app/app/build/outputs/apk/release
           APK=$(ls app-release*.apk | head -1)
           mv "$APK" InjectTools-${{ needs.validate.outputs.version_name }}-release.apk
 
       - name: Upload Release APK
-        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: InjectTools-${{ needs.validate.outputs.version_name }}-release

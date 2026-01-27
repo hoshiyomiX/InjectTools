@@ -1,6 +1,7 @@
 package com.hoshiyomi.injecttools
 
 import android.Manifest
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -41,7 +42,7 @@ class MainActivity : ComponentActivity() {
         setupGlobalCrashHandler()
         
         // Enable StrictMode in debug builds
-        if (BuildConfig.DEBUG) {
+        if (isDebugMode()) {
             setupStrictMode()
         }
         
@@ -73,6 +74,10 @@ class MainActivity : ComponentActivity() {
         }
         
         LogManager.i("MainActivity", "UI setup completed")
+    }
+    
+    private fun isDebugMode(): Boolean {
+        return (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
     
     private fun setupGlobalCrashHandler() {

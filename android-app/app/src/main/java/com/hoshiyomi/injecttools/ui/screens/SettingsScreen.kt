@@ -78,7 +78,7 @@ fun SettingsScreen(
                                 "Version 4.0.0-alpha",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontFamily = FontFamily.Monospace
-                            )
+            )
                         }
                     }
                     
@@ -189,7 +189,7 @@ fun SettingsScreen(
     }
 }
 
-@Suppress("DEPRECATION")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

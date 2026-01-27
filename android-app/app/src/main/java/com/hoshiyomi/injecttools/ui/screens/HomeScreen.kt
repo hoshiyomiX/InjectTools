@@ -72,7 +72,6 @@ fun HomeScreen(
             }
             
             // Results Access
-            @Suppress("DEPRECATION")
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onNavigateToResults
@@ -174,7 +173,7 @@ fun WelcomeCard() {
     }
 }
 
-@Suppress("DEPRECATION")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActionCard(
     modifier: Modifier = Modifier,

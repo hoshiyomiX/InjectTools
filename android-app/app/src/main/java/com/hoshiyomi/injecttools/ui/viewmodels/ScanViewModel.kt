@@ -16,43 +16,59 @@ class ScanViewModel : ViewModel() {
     private val _results = MutableStateFlow<List<InjectToolsKotlin.ScanResult>>(emptyList())
     val results: StateFlow<List<InjectToolsKotlin.ScanResult>> = _results.asStateFlow()
 
+    init {
+        LogManager.i("ScanViewModel", "ViewModel initialized")
+    }
+
     fun startScan(target: String, subdomains: List<String>) {
-        if (target.isBlank() || subdomains.isEmpty()) {
-            _uiState.value = ScanUiState.Error("Target dan subdomain tidak boleh kosong")
+        LogManager.i("ScanViewModel", "startScan called")
+        LogManager.d("ScanViewModel", "Target: $target")
+        LogManager.d("ScanViewModel", "Subdomains count: ${subdomains.size}")
+        
+        if (target.isBlank()) {
+            LogManager.w("ScanViewModel", "Target is blank")
+            _uiState.value = ScanUiState.Error("Target tidak boleh kosong")
+            return
+        }
+        
+        if (subdomains.isEmpty()) {
+            LogManager.w("ScanViewModel", "Subdomains list is empty")
+            _uiState.value = ScanUiState.Error("Subdomain list kosong")
             return
         }
 
         viewModelScope.launch {
             try {
+                LogManager.i("ScanViewModel", "Launching coroutine")
                 _uiState.value = ScanUiState.Scanning
                 _results.value = emptyList()
                 
-                LogManager.i("ScanViewModel", "Starting scan for target: $target")
-                LogManager.i("ScanViewModel", "Subdomains to test: ${subdomains.size}")
-                
-                // Langsung scan, no target check!
-                // Target validity akan terlihat dari TLS handshake success
+                LogManager.i("ScanViewModel", "Calling batchTest...")
                 val scanResults = InjectToolsKotlin.batchTest(target, subdomains)
                 
+                LogManager.i("ScanViewModel", "batchTest returned ${scanResults.size} results")
                 _results.value = scanResults
                 
                 val workingCount = scanResults.count { it.isWorking }
                 if (workingCount > 0) {
-                    LogManager.i("ScanViewModel", "Scan completed: $workingCount working subdomains found")
+                    LogManager.i("ScanViewModel", "Scan SUCCESS: $workingCount working")
                     _uiState.value = ScanUiState.Success(workingCount)
                 } else {
-                    LogManager.w("ScanViewModel", "Scan completed: No working subdomains found")
-                    _uiState.value = ScanUiState.NoResults("Target might be invalid or all subdomains failed")
+                    LogManager.w("ScanViewModel", "No working subdomains found")
+                    _uiState.value = ScanUiState.NoResults("Tidak ada subdomain yang working")
                 }
                 
             } catch (e: Exception) {
-                LogManager.e("ScanViewModel", "Scan failed", e)
+                LogManager.e("ScanViewModel", "Scan FAILED with exception", e)
                 _uiState.value = ScanUiState.Error(e.message ?: "Unknown error")
             }
         }
+        
+        LogManager.i("ScanViewModel", "startScan method completed")
     }
 
     fun resetScan() {
+        LogManager.i("ScanViewModel", "resetScan called")
         _uiState.value = ScanUiState.Idle
         _results.value = emptyList()
     }

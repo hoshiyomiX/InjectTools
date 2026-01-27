@@ -98,6 +98,28 @@ fun SettingsScreen(
                 fontWeight = FontWeight.Bold
             )
             
+            val logPath = LogManager.getLogFilePath()
+            if (logPath != null) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            "Live Log File",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            logPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+            
             SettingItem(
                 icon = Icons.Default.List,
                 title = "Copy Debug Logs",

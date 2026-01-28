@@ -27,6 +27,12 @@ jobs:
       with:
         gradle-version: '8.5'
         
+    - name: Generate Gradle Wrapper
+      run: gradle wrapper --gradle-version=8.5
+        
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+        
     - name: Create Keystore
       run: |
         keytool -genkeypair -v \
@@ -39,12 +45,6 @@ jobs:
     - name: Build Release APK
       id: build
       run: |
-        # Build Release with the keystore we just created
-        # We pass properties to override signing config if we set it up in gradle,
-        # or we can sign it manually.
-        # For simplicity, we will let gradle build unsigned/debug-signed first or configure it via cmd line properties if supported.
-        # ACTUALLY: The easiest way without modifying gradle file heavily is to use the debug keystore for release signing in this context.
-        
         ./gradlew assembleRelease \
           -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
           -Pandroid.injected.signing.store.password=android \

@@ -83,8 +83,6 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
                 "ESTABLISHED".to_string()
             } else {
                 if combined.trim().is_empty() {
-                    // Try to guess from exit code if output is empty? 
-                    // No, empty output usually means connection cut or timeout.
                     "FAILED: Empty Output".to_string()
                 } else {
                     format!("FAILED: {}", combined.trim())
@@ -371,12 +369,12 @@ pub async fn batch_test(
                     let mut tcp_ok = false;
                     match tcp_check {
                         Ok(Ok(_)) => {
+                            // FIXED: Allow latency < 2ms to proceed (match single test)
                             if latency < 2 {
-                                // Super suspicious
-                                scan_res.error_msg = Some("Suspicious Latency <2ms".to_string());
-                            } else {
-                                tcp_ok = true;
+                                // Just log it if needed, but allow proceed
+                                // scan_res.error_msg = Some("Suspicious Latency <2ms".to_string()); 
                             }
+                            tcp_ok = true;
                         },
                         _ => { scan_res.error_msg = Some("TCP 443 Blocked".to_string()); }
                     }

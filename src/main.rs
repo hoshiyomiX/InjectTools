@@ -15,7 +15,7 @@ use std::sync::Mutex;
 #[derive(Parser, Debug)]
 #[command(name = "InjectTools")]
 #[command(author = "hoshiyomi_id <t.me/hoshiyomi_id>")]
-#[command(version = "3.6.0")]
+#[command(version = "3.6.1")]
 #[command(about = "Bug Inject Scanner for Cloudflare Subdomains", long_about = None)]
 struct Args {
     /// Target host (tunnel/proxy domain)
@@ -45,6 +45,10 @@ struct Args {
     /// View exported results
     #[arg(long)]
     view_results: bool,
+
+    /// Enable verbose logging for troubleshooting
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 // Cache untuk target status
@@ -107,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
                         &subdomains,
                         args.timeout,
                         running.clone(),
+                        args.verbose,
                     ).await?;
                     
                     results::export_results(&results, &domain)?;
@@ -116,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else if let Some(subdomain) = args.subdomain {
                 // Single test
-                scanner::test_single(&config.target_host, &subdomain, args.timeout).await?;
+                scanner::test_single(&config.target_host, &subdomain, args.timeout, args.verbose).await?;
             } else {
                 eprintln!("{}", "Error: --subdomain atau --crtsh required".red());
                 std::process::exit(1);
@@ -138,7 +143,7 @@ async fn main() -> anyhow::Result<()> {
     // Interactive mode
     loop {
         ui::clear_screen();
-        ui::print_header("INJECTTOOLS v3.6.0");
+        ui::print_header("INJECTTOOLS v3.6.1");
         
         let mut status_icon = "⚪"; // Default neutral
         
@@ -178,6 +183,9 @@ async fn main() -> anyhow::Result<()> {
             "[E]dit".yellow().dimmed(),
             status_icon
         );
+        if args.verbose {
+            println!("  {}", "VERBOSE MODE ON".yellow().bold());
+        }
         println!("");
         
         // Tiles Menu Layout
@@ -203,7 +211,7 @@ async fn main() -> anyhow::Result<()> {
                 print!("\nMasukkan subdomain: ");
                 let subdomain = ui::read_line();
                 if !subdomain.is_empty() {
-                    scanner::test_single(&config.target_host, &subdomain, args.timeout).await?;
+                    scanner::test_single(&config.target_host, &subdomain, args.timeout, args.verbose).await?;
                 }
                 ui::pause();
             }
@@ -232,6 +240,7 @@ async fn main() -> anyhow::Result<()> {
                                     &subdomains,
                                     args.timeout,
                                     running.clone(),
+                                    args.verbose,
                                 ).await?;
                                 
                                 results::export_results(&results, &domain)?;
@@ -262,7 +271,7 @@ async fn main() -> anyhow::Result<()> {
                 if !target.is_empty() {
                     // Test target connection
                     println!("\n{}", "🔍 Testing target connection...".cyan());
-                    scanner::test_target(&target, args.timeout).await?;
+                    scanner::test_target(&target, args.timeout, args.verbose).await?;
                     
                     // Save if test successful
                     config.target_host = target;

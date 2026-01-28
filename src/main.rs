@@ -140,6 +140,8 @@ async fn main() -> anyhow::Result<()> {
         ui::clear_screen();
         ui::print_header("INJECTTOOLS v3.6.0");
         
+        let mut status_icon = "⚪"; // Default neutral
+        
         // Display target status dengan auto-check
         if !config.target_host.is_empty() {
             let mut status = target_status.lock().unwrap();
@@ -164,40 +166,35 @@ async fn main() -> anyhow::Result<()> {
                 print!("\r\x1B[K");
             }
             
-            let status_text = if status.is_online {
-                format!("🟢 ONLINE")
-            } else {
-                format!("🔴 OFFLINE")
-            };
-            
-            let status_color = if status.is_online {
-                status_text.green()
-            } else {
-                status_text.red()
-            };
-            
-            println!("\n{}", "─".repeat(50).bright_black());
-            println!("{} {}", "Target:".bright_black(), config.target_host.cyan().bold());
-            println!("{} {}", "Status:".bright_black(), status_color);
-            println!("{}", "─".repeat(50).bright_black());
+            status_icon = if status.is_online { "🟢" } else { "🔴" };
         }
         
-        println!("\n{}", "MAIN MENU".bold());
-        println!("{}" , "━".repeat(50).cyan());
-        println!("\n1. 🔍 Test Single Subdomain");
-        println!("2. 🌐 Fetch & Test dari crt.sh");
-        println!("3. 📊 View Exported Results");
-        println!("4. ⚙️  Change Target Host");
-        println!("5. 🚺 Exit");
-        println!("\n{}", "━".repeat(50).cyan());
+        // New Header Layout
+        // Host: example.com [✎] 🟢
+        println!("");
+        println!("  {} {} {} {}", 
+            "Host:".bold(), 
+            if config.target_host.is_empty() { "Not Set".red() } else { config.target_host.cyan().bold() },
+            "[E]dit".yellow().dimmed(),
+            status_icon
+        );
+        println!("");
         
-        print!("\n{} ", "Pilih:".bold());
+        // Tiles Menu Layout
+        println!("  ┌──────────────────────┐   ┌──────────────────────┐");
+        println!("  │ 1. Single Subdomain  │   │ 2. Crt.sh Discovery  │");
+        println!("  └──────────────────────┘   └──────────────────────┘");
+        println!("  ┌──────────────────────┐   ┌──────────────────────┐");
+        println!("  │ 3. History Results   │   │ x. Exit App          │");
+        println!("  └──────────────────────┘   └──────────────────────┘");
+        
+        print!("\n{} ", "Menu >".bold());
         let choice = ui::read_line();
 
         match choice.trim() {
             "1" => {
                 if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu (pilih menu 4)!".yellow());
+                    println!("\n{}", "⚠️  Set target host dulu (tekan 'e')!".yellow());
                     ui::pause();
                     continue;
                 }
@@ -212,7 +209,7 @@ async fn main() -> anyhow::Result<()> {
             }
             "2" => {
                 if config.target_host.is_empty() {
-                    println!("\n{}", "⚠️  Set target host dulu (pilih menu 4)!".yellow());
+                    println!("\n{}", "⚠️  Set target host dulu (tekan 'e')!".yellow());
                     ui::pause();
                     continue;
                 }
@@ -251,7 +248,8 @@ async fn main() -> anyhow::Result<()> {
                 results::view_results()?;
                 ui::pause();
             }
-            "4" => {
+            "e" | "E" => {
+                // Moved from Menu 4 to 'e'
                 ui::print_header("CHANGE TARGET HOST");
                 
                 if !config.target_host.is_empty() {
@@ -279,11 +277,10 @@ async fn main() -> anyhow::Result<()> {
                     std::thread::sleep(std::time::Duration::from_secs(2));
                 } else {
                     println!("\n{}", "⚠️  Target host tidak boleh kosong".yellow());
+                    std::thread::sleep(std::time::Duration::from_secs(1));
                 }
-                
-                ui::pause();
             }
-            "5" => {
+            "x" | "X" | "exit" => {
                 println!("\n{}", "👋 Terima kasih telah menggunakan InjectTools!".green());
                 break;
             }

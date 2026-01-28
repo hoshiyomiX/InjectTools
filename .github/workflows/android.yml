@@ -15,8 +15,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -29,40 +27,36 @@ jobs:
       with:
         gradle-version: '8.5'
         
-    - name: Build with Gradle
+    - name: Create Keystore
+      run: |
+        keytool -genkeypair -v \
+        -keystore app/release.keystore \
+        -keyalg RSA -keysize 2048 -validity 10000 \
+        -alias androiddebugkey \
+        -dname "CN=Android Debug,O=Android,C=US" \
+        -storepass android -keypass android
+        
+    - name: Build Release APK
       id: build
       run: |
-        set -o pipefail
-        gradle assembleDebug 2>&1 | tee full-build.log
+        # Build Release with the keystore we just created
+        # We pass properties to override signing config if we set it up in gradle,
+        # or we can sign it manually.
+        # For simplicity, we will let gradle build unsigned/debug-signed first or configure it via cmd line properties if supported.
+        # ACTUALLY: The easiest way without modifying gradle file heavily is to use the debug keystore for release signing in this context.
         
-    - name: Trap Failure and Extract Log
-      if: failure()
-      run: |
-        echo "Build failed. Extracting error log..."
-        # Extract content from "FAILURE:" to the first occurrence of "https://help.gradle.org"
-        sed -n '/FAILURE:/,/https:\/\/help.gradle.org/p' full-build.log > build-error.log
-        
-        # If the file is empty (pattern not found), dump the last 50 lines
-        if [ ! -s build-error.log ]; then
-          tail -n 50 full-build.log > build-error.log
-        fi
-        
-        cat build-error.log
+        ./gradlew assembleRelease \
+          -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+          -Pandroid.injected.signing.store.password=android \
+          -Pandroid.injected.signing.key.alias=androiddebugkey \
+          -Pandroid.injected.signing.key.password=android
+      
+    - name: List Artifacts
+      run: ls -R app/build/outputs/apk/
 
-    - name: Upload Error Log to Repo
-      if: failure()
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # Force add the log file
-        git add -f build-error.log
-        git commit -m "ci: add build failure log [skip ci]"
-        git push
-
-    - name: Upload APK
+    - name: Upload Release APKs
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: InjectTools-Release
+        path: app/build/outputs/apk/release/*.apk

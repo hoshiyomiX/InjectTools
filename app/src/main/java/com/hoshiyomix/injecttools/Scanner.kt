@@ -8,6 +8,9 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.PrintWriter
 
 object Scanner {
 
@@ -65,16 +68,25 @@ object Scanner {
         return result
     }
 
-    suspend fun testSingle(target: String, subdomain: String, timeoutMs: Int = 3000): ScanResult = withContext(Dispatchers.IO) {
+    suspend fun testSingle(target: String, subdomain: String, verbose: Boolean = false, timeoutMs: Int = 5000): ScanResult = withContext(Dispatchers.IO) {
         var ip = ""
         var isCf = false
+        
+        if (verbose) Logger.log("--> Resolving DNS for: $subdomain")
+
         try {
             // 1. DNS Resolution
             val inetAddress = InetAddress.getByName(subdomain)
             ip = inetAddress.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "No IP found")
+            
+            if (verbose) Logger.log("    Resolved IP: $ip")
+            
             isCf = isCloudflareIp(ip)
+            if (verbose) Logger.log("    Cloudflare IP: $isCf")
 
             // 2. SSL/TLS Connection with SNI
+            if (verbose) Logger.log("--> Starting SSL Handshake (SNI: $target)...")
+            
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
             val socket = Socket(ip, 443)
             socket.soTimeout = timeoutMs
@@ -90,13 +102,29 @@ object Scanner {
             // Start Handshake
             sslSocket.startHandshake()
             
-            // If we reach here, handshake is successful
+            if (verbose) Logger.log("    SSL Handshake: SUCCESS")
+            
+            // 3. HTTP Request Check (Optional but good for accuracy)
+            // Send a simple HEAD request to check response code
+            val writer = PrintWriter(sslSocket.outputStream)
+            val reader = BufferedReader(InputStreamReader(sslSocket.inputStream))
+            
+            writer.print("HEAD / HTTP/1.1\r\n")
+            writer.print("Host: $target\r\n")
+            writer.print("Connection: close\r\n")
+            writer.print("\r\n")
+            writer.flush()
+            
+            val responseLine = reader.readLine()
+            if (verbose) Logger.log("    HTTP Response: $responseLine")
+
             sslSocket.close()
             socket.close()
             
             return@withContext ScanResult(subdomain, ip, true, isCf)
 
         } catch (e: Exception) {
+            if (verbose) Logger.log("!!  ERROR: ${e.message}")
             return@withContext ScanResult(subdomain, ip, false, isCf, e.message)
         }
     }

@@ -32,6 +32,25 @@ jobs:
         
     - name: Make gradlew executable
       run: chmod +x ./gradlew
+
+    - name: Commit Gradle Wrapper
+      # Only run on push to apk branch, not PRs
+      if: github.event_name == 'push' && github.ref == 'refs/heads/apk'
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Add wrapper files
+        git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties gradle/wrapper/gradle-wrapper.jar
+        
+        # Commit if changes exist
+        if ! git diff-index --quiet HEAD; then
+          echo "Changes detected. Committing wrapper..."
+          git commit -m "chore: add gradle wrapper files [skip ci]"
+          git push
+        else
+          echo "No changes to commit"
+        fi
         
     - name: Create Keystore
       run: |

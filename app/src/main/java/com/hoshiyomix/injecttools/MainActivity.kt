@@ -337,7 +337,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit) {
         if (isScanning) {
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { progress },
+                progress = progress, // FIX: remove lambda braces
                 modifier = Modifier.fillMaxWidth(),
             )
             Text("${(progress * 100).toInt()}%", modifier = Modifier.align(Alignment.End))

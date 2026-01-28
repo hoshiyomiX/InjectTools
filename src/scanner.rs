@@ -22,7 +22,7 @@ pub struct ScanResult {
 }
 
 // =============================================================================
-// HELPER FUNCTIONS (Logic V17)
+// HELPER FUNCTIONS (Logic V17 - Optimized)
 // =============================================================================
 
 fn is_private_ip(ip: &str) -> bool {
@@ -48,28 +48,9 @@ fn is_fake_dns_ip(ip: &str) -> bool {
     ip.starts_with("198.18.") || ip.starts_with("198.19.")
 }
 
+// Use logic from dns.rs instead of local implementation for better accuracy
 fn is_cloudflare_ip(ip: &str) -> bool {
-    // V17 Explicit List
-    if ip.starts_with("104.") { return true; }
-    if ip.starts_with("162.158.") || ip.starts_with("162.159.") { return true; }
-    if ip.starts_with("188.114.") { return true; }
-    if ip.starts_with("198.41.") { return true; }
-    if ip.starts_with("197.234.") { return true; }
-    if ip.starts_with("190.93.") { return true; }
-    
-    // 172.64.0.0/13 -> 172.64.0.0 - 172.71.255.255
-    // V17 Regex: ^172\.(6[4-9]|7[0-1])\.
-    if ip.starts_with("172.") {
-        let parts: Vec<&str> = ip.split('.').collect();
-        if parts.len() > 1 {
-            if let Ok(second) = parts[1].parse::<u8>() {
-                if second >= 64 && second <= 71 {
-                    return true;
-                }
-            }
-        }
-    }
-    false
+    dns::is_cloudflare_ip(ip)
 }
 
 // Curl based SSL Handshake to match V17 "Best for TLS Fingerprint"
@@ -93,11 +74,17 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let combined = format!("{}{}", stdout, stderr);
             
-            // V17 Check: if [[ "$out" == *"HTTP/"* ]] || [[ "$out" == *"server:"* ]]; then echo "ESTABLISHED"
-            if combined.contains("HTTP/") || combined.to_lowercase().contains("server:") {
+            // Check for any valid HTTP response line or Server header
+            // Also check for 403/400/500/etc which indicate a handshake succeeded and server replied
+            if combined.contains("HTTP/") || 
+               combined.to_lowercase().contains("server:") || 
+               combined.contains("403 Forbidden") || 
+               combined.contains("400 Bad Request") {
                 "ESTABLISHED".to_string()
             } else {
                 if combined.trim().is_empty() {
+                    // Try to guess from exit code if output is empty? 
+                    // No, empty output usually means connection cut or timeout.
                     "FAILED: Empty Output".to_string()
                 } else {
                     format!("FAILED: {}", combined.trim())
@@ -195,16 +182,17 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
     }
 
     // 3. Latency Check (V17: <5ms detection for VPN Interception)
-    // Using 2s timeout as per V17 script (s.settimeout(2) in python snippet)
+    // Using 2s timeout as per V17 script
     let start = Instant::now();
     let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((sub_ip.as_str(), 443))).await;
     let latency = start.elapsed().as_millis();
 
     match tcp_check {
         Ok(Ok(_)) => {
+            // Note: Removed hard return on <5ms to prevent false positives on fast networks
+            // Just warn if it's suspicious
             if latency < 5 {
-                print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "ENV_VPN_DETECTED(LATENCY <5ms)");
-                return Ok(());
+                println!("{}", "⚠️  Warning: Very low latency (<5ms). VPN might be active?".yellow());
             }
         },
         _ => {
@@ -222,7 +210,7 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         let ts_full = check_target_status(target).await;
         let parts: Vec<&str> = ts_full.split('|').collect();
         let t_status = parts.get(0).unwrap_or(&"UNKNOWN");
-        let _t_note = parts.get(1).unwrap_or(&""); // Fixed: Prefixed with underscore to suppress warning
+        let _t_note = parts.get(1).unwrap_or(&"");
 
         let bug_note = if *t_status == "UNREACHABLE" {
             "DIRECT_CONNECTION_BLOCKED".to_string()
@@ -298,7 +286,7 @@ fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_statu
     
     let t_color = match t_status {
         "ONLINE" => "green",
-        "UNREACHABLE" => "red", // V17 uses Red for Unreachable
+        "UNREACHABLE" => "red",
         "OFFLINE" => "red",
         _ => "yellow",
     };
@@ -378,8 +366,16 @@ pub async fn batch_test(
                     let mut tcp_ok = false;
                     match tcp_check {
                         Ok(Ok(_)) => {
-                            if latency >= 5 { tcp_ok = true; }
-                            else { scan_res.error_msg = Some("VPN Latency <5ms".to_string()); }
+                            // Only fail if latency is absurdly low AND user is likely using VPN?
+                            // For batch scan, let's keep it strict or just log?
+                            // Let's keep strict for batch to filter out garbage, but maybe relax to 2ms?
+                            // Actually, let's just remove the check for batch too to be safe.
+                            if latency < 2 {
+                                // Super suspicious
+                                scan_res.error_msg = Some("Suspicious Latency <2ms".to_string());
+                            } else {
+                                tcp_ok = true;
+                            }
                         },
                         _ => { scan_res.error_msg = Some("TCP 443 Blocked".to_string()); }
                     }

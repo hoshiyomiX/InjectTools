@@ -5,22 +5,43 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.hoshiyomix.injecttools.Scanner.ScanResult
+
+// Global log buffer for verbose mode
+object Logger {
+    private val _logs = mutableStateListOf<String>()
+    val logs: List<String> get() = _logs
+
+    fun log(msg: String) {
+        _logs.add(msg)
+    }
+
+    fun clear() {
+        _logs.clear()
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,7 +57,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class Screen {
-    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS, SETTINGS
+    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS, SETTINGS, VERBOSE_LOGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +66,7 @@ fun MainApp(onExit: () -> Unit) {
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf("") } // Empty by default to force user to set it
     var scanHistory by remember { mutableStateOf(listOf<ScanResult>()) }
+    var isVerbose by remember { mutableStateOf(false) } // Verbose Toggle State
     val context = LocalContext.current
 
     // Helper to add results to history
@@ -58,11 +80,12 @@ fun MainApp(onExit: () -> Unit) {
                 title = { 
                     Text(
                         text = when (currentScreen) {
-                            Screen.MENU -> "InjectTools v3.6.0"
+                            Screen.MENU -> "InjectTools v3.6.1"
                             Screen.SINGLE_TEST -> "Single Subdomain"
                             Screen.CRTSH_TEST -> "Crt.sh Discovery"
                             Screen.RESULTS -> "Scan Results"
                             Screen.SETTINGS -> "Settings"
+                            Screen.VERBOSE_LOGS -> "Verbose Logs"
                         }
                     )
                 },
@@ -74,6 +97,13 @@ fun MainApp(onExit: () -> Unit) {
                     }
                 },
                 actions = {
+                    // Verbose Log Icon Button
+                    if (isVerbose) {
+                         IconButton(onClick = { currentScreen = Screen.VERBOSE_LOGS }) {
+                            Icon(Icons.Default.Info, contentDescription = "Logs", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+
                     if (currentScreen == Screen.MENU) {
                         IconButton(onClick = { currentScreen = Screen.SETTINGS }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -96,10 +126,19 @@ fun MainApp(onExit: () -> Unit) {
                     },
                     onExit = onExit
                 )
-                Screen.SINGLE_TEST -> ManualScanScreen(targetHost, onResult = { addResults(listOf(it)) })
-                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) })
+                Screen.SINGLE_TEST -> ManualScanScreen(targetHost, isVerbose, onResult = { addResults(listOf(it)) })
+                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, isVerbose, onResults = { addResults(it) })
                 Screen.RESULTS -> ResultHistoryScreen(scanHistory)
-                Screen.SETTINGS -> SettingsScreen(targetHost, onSave = { targetHost = it; currentScreen = Screen.MENU })
+                Screen.SETTINGS -> SettingsScreen(
+                    currentHost = targetHost, 
+                    isVerbose = isVerbose,
+                    onSave = { host, verbose -> 
+                        targetHost = host
+                        isVerbose = verbose
+                        currentScreen = Screen.MENU 
+                    }
+                )
+                Screen.VERBOSE_LOGS -> VerboseLogScreen()
             }
         }
     }
@@ -152,7 +191,7 @@ fun MenuScreen(
         Spacer(modifier = Modifier.height(12.dp))
         MenuButton("3. 📊 View Exported Results") { onNavigate(Screen.RESULTS) }
         Spacer(modifier = Modifier.height(12.dp))
-        MenuButton("4. ⚙️  Change Target Host") { onNavigate(Screen.SETTINGS) }
+        MenuButton("4. ⚙️  Settings & Target Host") { onNavigate(Screen.SETTINGS) }
         Spacer(modifier = Modifier.height(12.dp))
         MenuButton("5. 🚺 Exit", isDestructive = true) { onExit() }
     }
@@ -175,13 +214,14 @@ fun MenuButton(text: String, isDestructive: Boolean = false, onClick: () -> Unit
 }
 
 @Composable
-fun SettingsScreen(currentHost: String, onSave: (String) -> Unit) {
+fun SettingsScreen(currentHost: String, isVerbose: Boolean, onSave: (String, Boolean) -> Unit) {
     var hostInput by remember { mutableStateOf(currentHost) }
+    var verboseState by remember { mutableStateOf(isVerbose) }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Text("Konfigurasi Target", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Target Host digunakan sebagai SNI (Server Name Indication) saat melakukan handshake SSL ke IP subdomain.", style = MaterialTheme.typography.bodyMedium)
+        Text("Target Host digunakan sebagai SNI saat handshake SSL.", style = MaterialTheme.typography.bodyMedium)
         
         Spacer(modifier = Modifier.height(24.dp))
         
@@ -192,11 +232,25 @@ fun SettingsScreen(currentHost: String, onSave: (String) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Verbose Checkbox
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Checkbox(
+                checked = verboseState,
+                onCheckedChange = { verboseState = it }
+            )
+            Text("Enable Verbose Logging (Debug Panel)")
+        }
         
         Spacer(modifier = Modifier.height(24.dp))
         
         Button(
-            onClick = { onSave(hostInput.trim()) },
+            onClick = { onSave(hostInput.trim(), verboseState) },
             modifier = Modifier.fillMaxWidth(),
             enabled = hostInput.isNotBlank()
         ) {
@@ -225,7 +279,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
 }
 
 @Composable
-fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit) {
+fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResult) -> Unit) {
     var subdomain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var lastResult by remember { mutableStateOf<ScanResult?>(null) }
@@ -246,8 +300,13 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit) {
             onClick = {
                 if (isScanning || subdomain.isBlank()) return@Button
                 isScanning = true
+                if (isVerbose) {
+                    Logger.clear()
+                    Logger.log("--- Starting Scan for ${subdomain.trim()} ---")
+                }
+                
                 scope.launch {
-                    val res = Scanner.testSingle(targetHost, subdomain.trim())
+                    val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
                     lastResult = res
                     onResult(res)
                     isScanning = false
@@ -270,7 +329,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit) {
 }
 
 @Composable
-fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit) {
+fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<ScanResult>) -> Unit) {
     var domain by remember { mutableStateOf("") }
     var subdomains by remember { mutableStateOf(listOf<String>()) }
     var scanResults by remember { mutableStateOf(listOf<ScanResult>()) }
@@ -295,11 +354,15 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit) {
                 onClick = {
                     isFetching = true
                     scanResults = emptyList()
+                    if (isVerbose) Logger.log("Fetching subdomains for $domain from crt.sh...")
+                    
                     scope.launch {
                         try {
                             subdomains = Crtsh.fetchSubdomains(domain.trim())
+                            if (isVerbose) Logger.log("Found ${subdomains.size} subdomains")
                         } catch (e: Exception) {
                             subdomains = emptyList()
+                            if (isVerbose) Logger.log("Error fetching: ${e.message}")
                         }
                         isFetching = false
                     }
@@ -314,11 +377,18 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit) {
                 onClick = {
                     isScanning = true
                     scanResults = emptyList()
+                    if (isVerbose) Logger.clear()
+                    
                     scope.launch {
                         val tempResults = mutableListOf<ScanResult>()
                         val total = subdomains.size
                         subdomains.forEachIndexed { index, sub ->
-                            val res = Scanner.testSingle(targetHost, sub)
+                            if (isVerbose) Logger.log("Scanning [$index/$total]: $sub")
+                            
+                            // Note: We force verbose OFF for batch scan to avoid flooding memory/UI
+                            // Unless critical error handling is needed.
+                            val res = Scanner.testSingle(targetHost, sub, false) 
+                            
                             tempResults.add(res)
                             scanResults = tempResults.toList() // Trigger recomposition
                             progress = (index + 1) / total.toFloat()
@@ -337,7 +407,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit) {
         if (isScanning) {
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = progress, // FIX: remove lambda braces
+                progress = progress, 
                 modifier = Modifier.fillMaxWidth(),
             )
             Text("${(progress * 100).toInt()}%", modifier = Modifier.align(Alignment.End))
@@ -392,6 +462,50 @@ fun ResultItem(res: ScanResult) {
             if (res.errorMsg != null) {
                 Text(text = "Error: ${res.errorMsg}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
+        }
+    }
+}
+
+@Composable
+fun VerboseLogScreen() {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        
+        Text("Verbose Logs", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+        ) {
+            SelectionContainer {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    reverseLayout = true // Show latest at bottom logic handled by list order, actually standard is fine.
+                ) {
+                    items(Logger.logs) { log ->
+                        Text(
+                            text = log, 
+                            color = Color(0xFF00FF00), // Hacker green
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp
+                        )
+                        Divider(color = Color.DarkGray, thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+        
+        Button(
+            onClick = { Logger.clear() },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+            Text("Clear Logs")
         }
     }
 }

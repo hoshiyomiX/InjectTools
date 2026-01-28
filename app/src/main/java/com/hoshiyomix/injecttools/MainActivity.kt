@@ -123,15 +123,10 @@ fun MainApp(onExit: () -> Unit) {
     val context = LocalContext.current
 
     // Rust/System Integration: Capture logcat for "Rust" tag or general stdout
-    // This is a simulation since we aren't actually running a rust binary via JNI yet,
-    // but this structure prepares for it.
     LaunchedEffect(isVerbose) {
         if (isVerbose) {
             withContext(Dispatchers.IO) {
                 try {
-                    // Clear previous logs first to avoid duplicates if re-enabled
-                    // Logger.clear() // Optional: depends on preference
-                    
                     val process = Runtime.getRuntime().exec("logcat -d -v time")
                     val reader = BufferedReader(InputStreamReader(process.inputStream))
                     var line: String?
@@ -163,7 +158,6 @@ fun MainApp(onExit: () -> Unit) {
     }
 
     fun navigateBack() {
-        // Fix: Ensure we don't get stuck if previous is same as current or invalid
         if (currentScreen == Screen.VERBOSE_LOGS) {
              currentScreen = previousScreen
              if (currentScreen == Screen.VERBOSE_LOGS) {
@@ -239,8 +233,6 @@ fun MainApp(onExit: () -> Unit) {
     }
 }
 
-// ... MenuScreen and other Composables ...
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun MenuScreen(
@@ -277,7 +269,6 @@ fun MenuScreen(
         )
     )
     
-    // Edit Host State
     var isEditingHost by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -288,7 +279,6 @@ fun MenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // App Header & Config
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -307,14 +297,13 @@ fun MenuScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v3.6.4",
+                    text = "v3.6.5",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Static Layout for Target Host
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -383,7 +372,6 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Verbose Toggle (Full Width Card)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -396,7 +384,7 @@ fun MenuScreen(
                     ) {
                         Checkbox(
                             checked = isVerbose,
-                            onCheckedChange = null // Handled by Surface onClick
+                            onCheckedChange = null
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
@@ -418,7 +406,6 @@ fun MenuScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Menu Tiles Grid
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -489,8 +476,6 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
     }
 }
 
-// ResultHistoryScreen remains same...
-
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {
     if (history.isEmpty()) {
@@ -560,23 +545,17 @@ fun checkNetworkAndConfirm(
     
     when (status) {
         NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> {
-            // Proceed immediately
+            // Only this condition allows scan to proceed
             onProceed()
         }
         NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> {
-            Toast.makeText(context, "⚠️ WARNING: You have regular internet access! Avoid using main quota.", Toast.LENGTH_LONG).show()
-            // In a real app we might show a dialog, but here we proceed with toast warning
-            onProceed()
+            Toast.makeText(context, "❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.", Toast.LENGTH_LONG).show()
         }
         NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> {
-            Toast.makeText(context, "⚠️ WARNING: VPN is active! Please disable VPN for accurate scanning.", Toast.LENGTH_LONG).show()
-            // Proceed anyway but warn
-            onProceed()
+            Toast.makeText(context, "❌ BLOCKED: VPN is active! Please disable VPN before scanning.", Toast.LENGTH_LONG).show()
         }
         NetworkUtils.NetworkStatus.INTERNET_VPN -> {
-            Toast.makeText(context, "⚠️ CRITICAL: VPN active & Internet detected! Disable VPN & check quota.", Toast.LENGTH_LONG).show()
-            // Proceed anyway but warn
-            onProceed()
+            Toast.makeText(context, "❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.", Toast.LENGTH_LONG).show()
         }
         NetworkUtils.NetworkStatus.DISCONNECTED -> {
             Toast.makeText(context, "❌ No network connection. Connect to WiFi/Data first.", Toast.LENGTH_SHORT).show()
@@ -842,7 +821,6 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     }
 }
 
-// ... rest of the file (ResultItem, VerboseLogScreen) ...
 @Composable
 fun ResultItem(res: ScanResult) {
     Card(

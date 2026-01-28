@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,16 +26,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.hoshiyomix.injecttools.Scanner.ScanResult
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 // Global log buffer for verbose mode
 object Logger {
@@ -89,7 +97,7 @@ fun dynamicColorScheme(): ColorScheme {
 }
 
 enum class Screen {
-    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS, SETTINGS, VERBOSE_LOGS
+    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS, VERBOSE_LOGS
 }
 
 data class MenuTile(
@@ -105,13 +113,39 @@ data class MenuTile(
 @Composable
 fun MainApp(onExit: () -> Unit) {
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
+    var previousScreen by remember { mutableStateOf(Screen.MENU) } // Track previous screen
     var targetHost by remember { mutableStateOf("") }
     var scanHistory by remember { mutableStateOf(listOf<ScanResult>()) }
     var isVerbose by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // Rust Integration: Capture stdout/stderr
+    LaunchedEffect(Unit) {
+        // This is a placeholder for actual Rust interaction if using JNI.
+        // For now, we simulate capturing "system" logs or command outputs.
+        // In a real Termux/Rust scenario, you might read from a process stream.
+        // Example logic if we were running a shell command:
+        /*
+        val process = Runtime.getRuntime().exec("logcat -d")
+        val reader = BufferedReader(InputStreamReader(process.inputStream))
+        var line: String?
+        while (reader.readLine().also { line = it } != null) {
+            if (isVerbose) Logger.log("[SYS] $line")
+        }
+        */
+    }
+
     fun addResults(newResults: List<ScanResult>) {
         scanHistory = newResults + scanHistory
+    }
+
+    fun navigateTo(screen: Screen) {
+        previousScreen = currentScreen
+        currentScreen = screen
+    }
+
+    fun navigateBack() {
+        currentScreen = previousScreen
     }
 
     Scaffold(
@@ -124,24 +158,25 @@ fun MainApp(onExit: () -> Unit) {
                                 Screen.SINGLE_TEST -> "Single Subdomain"
                                 Screen.CRTSH_TEST -> "Crt.sh Discovery"
                                 Screen.RESULTS -> "Scan Results"
-                                Screen.SETTINGS -> "Settings"
                                 Screen.VERBOSE_LOGS -> "Verbose Logs"
                                 else -> ""
                             }
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { currentScreen = Screen.MENU }) {
+                        IconButton(onClick = { navigateBack() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     },
                     actions = {
-                        if (isVerbose && currentScreen != Screen.VERBOSE_LOGS) {
-                            IconButton(onClick = { currentScreen = Screen.VERBOSE_LOGS }) {
-                                Badge(
-                                    containerColor = MaterialTheme.colorScheme.error
-                                ) {
-                                    Icon(Icons.Default.Info, contentDescription = "Logs")
+                        if (currentScreen != Screen.VERBOSE_LOGS) {
+                            IconButton(onClick = { navigateTo(Screen.VERBOSE_LOGS) }) {
+                                if (isVerbose) {
+                                     Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                         Icon(Icons.Default.Terminal, contentDescription = "Logs")
+                                     }
+                                } else {
+                                    Icon(Icons.Default.Terminal, contentDescription = "Logs")
                                 }
                             }
                         }
@@ -155,11 +190,13 @@ fun MainApp(onExit: () -> Unit) {
                 Screen.MENU -> MenuScreen(
                     targetHost = targetHost,
                     isVerbose = isVerbose,
+                    onUpdateHost = { targetHost = it },
+                    onToggleVerbose = { isVerbose = it },
                     onNavigate = { screen ->
                         if ((screen == Screen.SINGLE_TEST || screen == Screen.CRTSH_TEST) && targetHost.isBlank()) {
-                            Toast.makeText(context, "⚠️ Set target host first!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "⚠️ Set target host in header first!", Toast.LENGTH_SHORT).show()
                         } else {
-                            currentScreen = screen
+                            navigateTo(screen)
                         }
                     },
                     onExit = onExit
@@ -167,22 +204,13 @@ fun MainApp(onExit: () -> Unit) {
                 Screen.SINGLE_TEST -> ManualScanScreen(targetHost, isVerbose, onResult = { addResults(listOf(it)) })
                 Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, isVerbose, onResults = { addResults(it) })
                 Screen.RESULTS -> ResultHistoryScreen(scanHistory)
-                Screen.SETTINGS -> SettingsScreen(
-                    currentHost = targetHost, 
-                    isVerbose = isVerbose,
-                    onSave = { host, verbose -> 
-                        targetHost = host
-                        isVerbose = verbose
-                        currentScreen = Screen.MENU 
-                    }
-                )
-                Screen.VERBOSE_LOGS -> VerboseLogScreen()
+                Screen.VERBOSE_LOGS -> VerboseLogScreen(onBack = { navigateBack() }) // Pass back handler
             }
         }
     }
 
     BackHandler(enabled = currentScreen != Screen.MENU) {
-        currentScreen = Screen.MENU
+        navigateBack()
     }
 }
 
@@ -190,6 +218,8 @@ fun MainApp(onExit: () -> Unit) {
 fun MenuScreen(
     targetHost: String,
     isVerbose: Boolean,
+    onUpdateHost: (String) -> Unit,
+    onToggleVerbose: (Boolean) -> Unit,
     onNavigate: (Screen) -> Unit,
     onExit: () -> Unit
 ) {
@@ -217,24 +247,13 @@ fun MenuScreen(
             Icons.Default.List,
             Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)),
             Screen.RESULTS
-        ),
-        MenuTile(
-            4, 
-            "Settings", 
-            "Configure target host",
-            Icons.Default.Settings,
-            Pair(Color(0xFF43E97B), Color(0xFF38F9D7)),
-            Screen.SETTINGS
-        ),
-        MenuTile(
-            5, 
-            "Exit", 
-            "Close application",
-            Icons.Default.Close,
-            Pair(Color(0xFFFA709A), Color(0xFFFEE140)),
-            null
         )
     )
+    
+    // Edit Host State
+    var isEditingHost by remember { mutableStateOf(false) }
+    var tempHost by remember { mutableStateOf(targetHost) }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     Column(
         modifier = Modifier
@@ -242,11 +261,11 @@ fun MenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // App Header
+        // App Header & Config
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             ),
             shape = RoundedCornerShape(20.dp)
         ) {
@@ -258,62 +277,89 @@ fun MenuScreen(
                     text = "InjectTools",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v3.6.1",
+                    text = "v3.6.2",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
                 
-                // Target Status
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 2.dp
-                ) {
+                // Editable Target Host Field
+                Text(
+                    text = "TARGET HOST",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                if (isEditingHost) {
+                    OutlinedTextField(
+                        value = tempHost,
+                        onValueChange = { tempHost = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            onUpdateHost(tempHost)
+                            isEditingHost = false
+                            keyboardController?.hide()
+                        }),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                onUpdateHost(tempHost)
+                                isEditingHost = false
+                                keyboardController?.hide()
+                            }) {
+                                Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    )
+                } else {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { 
+                                tempHost = targetHost
+                                isEditingHost = true 
+                            }
+                            .padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = if (targetHost.isNotBlank()) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.error
+                        Text(
+                            text = targetHost.ifBlank { "Tap to set host..." },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                            color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Target Host",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = targetHost.ifBlank { "Not configured" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Icon(
+                            Icons.Default.Edit, 
+                            contentDescription = "Edit", 
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
                     }
                 }
-                
-                if (isVerbose) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("Verbose Mode ON") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                        )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Verbose Toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onToggleVerbose(!isVerbose) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Checkbox(
+                        checked = isVerbose,
+                        onCheckedChange = { onToggleVerbose(it) }
                     )
+                    Text("Verbose Logs")
                 }
             }
         }
@@ -325,14 +371,12 @@ fun MenuScreen(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.height(600.dp)
+            modifier = Modifier.height(400.dp) // Adjusted height since tiles are fewer
         ) {
             items(tiles) { tile ->
                 MenuTileCard(tile) {
                     if (tile.screen != null) {
                         onNavigate(tile.screen)
-                    } else {
-                        onExit()
                     }
                 }
             }
@@ -393,114 +437,7 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
     }
 }
 
-@Composable
-fun SettingsScreen(currentHost: String, isVerbose: Boolean, onSave: (String, Boolean) -> Unit) {
-    var hostInput by remember { mutableStateOf(currentHost) }
-    var verboseState by remember { mutableStateOf(isVerbose) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Configuration", 
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Set target host for SSL SNI injection", 
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        OutlinedTextField(
-            value = hostInput,
-            onValueChange = { hostInput = it },
-            label = { Text("Target Host") },
-            placeholder = { Text("tunnel.example.com") },
-            leadingIcon = {
-                Icon(Icons.Default.LocationOn, contentDescription = null)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Verbose Logging",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "Show detailed debug information",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = verboseState,
-                    onCheckedChange = { verboseState = it }
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Button(
-            onClick = { onSave(hostInput.trim(), verboseState) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            enabled = hostInput.isNotBlank(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(Icons.Default.Check, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Save Configuration", fontSize = 16.sp)
-        }
-    }
-}
+// Settings Screen Removed as requested (merged into Header)
 
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {
@@ -875,7 +812,7 @@ fun ResultItem(res: ScanResult) {
 }
 
 @Composable
-fun VerboseLogScreen() {
+fun VerboseLogScreen(onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -891,12 +828,10 @@ fun VerboseLogScreen() {
                 modifier = Modifier.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.Close, contentDescription = "Close")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
                         "Verbose Logs",

@@ -1,5 +1,6 @@
 package com.hoshiyomix.injecttools
 
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.Socket
 import javax.net.ssl.SNIHostName
@@ -72,17 +73,29 @@ object Scanner {
         var ip = ""
         var isCf = false
         
-        if (verbose) Logger.log("--> Resolving DNS for: $subdomain")
+        if (verbose) Logger.log("--> Resolving DNS for: $subdomain (IPv4 Only)")
 
         try {
-            // 1. DNS Resolution
-            val inetAddress = InetAddress.getByName(subdomain)
-            ip = inetAddress.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "No IP found")
+            // 1. DNS Resolution (Force IPv4)
+            val allIps = InetAddress.getAllByName(subdomain)
+            val ipv4 = allIps.firstOrNull { it is Inet4Address }
+            
+            if (ipv4 == null) {
+                return@withContext ScanResult(subdomain, "", false, false, "No IPv4 address found")
+            }
+            
+            ip = ipv4.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "Invalid IP")
             
             if (verbose) Logger.log("    Resolved IP: $ip")
             
             isCf = isCloudflareIp(ip)
-            if (verbose) Logger.log("    Cloudflare IP: $isCf")
+            if (verbose) {
+                if (isCf) {
+                    Logger.log("    Cloudflare IP: true")
+                } else {
+                    Logger.log("!!  WARNING: Resolved IP is NOT a Cloudflare IP (proceeding anyway)")
+                }
+            }
 
             // 2. SSL/TLS Connection with SNI
             if (verbose) Logger.log("--> Starting SSL Handshake (SNI: $target)...")

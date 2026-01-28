@@ -1,21 +1,9 @@
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':app:mergeExtDexDebug'.
-> Could not resolve all files for configuration ':app:debugRuntimeClasspath'.
-   > Failed to transform material-icons-extended-release.aar (androidx.compose.material:material-icons-extended-android:1.5.0) to match attributes {artifactType=android-dex, asm-transformed-variant=NONE, dexing-enable-desugaring=true, dexing-enable-jacoco-instrumentation=false, dexing-is-debuggable=true, dexing-min-sdk=24, org.gradle.category=library, org.gradle.status=release, org.gradle.usage=java-runtime, org.jetbrains.kotlin.platform.type=androidJvm}.
-      > Execution failed for DexingNoClasspathTransform: /home/runner/.gradle/caches/transforms-3/74ab1a3a1c68bfa9f033f43e95bef870/transformed/jetified-material-icons-extended-release-runtime.jar.
-         > Error while dexing.
-
-* Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to get full insights.
-> Get more help at https://help.gradle.org.
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Gradle build daemon has been stopped: since the JVM garbage collector is thrashing
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
 
 * Try:
 > Run with --stacktrace option to get the stack trace.

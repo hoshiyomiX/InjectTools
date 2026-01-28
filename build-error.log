@@ -6,6 +6,7 @@ Execution failed for task ':app:compileDebugKotlin'.
    > Compilation error. See log for more details
 
 * Try:
+> Run with --stacktrace option to get the stack trace.
 > Run with --info or --debug option to get more log output.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.

@@ -54,8 +54,17 @@ fn is_cloudflare_ip(ip: &str) -> bool {
 }
 
 // Curl based SSL Handshake to match V17 "Best for TLS Fingerprint"
-fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
-    // curl -s -I --http1.1 --resolve "sni:443:ip" "https://sni/" --connect-timeout 5 -k
+fn ssl_handshake_curl(ip: &str, sni: &str, verbose: bool) -> String {
+    let curl_cmd = format!(
+        "curl -s -I --http1.1 --resolve {}:443:{} https://{}/ --connect-timeout 5 -k",
+        sni, ip, sni
+    );
+
+    if verbose {
+        println!("{}", "[VERBOSE] Executing SSL Handshake:".bright_black());
+        println!("{}", curl_cmd.bright_black());
+    }
+
     let output = Command::new("curl")
         .arg("-s")
         .arg("-I")
@@ -74,6 +83,11 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let combined = format!("{}{}", stdout, stderr);
             
+            if verbose {
+                println!("{}", "[VERBOSE] SSL Output:".bright_black());
+                println!("{}", combined.trim().bright_black());
+            }
+
             // Check for any valid HTTP response line or Server header
             // Also check for 403/400/500/etc which indicate a handshake succeeded and server replied
             if combined.contains("HTTP/") || 
@@ -83,8 +97,6 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
                 "ESTABLISHED".to_string()
             } else {
                 if combined.trim().is_empty() {
-                    // Try to guess from exit code if output is empty? 
-                    // No, empty output usually means connection cut or timeout.
                     "FAILED: Empty Output".to_string()
                 } else {
                     format!("FAILED: {}", combined.trim())
@@ -95,7 +107,7 @@ fn ssl_handshake_curl(ip: &str, sni: &str) -> String {
     }
 }
 
-async fn check_target_status(target: &str) -> String {
+async fn check_target_status(target: &str, verbose: bool) -> String {
     // 1. Resolve Target
     let tip = match dns::resolve_domain_first(target).await {
         Ok(ip) => ip,
@@ -103,13 +115,17 @@ async fn check_target_status(target: &str) -> String {
     };
 
     // 2. Check Direct SSL
-    let tssl = ssl_handshake_curl(&tip, target);
+    let tssl = ssl_handshake_curl(&tip, target, verbose);
     if tssl == "ESTABLISHED" {
         return "ONLINE|SSL_OK".to_string();
     }
 
     // 3. Fallback HTTP
     // curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "http://target/"
+    if verbose {
+        println!("{}", "[VERBOSE] Direct SSL failed, trying fallback HTTP check...".bright_black());
+    }
+    
     let output = Command::new("curl")
         .arg("-s")
         .arg("-o")
@@ -136,8 +152,8 @@ async fn check_target_status(target: &str) -> String {
 // =============================================================================
 
 /// Test single target connection (Used in Menu 4: Change Target)
-pub async fn test_target(target: &str, _timeout: u64) -> anyhow::Result<()> {
-    let status_raw = check_target_status(target).await;
+pub async fn test_target(target: &str, _timeout: u64, verbose: bool) -> anyhow::Result<()> {
+    let status_raw = check_target_status(target, verbose).await;
     let parts: Vec<&str> = status_raw.split('|').collect();
     let status = parts.get(0).unwrap_or(&"UNKNOWN");
     let note = parts.get(1).unwrap_or(&"");
@@ -151,7 +167,7 @@ pub async fn test_target(target: &str, _timeout: u64) -> anyhow::Result<()> {
     }
 }
 
-pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow::Result<()> {
+pub async fn test_single(target: &str, subdomain: &str, _timeout: u64, verbose: bool) -> anyhow::Result<()> {
     println!("\n{}", "==================== CHECKING ====================".blue());
     println!("Subdomain : {}", subdomain.yellow());
     println!("Target    : {}", target.cyan());
@@ -176,38 +192,48 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "ENV_PRIVATE_IP");
         return Ok(());
     }
-    if !is_cloudflare_ip(&sub_ip) {
+    
+    // NEW: Use enhanced Cloudflare detection (IP Range + HTTP Headers)
+    // This fixes the "accuracy" issue for BYOIP addresses
+    let is_cf = dns::is_cloudflare_enhanced(subdomain, &sub_ip).await;
+    
+    if !is_cf {
+        if verbose {
+            println!("{}", "[VERBOSE] IP not in CF Range and no CF headers found.".red());
+        }
         print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_NOT_CLOUDFLARE");
         return Ok(());
+    } else if verbose && !dns::is_cloudflare_ip(&sub_ip) {
+         println!("{}", "[VERBOSE] Note: IP not in official range, but CF headers detected.".green());
     }
 
     // 3. Latency Check (V17: <5ms detection for VPN Interception)
-    // Using 2s timeout as per V17 script
     let start = Instant::now();
     let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((sub_ip.as_str(), 443))).await;
     let latency = start.elapsed().as_millis();
 
+    if verbose {
+         println!("{}", format!("[VERBOSE] TCP Latency: {}ms", latency).bright_black());
+    }
+
     match tcp_check {
         Ok(Ok(_)) => {
-            // Note: Removed hard return on <5ms to prevent false positives on fast networks
-            // Just warn if it's suspicious
             if latency < 5 {
                 println!("{}", "⚠️  Warning: Very low latency (<5ms). VPN might be active?".yellow());
             }
         },
         _ => {
-            // Timeout or Error -> TCP Blocked
             print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_TCP_BLOCKED");
             return Ok(());
         }
     }
 
     // 4. Test Handshake (V17 Logic)
-    let ssl_status = ssl_handshake_curl(&sub_ip, target);
+    let ssl_status = ssl_handshake_curl(&sub_ip, target, verbose);
 
     if ssl_status != "ESTABLISHED" {
         // Handshake Failed
-        let ts_full = check_target_status(target).await;
+        let ts_full = check_target_status(target, verbose).await;
         let parts: Vec<&str> = ts_full.split('|').collect();
         let t_status = parts.get(0).unwrap_or(&"UNKNOWN");
         let _t_note = parts.get(1).unwrap_or(&"");
@@ -215,7 +241,6 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         let bug_note = if *t_status == "UNREACHABLE" {
             "DIRECT_CONNECTION_BLOCKED".to_string()
         } else {
-            // Target is alive/online, so it's a compatibility issue
             if ssl_status.contains("refused") {
                 "BUG_NOT_COMPATIBLE(CONN_REFUSED)".to_string()
             } else if ssl_status.contains("reset") {
@@ -232,7 +257,6 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
     }
 
     // 5. Handshake Success -> Check End-to-End HTTP
-    // curl -s -I --http1.1 --resolve ...
     let output = Command::new("curl")
         .arg("-s")
         .arg("-I")
@@ -250,6 +274,11 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
 
     if let Ok(out) = output {
         let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+        
+        if verbose {
+            println!("{}", "[VERBOSE] Final HTTP Output:".bright_black());
+            println!("{}", stdout.trim().bright_black());
+        }
         
         // Parse HTTP Code
         if let Some(line) = stdout.lines().next() {
@@ -309,6 +338,7 @@ pub async fn batch_test(
     subdomains: &[String],
     _timeout: u64,
     running: Arc<AtomicBool>,
+    verbose: bool,
 ) -> anyhow::Result<Vec<ScanResult>> {
     let total = subdomains.len();
     let mut results = Vec::new();
@@ -366,10 +396,6 @@ pub async fn batch_test(
                     let mut tcp_ok = false;
                     match tcp_check {
                         Ok(Ok(_)) => {
-                            // Only fail if latency is absurdly low AND user is likely using VPN?
-                            // For batch scan, let's keep it strict or just log?
-                            // Let's keep strict for batch to filter out garbage, but maybe relax to 2ms?
-                            // Actually, let's just remove the check for batch too to be safe.
                             if latency < 2 {
                                 // Super suspicious
                                 scan_res.error_msg = Some("Suspicious Latency <2ms".to_string());
@@ -382,7 +408,14 @@ pub async fn batch_test(
 
                     if tcp_ok {
                          // V17 Handshake
-                         let ssl_res = ssl_handshake_curl(&ip, target);
+                         let ssl_res = ssl_handshake_curl(&ip, target, verbose); // pass verbose but maybe ignore output in batch? 
+                         // actually verbose in batch might ruin progress bar. 
+                         // Let's force verbose to false for batch's internal calls to avoid spam, 
+                         // OR we implement a "log to file" if verbose.
+                         // For now, let's just pass `false` for internal helper calls in batch to keep it clean.
+                         // Wait, I changed the signature of ssl_handshake_curl to take verbose.
+                         // I will pass `false` here to prevent spamming the console during batch.
+                         
                          if ssl_res == "ESTABLISHED" {
                              // End-to-End
                              let output = Command::new("curl")

@@ -176,9 +176,11 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64) -> anyhow
         print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "ENV_PRIVATE_IP");
         return Ok(());
     }
+    
+    // REMOVED: Strict Cloudflare IP Check
+    // We now just warn but proceed
     if !is_cloudflare_ip(&sub_ip) {
-        print_report(target, "UNKNOWN", subdomain, &sub_ip, "NOT_WORKING", "SUBDOMAIN_NOT_CLOUDFLARE");
-        return Ok(());
+        println!("{}", "⚠️  Warning: IP not in standard Cloudflare ranges. Continuing anyway...".yellow());
     }
 
     // 3. Latency Check (V17: <5ms detection for VPN Interception)
@@ -353,11 +355,14 @@ pub async fn batch_test(
                     scan_res.error_msg = Some("Fake DNS".to_string());
                 } else if is_private_ip(&ip) {
                      scan_res.error_msg = Some("Private IP".to_string());
-                } else if !is_cloudflare_ip(&ip) {
-                     scan_res.error_msg = Some("Not Cloudflare".to_string());
                 } else {
-                    scan_res.is_cloudflare = true;
+                    // Check Cloudflare but don't block
+                    if is_cloudflare_ip(&ip) {
+                         scan_res.is_cloudflare = true;
+                    }
 
+                    // Proceed to test regardless of CF status (Requested by user)
+                    
                     // Latency Check (<5ms check included)
                     let start = Instant::now();
                     let tcp_check = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((ip.as_str(), 443))).await;
@@ -366,10 +371,6 @@ pub async fn batch_test(
                     let mut tcp_ok = false;
                     match tcp_check {
                         Ok(Ok(_)) => {
-                            // Only fail if latency is absurdly low AND user is likely using VPN?
-                            // For batch scan, let's keep it strict or just log?
-                            // Let's keep strict for batch to filter out garbage, but maybe relax to 2ms?
-                            // Actually, let's just remove the check for batch too to be safe.
                             if latency < 2 {
                                 // Super suspicious
                                 scan_res.error_msg = Some("Suspicious Latency <2ms".to_string());
@@ -410,6 +411,10 @@ pub async fn batch_test(
                                          }
                                      }
                                  } else {
+                                     // Only report error if we expected CF but didn't get it?
+                                     // Actually if user wants to scan non-CF, they might not care about CF-Ray
+                                     // BUT usually "Inject" implies checking for CF-Ray or specific header.
+                                     // Let's assume if CF-Ray missing, it's not a "Working CF Bug".
                                      scan_res.error_msg = Some("No CF-Ray".to_string());
                                  }
                              }

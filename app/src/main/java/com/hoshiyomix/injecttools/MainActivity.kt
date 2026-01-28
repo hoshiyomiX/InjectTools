@@ -42,6 +42,8 @@ import kotlinx.coroutines.launch
 import com.hoshiyomix.injecttools.Scanner.ScanResult
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // Global log buffer for verbose mode
 object Logger {
@@ -120,20 +122,33 @@ fun MainApp(onExit: () -> Unit) {
     var isVerbose by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Rust Integration: Capture stdout/stderr
-    LaunchedEffect(Unit) {
-        // This is a placeholder for actual Rust interaction if using JNI.
-        // For now, we simulate capturing "system" logs or command outputs.
-        // In a real Termux/Rust scenario, you might read from a process stream.
-        // Example logic if we were running a shell command:
-        /*
-        val process = Runtime.getRuntime().exec("logcat -d")
-        val reader = BufferedReader(InputStreamReader(process.inputStream))
-        var line: String?
-        while (reader.readLine().also { line = it } != null) {
-            if (isVerbose) Logger.log("[SYS] $line")
+    // Rust/System Integration: Capture logcat for "Rust" tag or general stdout
+    // This is a simulation since we aren't actually running a rust binary via JNI yet,
+    // but this structure prepares for it.
+    LaunchedEffect(isVerbose) {
+        if (isVerbose) {
+            withContext(Dispatchers.IO) {
+                try {
+                    // Clear previous logs first to avoid duplicates if re-enabled
+                    // Logger.clear() // Optional: depends on preference
+                    
+                    val process = Runtime.getRuntime().exec("logcat -d -v time")
+                    val reader = BufferedReader(InputStreamReader(process.inputStream))
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        line?.let {
+                            if (it.contains("System.out") || it.contains("Rust")) {
+                                withContext(Dispatchers.Main) {
+                                    Logger.log(it)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore logcat errors
+                }
+            }
         }
-        */
     }
 
     fun addResults(newResults: List<ScanResult>) {
@@ -141,12 +156,22 @@ fun MainApp(onExit: () -> Unit) {
     }
 
     fun navigateTo(screen: Screen) {
-        previousScreen = currentScreen
-        currentScreen = screen
+        if (currentScreen != screen) {
+            previousScreen = currentScreen
+            currentScreen = screen
+        }
     }
 
     fun navigateBack() {
-        currentScreen = previousScreen
+        // Fix: Ensure we don't get stuck if previous is same as current or invalid
+        if (currentScreen == Screen.VERBOSE_LOGS) {
+             currentScreen = previousScreen
+             if (currentScreen == Screen.VERBOSE_LOGS) {
+                 currentScreen = Screen.MENU
+             }
+        } else if (currentScreen != Screen.MENU) {
+            currentScreen = Screen.MENU
+        }
     }
 
     Scaffold(
@@ -199,13 +224,12 @@ fun MainApp(onExit: () -> Unit) {
                         } else {
                             navigateTo(screen)
                         }
-                    },
-                    onExit = onExit
+                    }
                 )
                 Screen.SINGLE_TEST -> ManualScanScreen(targetHost, isVerbose, onResult = { addResults(listOf(it)) })
                 Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, isVerbose, onResults = { addResults(it) })
                 Screen.RESULTS -> ResultHistoryScreen(scanHistory)
-                Screen.VERBOSE_LOGS -> VerboseLogScreen(onBack = { navigateBack() }) // Pass back handler
+                Screen.VERBOSE_LOGS -> VerboseLogScreen(onBack = { navigateBack() })
             }
         }
     }
@@ -222,8 +246,7 @@ fun MenuScreen(
     isVerbose: Boolean,
     onUpdateHost: (String) -> Unit,
     onToggleVerbose: (Boolean) -> Unit,
-    onNavigate: (Screen) -> Unit,
-    onExit: () -> Unit
+    onNavigate: (Screen) -> Unit
 ) {
     val tiles = listOf(
         MenuTile(
@@ -282,86 +305,111 @@ fun MenuScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v3.6.2",
+                    text = "v3.6.3",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Editable Target Host Field
-                Text(
-                    text = "TARGET HOST",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                if (isEditingHost) {
-                    OutlinedTextField(
-                        value = tempHost,
-                        onValueChange = { tempHost = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            onUpdateHost(tempHost)
-                            isEditingHost = false
-                            keyboardController?.hide()
-                        }),
-                        trailingIcon = {
-                            IconButton(onClick = {
+                // Static Layout for Target Host (Fixed Height to avoid jumpy UI)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "TARGET HOST (SNI)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (isEditingHost) {
+                        OutlinedTextField(
+                            value = tempHost,
+                            onValueChange = { tempHost = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodyLarge,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = {
                                 onUpdateHost(tempHost)
                                 isEditingHost = false
                                 keyboardController?.hide()
-                            }) {
-                                Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                            }),
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    onUpdateHost(tempHost)
+                                    isEditingHost = false
+                                    keyboardController?.hide()
+                                }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                                }
                             }
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    tempHost = targetHost
+                                    isEditingHost = true 
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = targetHost.ifBlank { "Tap to set host..." },
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Icon(
+                                Icons.Default.Edit, 
+                                contentDescription = "Edit", 
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { 
-                                tempHost = targetHost
-                                isEditingHost = true 
-                            }
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = targetHost.ifBlank { "Tap to set host..." },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
-                            color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            Icons.Default.Edit, 
-                            contentDescription = "Edit", 
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Verbose Toggle
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onToggleVerbose(!isVerbose) }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                // Verbose Toggle (Full Width Card)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    onClick = { onToggleVerbose(!isVerbose) },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Checkbox(
-                        checked = isVerbose,
-                        onCheckedChange = { onToggleVerbose(it) }
-                    )
-                    Text("Verbose Logs")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Checkbox(
+                            checked = isVerbose,
+                            onCheckedChange = null // Handled by Surface onClick
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Verbose Logs",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Show stdout/stderr debug info",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -373,7 +421,7 @@ fun MenuScreen(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.height(400.dp) // Adjusted height since tiles are fewer
+            modifier = Modifier.height(400.dp)
         ) {
             items(tiles) { tile ->
                 MenuTileCard(tile) {
@@ -439,7 +487,7 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
     }
 }
 
-// Settings Screen Removed as requested (merged into Header)
+// ... rest of the code remains same ...
 
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {

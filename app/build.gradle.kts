@@ -13,11 +13,14 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        
+        // Enable MultiDex for material-icons-extended
+        multiDexEnabled = true
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true // Enable shrinking to reduce size
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -45,7 +48,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // Icons Extended for AccountTree, Language, Download, etc.
+    
+    // Icons Extended (Heavy library, requires MultiDex + Heap increase)
     implementation("androidx.compose.material:material-icons-extended")
     
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

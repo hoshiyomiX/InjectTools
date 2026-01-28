@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -175,9 +177,9 @@ fun MainApp(onExit: () -> Unit) {
                     title = { 
                         Text(
                             text = when (currentScreen) {
-                                Screen.SINGLE_TEST -> "Single Subdomain"
-                                Screen.CRTSH_TEST -> "Crt.sh Discovery"
-                                Screen.RESULTS -> "Scan Results"
+                                Screen.SINGLE_TEST -> "Test Single Subdomain"
+                                Screen.CRTSH_TEST -> "Scan & Test Subdomain"
+                                Screen.RESULTS -> "History Logs"
                                 Screen.VERBOSE_LOGS -> "Verbose Logs"
                                 else -> ""
                             }
@@ -245,7 +247,7 @@ fun MenuScreen(
     val tiles = listOf(
         MenuTile(
             1, 
-            "Single Test", 
+            "Test Single Subdomain", 
             "Quick subdomain check",
             Icons.Default.Search,
             Pair(Color(0xFF667EEA), Color(0xFF764BA2)),
@@ -253,7 +255,7 @@ fun MenuScreen(
         ),
         MenuTile(
             2, 
-            "Crt.sh Scan", 
+            "Scan & Test Subdomain", 
             "Auto-discover & test",
             Icons.Default.AccountTree,
             Pair(Color(0xFFF093FB), Color(0xFFF5576C)),
@@ -261,7 +263,7 @@ fun MenuScreen(
         ),
         MenuTile(
             3, 
-            "Results", 
+            "History Logs", 
             "View scan history",
             Icons.Default.List,
             Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)),
@@ -272,156 +274,172 @@ fun MenuScreen(
     var isEditingHost by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
-    Column(
+    // Detect tap outside to close keyboard and save
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
             ) {
-                Text(
-                    text = "InjectTools",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "v3.6.5",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
+                if (isEditingHost) {
+                    onUpdateHost(tempHost)
+                    isEditingHost = false
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                }
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(20.dp)
+            ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.Start
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "TARGET HOST (SNI)",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "InjectTools",
+                        style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "v3.6.6",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                     
-                    if (isEditingHost) {
-                        OutlinedTextField(
-                            value = tempHost,
-                            onValueChange = { tempHost = it },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodyLarge,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = {
-                                onUpdateHost(tempHost)
-                                isEditingHost = false
-                                keyboardController?.hide()
-                            }),
-                            trailingIcon = {
-                                IconButton(onClick = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "DOMAIN HOST",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        if (isEditingHost) {
+                            OutlinedTextField(
+                                value = tempHost,
+                                onValueChange = { tempHost = it },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = MaterialTheme.typography.bodyLarge,
+                                placeholder = { Text("contoh: sg.server.web.id", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = {
                                     onUpdateHost(tempHost)
                                     isEditingHost = false
                                     keyboardController?.hide()
-                                }) {
-                                    Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
-                                }
+                                    focusManager.clearFocus()
+                                }),
+                                trailingIcon = null // Removed check button as requested
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { 
+                                        tempHost = targetHost
+                                        isEditingHost = true 
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = targetHost.ifBlank { "contoh: sg.server.web.id" },
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Icon(
+                                    Icons.Default.Edit, 
+                                    contentDescription = "Edit", 
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    tempHost = targetHost
-                                    isEditingHost = true 
-                                },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = targetHost.ifBlank { "Tap to set host..." },
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
-                                color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Icon(
-                                Icons.Default.Edit, 
-                                contentDescription = "Edit", 
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    onClick = { onToggleVerbose(!isVerbose) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(12.dp)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        onClick = { onToggleVerbose(!isVerbose) },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Checkbox(
-                            checked = isVerbose,
-                            onCheckedChange = null
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Verbose Logs",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Checkbox(
+                                checked = isVerbose,
+                                onCheckedChange = null
                             )
-                            Text(
-                                text = "Show stdout/stderr debug info",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Verbose Logs",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Show stdout/stderr debug info",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.height(400.dp)
-        ) {
-            items(tiles) { tile ->
-                MenuTileCard(tile) {
-                    if (tile.screen != null) {
-                        onNavigate(tile.screen)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.height(400.dp)
+            ) {
+                items(tiles) { tile ->
+                    MenuTileCard(tile) {
+                        if (tile.screen != null) {
+                            onNavigate(tile.screen)
+                        }
                     }
                 }
             }
         }
     }
 }
+
+// ... Rest of the file (MenuTileCard, ResultHistoryScreen, ManualScanScreen, CrtshScanScreen, ResultItem, VerboseLogScreen) remains same ...
+// Duplicating ManualScanScreen, CrtshScanScreen etc to ensure full file content is preserved in MCP update
+// IMPORTANT: Since I am replacing the file content, I must include everything.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -516,7 +534,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                "Scan History", 
+                                "History Logs", 
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -591,7 +609,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Single Subdomain Test",
+                    "Test Single Subdomain",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -702,7 +720,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Crt.sh Discovery",
+                    "Scan & Test Subdomain",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )

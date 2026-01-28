@@ -214,6 +214,7 @@ fun MainApp(onExit: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MenuScreen(
     targetHost: String,

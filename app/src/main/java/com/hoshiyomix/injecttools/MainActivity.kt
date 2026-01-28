@@ -239,6 +239,8 @@ fun MainApp(onExit: () -> Unit) {
     }
 }
 
+// ... MenuScreen and other Composables ...
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun MenuScreen(
@@ -305,14 +307,14 @@ fun MenuScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v3.6.3",
+                    text = "v3.6.4",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Static Layout for Target Host (Fixed Height to avoid jumpy UI)
+                // Static Layout for Target Host
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -487,7 +489,7 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
     }
 }
 
-// ... rest of the code remains same ...
+// ResultHistoryScreen remains same...
 
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {
@@ -549,12 +551,46 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
     }
 }
 
+// Logic to check network status and confirm scan
+fun checkNetworkAndConfirm(
+    context: android.content.Context, 
+    onProceed: () -> Unit
+) {
+    val status = NetworkUtils.checkNetworkStatus(context)
+    
+    when (status) {
+        NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> {
+            // Proceed immediately
+            onProceed()
+        }
+        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> {
+            Toast.makeText(context, "⚠️ WARNING: You have regular internet access! Avoid using main quota.", Toast.LENGTH_LONG).show()
+            // In a real app we might show a dialog, but here we proceed with toast warning
+            onProceed()
+        }
+        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> {
+            Toast.makeText(context, "⚠️ WARNING: VPN is active! Please disable VPN for accurate scanning.", Toast.LENGTH_LONG).show()
+            // Proceed anyway but warn
+            onProceed()
+        }
+        NetworkUtils.NetworkStatus.INTERNET_VPN -> {
+            Toast.makeText(context, "⚠️ CRITICAL: VPN active & Internet detected! Disable VPN & check quota.", Toast.LENGTH_LONG).show()
+            // Proceed anyway but warn
+            onProceed()
+        }
+        NetworkUtils.NetworkStatus.DISCONNECTED -> {
+            Toast.makeText(context, "❌ No network connection. Connect to WiFi/Data first.", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
 @Composable
 fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResult) -> Unit) {
     var subdomain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var lastResult by remember { mutableStateOf<ScanResult?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -607,17 +643,20 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         Button(
             onClick = {
                 if (isScanning || subdomain.isBlank()) return@Button
-                isScanning = true
-                if (isVerbose) {
-                    Logger.clear()
-                    Logger.log("--- Starting scan for ${subdomain.trim()} ---")
-                }
                 
-                scope.launch {
-                    val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
-                    lastResult = res
-                    onResult(res)
-                    isScanning = false
+                checkNetworkAndConfirm(context) {
+                    isScanning = true
+                    if (isVerbose) {
+                        Logger.clear()
+                        Logger.log("--- Starting scan for ${subdomain.trim()} ---")
+                    }
+                    
+                    scope.launch {
+                        val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
+                        lastResult = res
+                        onResult(res)
+                        isScanning = false
+                    }
                 }
             },
             enabled = !isScanning && subdomain.isNotBlank(),
@@ -663,6 +702,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     var isScanning by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -747,22 +787,26 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
 
             Button(
                 onClick = {
-                    isScanning = true
-                    scanResults = emptyList()
-                    if (isVerbose) Logger.clear()
-                    
-                    scope.launch {
-                        val tempResults = mutableListOf<ScanResult>()
-                        val total = subdomains.size
-                        subdomains.forEachIndexed { index, sub ->
-                            if (isVerbose) Logger.log("[$index/$total]: $sub")
-                            val res = Scanner.testSingle(targetHost, sub, false)
-                            tempResults.add(res)
-                            scanResults = tempResults.toList()
-                            progress = (index + 1) / total.toFloat()
+                    if (isScanning || subdomains.isEmpty()) return@Button
+
+                    checkNetworkAndConfirm(context) {
+                        isScanning = true
+                        scanResults = emptyList()
+                        if (isVerbose) Logger.clear()
+                        
+                        scope.launch {
+                            val tempResults = mutableListOf<ScanResult>()
+                            val total = subdomains.size
+                            subdomains.forEachIndexed { index, sub ->
+                                if (isVerbose) Logger.log("[$index/$total]: $sub")
+                                val res = Scanner.testSingle(targetHost, sub, false)
+                                tempResults.add(res)
+                                scanResults = tempResults.toList()
+                                progress = (index + 1) / total.toFloat()
+                            }
+                            onResults(tempResults)
+                            isScanning = false
                         }
-                        onResults(tempResults)
-                        isScanning = false
                     }
                 },
                 enabled = !isScanning && subdomains.isNotEmpty(),
@@ -798,6 +842,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     }
 }
 
+// ... rest of the file (ResultItem, VerboseLogScreen) ...
 @Composable
 fun ResultItem(res: ScanResult) {
     Card(

@@ -19,16 +19,18 @@ android {
             useSupportLibrary true
         }
         
-        // Keep resConfigs to limit language resources, still helps with build speed
+        // Retaining this (even though ae42fbd didn't have it) because it helps build stability
+        // and reduces size further by stripping unused languages.
         resConfigs "en", "xxhdpi"
     }
 
     buildTypes {
         release {
-            // DISABLED ALL COMPRESSION to guarantee build success
-            // "GC overhead limit exceeded" indicates R8 cannot handle the graph size on this runner
+            // Configuration from commit ae42fbd:
+            // 1. Minify Code: YES (reduces dex size significantly)
+            // 2. Shrink Resources: NO (prevents the "Java heap space" crash)
             shrinkResources false 
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

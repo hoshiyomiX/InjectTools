@@ -440,6 +440,7 @@ fun MenuScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
     Card(

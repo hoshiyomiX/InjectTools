@@ -40,6 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import com.hoshiyomix.injecttools.Scanner.ScanResult
@@ -273,17 +275,14 @@ fun MenuScreen(
         )
     )
 
-    var isEditingHost by remember { mutableStateOf(false) }
+    var showHostDialog by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusManager = LocalFocusManager.current
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Main content (blurred when editing)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(if (isEditingHost) 8.dp else 0.dp)
+                .blur(if (showHostDialog) 4.dp else 0.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
@@ -316,6 +315,10 @@ fun MenuScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                            .clickable { 
+                                tempHost = targetHost
+                                showHostDialog = true 
+                            }
                             .padding(16.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
@@ -328,52 +331,23 @@ fun MenuScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        if (isEditingHost) {
-                            OutlinedTextField(
-                                value = tempHost,
-                                onValueChange = { tempHost = it },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodyLarge,
-                                placeholder = {
-                                    Text(
-                                        "contoh: sg.server.web.id",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                },
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = {
-                                    onUpdateHost(tempHost)
-                                    isEditingHost = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                }),
-                                trailingIcon = null
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = targetHost.ifBlank { "contoh: sg.server.web.id" },
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
-                        } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        tempHost = targetHost
-                                        isEditingHost = true
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = targetHost.ifBlank { "contoh: sg.server.web.id" },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Edit",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
 
@@ -420,8 +394,8 @@ fun MenuScreen(
                 modifier = Modifier.height(400.dp)
             ) {
                 items(tiles) { tile ->
-                    MenuTileCard(tile, enabled = !isEditingHost) {
-                        if (!isEditingHost) {
+                    MenuTileCard(tile, enabled = !showHostDialog) {
+                        if (!showHostDialog) {
                             tile.screen?.let(onNavigate)
                         }
                     }
@@ -429,25 +403,95 @@ fun MenuScreen(
             }
         }
 
-        // Overlay (only visible when editing)
-        if (isEditingHost) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .zIndex(1f)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        onUpdateHost(tempHost)
-                        isEditingHost = false
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                    }
+        // Host Edit Dialog
+        if (showHostDialog) {
+            HostEditDialog(
+                currentHost = tempHost,
+                onHostChange = { tempHost = it },
+                onDismiss = { showHostDialog = false },
+                onConfirm = {
+                    onUpdateHost(tempHost)
+                    showHostDialog = false
+                }
             )
         }
     }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun HostEditDialog(
+    currentHost: String,
+    onHostChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Language,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Set Target Host")
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    "Enter the domain host to use as injection target.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = currentHost,
+                    onValueChange = onHostChange,
+                    label = { Text("Domain Host") },
+                    placeholder = { Text("sg.server.web.id") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onConfirm()
+                    }),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    onConfirm()
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Cancel")
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

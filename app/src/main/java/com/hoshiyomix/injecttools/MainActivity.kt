@@ -28,7 +28,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -77,7 +76,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainApp(onExit = { finish() })
+                    MainApp()
                 }
             }
         }
@@ -116,7 +115,7 @@ data class MenuTile(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-fun MainApp(onExit: () -> Unit) {
+fun MainApp() {
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var previousScreen by remember { mutableStateOf(Screen.MENU) } // Track previous screen
     var targetHost by remember { mutableStateOf("") }
@@ -141,7 +140,7 @@ fun MainApp(onExit: () -> Unit) {
                             }
                         }
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Ignore logcat errors
                 }
             }
@@ -161,10 +160,10 @@ fun MainApp(onExit: () -> Unit) {
 
     fun navigateBack() {
         if (currentScreen == Screen.VERBOSE_LOGS) {
-             currentScreen = previousScreen
-             if (currentScreen == Screen.VERBOSE_LOGS) {
-                 currentScreen = Screen.MENU
-             }
+            currentScreen = previousScreen
+            if (currentScreen == Screen.VERBOSE_LOGS) {
+                currentScreen = Screen.MENU
+            }
         } else if (currentScreen != Screen.MENU) {
             currentScreen = Screen.MENU
         }
@@ -174,7 +173,7 @@ fun MainApp(onExit: () -> Unit) {
         topBar = {
             if (currentScreen != Screen.MENU) {
                 TopAppBar(
-                    title = { 
+                    title = {
                         Text(
                             text = when (currentScreen) {
                                 Screen.SINGLE_TEST -> "Test Single Subdomain"
@@ -194,9 +193,9 @@ fun MainApp(onExit: () -> Unit) {
                         if (currentScreen != Screen.VERBOSE_LOGS) {
                             IconButton(onClick = { navigateTo(Screen.VERBOSE_LOGS) }) {
                                 if (isVerbose) {
-                                     Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                         Icon(Icons.Default.Terminal, contentDescription = "Logs")
-                                     }
+                                    Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                        Icon(Icons.Default.Terminal, contentDescription = "Logs")
+                                    }
                                 } else {
                                     Icon(Icons.Default.Terminal, contentDescription = "Logs")
                                 }
@@ -222,6 +221,7 @@ fun MainApp(onExit: () -> Unit) {
                         }
                     }
                 )
+
                 Screen.SINGLE_TEST -> ManualScanScreen(targetHost, isVerbose, onResult = { addResults(listOf(it)) })
                 Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, isVerbose, onResults = { addResults(it) })
                 Screen.RESULTS -> ResultHistoryScreen(scanHistory)
@@ -246,31 +246,31 @@ fun MenuScreen(
 ) {
     val tiles = listOf(
         MenuTile(
-            1, 
-            "Test Single Subdomain", 
+            1,
+            "Test Single Subdomain",
             "Quick subdomain check",
             Icons.Default.Search,
             Pair(Color(0xFF667EEA), Color(0xFF764BA2)),
             Screen.SINGLE_TEST
         ),
         MenuTile(
-            2, 
-            "Scan & Test Subdomain", 
+            2,
+            "Scan & Test Subdomain",
             "Auto-discover & test",
             Icons.Default.AccountTree,
             Pair(Color(0xFFF093FB), Color(0xFFF5576C)),
             Screen.CRTSH_TEST
         ),
         MenuTile(
-            3, 
-            "History Logs", 
+            3,
+            "History Logs",
             "View scan history",
             Icons.Default.List,
             Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)),
             Screen.RESULTS
         )
     )
-    
+
     var isEditingHost by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -320,9 +320,9 @@ fun MenuScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
-                    
+
                     Spacer(modifier = Modifier.height(24.dp))
-                    
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -336,9 +336,9 @@ fun MenuScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        
+
                         Spacer(modifier = Modifier.height(8.dp))
-                        
+
                         if (isEditingHost) {
                             OutlinedTextField(
                                 value = tempHost,
@@ -346,7 +346,12 @@ fun MenuScreen(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 textStyle = MaterialTheme.typography.bodyLarge,
-                                placeholder = { Text("contoh: sg.server.web.id", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                placeholder = {
+                                    Text(
+                                        "contoh: sg.server.web.id",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                },
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = {
                                     onUpdateHost(tempHost)
@@ -354,15 +359,15 @@ fun MenuScreen(
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
                                 }),
-                                trailingIcon = null // Removed check button as requested
+                                trailingIcon = null
                             )
                         } else {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { 
+                                    .clickable {
                                         tempHost = targetHost
-                                        isEditingHost = true 
+                                        isEditingHost = true
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -374,8 +379,8 @@ fun MenuScreen(
                                     color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
                                 Icon(
-                                    Icons.Default.Edit, 
-                                    contentDescription = "Edit", 
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit",
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
@@ -427,9 +432,7 @@ fun MenuScreen(
             ) {
                 items(tiles) { tile ->
                     MenuTileCard(tile) {
-                        if (tile.screen != null) {
-                            onNavigate(tile.screen)
-                        }
+                        tile.screen?.let(onNavigate)
                     }
                 }
             }
@@ -437,11 +440,6 @@ fun MenuScreen(
     }
 }
 
-// ... Rest of the file (MenuTileCard, ResultHistoryScreen, ManualScanScreen, CrtshScanScreen, ResultItem, VerboseLogScreen) remains same ...
-// Duplicating ManualScanScreen, CrtshScanScreen etc to ensure full file content is preserved in MCP update
-// IMPORTANT: Since I am replacing the file content, I must include everything.
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
     Card(
@@ -475,7 +473,7 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
                     modifier = Modifier.size(32.dp),
                     tint = Color.White
                 )
-                
+
                 Column {
                     Text(
                         text = tile.title,
@@ -534,7 +532,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                "History Logs", 
+                                "History Logs",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -556,27 +554,47 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
 
 // Logic to check network status and confirm scan
 fun checkNetworkAndConfirm(
-    context: android.content.Context, 
+    context: android.content.Context,
     onProceed: () -> Unit
 ) {
     val status = NetworkUtils.checkNetworkStatus(context)
-    
+
     when (status) {
         NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> {
             // Only this condition allows scan to proceed
             onProceed()
         }
+
         NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> {
-            Toast.makeText(context, "❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                "❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.",
+                Toast.LENGTH_LONG
+            ).show()
         }
+
         NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> {
-            Toast.makeText(context, "❌ BLOCKED: VPN is active! Please disable VPN before scanning.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                "❌ BLOCKED: VPN is active! Please disable VPN before scanning.",
+                Toast.LENGTH_LONG
+            ).show()
         }
+
         NetworkUtils.NetworkStatus.INTERNET_VPN -> {
-            Toast.makeText(context, "❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                "❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.",
+                Toast.LENGTH_LONG
+            ).show()
         }
+
         NetworkUtils.NetworkStatus.DISCONNECTED -> {
-            Toast.makeText(context, "❌ No network connection. Connect to WiFi/Data first.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                "❌ No network connection. Connect to WiFi/Data first.",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 }
@@ -634,20 +652,20 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Button(
             onClick = {
                 if (isScanning || subdomain.isBlank()) return@Button
-                
+
                 checkNetworkAndConfirm(context) {
                     isScanning = true
                     if (isVerbose) {
                         Logger.clear()
                         Logger.log("--- Starting scan for ${subdomain.trim()} ---")
                     }
-                    
+
                     scope.launch {
                         val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
                         lastResult = res
@@ -675,9 +693,9 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                 Text("Test Connection", fontSize = 16.sp)
             }
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         lastResult?.let {
             Text(
                 "Last Result",
@@ -697,7 +715,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     var scanResults by remember { mutableStateOf(listOf<ScanResult>()) }
     var isFetching by remember { mutableStateOf(false) }
     var isScanning by remember { mutableStateOf(false) }
-    var progress by remember { mutableFloatStateOf(0f) }
+    var progress by remember { mutableStateOf(0f) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -754,7 +772,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     isFetching = true
                     scanResults = emptyList()
                     if (isVerbose) Logger.log("Fetching subdomains for $domain from crt.sh...")
-                    
+
                     scope.launch {
                         try {
                             subdomains = Crtsh.fetchSubdomains(domain.trim())
@@ -767,7 +785,9 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     }
                 },
                 enabled = !isFetching && !isScanning && domain.isNotBlank(),
-                modifier = Modifier.weight(1f).height(56.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 if (isFetching) {
@@ -790,7 +810,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                         isScanning = true
                         scanResults = emptyList()
                         if (isVerbose) Logger.clear()
-                        
+
                         scope.launch {
                             val tempResults = mutableListOf<ScanResult>()
                             val total = subdomains.size
@@ -807,7 +827,9 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     }
                 },
                 enabled = !isScanning && subdomains.isNotEmpty(),
-                modifier = Modifier.weight(1f).height(56.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
@@ -815,7 +837,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                 Text(if (isScanning) "Scanning" else "Scan All")
             }
         }
-        
+
         if (isScanning) {
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
@@ -830,7 +852,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         LazyColumn {
             items(scanResults) { res ->
                 ResultItem(res)
@@ -839,13 +861,14 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultItem(res: ScanResult) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (res.isWorking) 
-                MaterialTheme.colorScheme.primaryContainer 
-            else 
+            containerColor = if (res.isWorking)
+                MaterialTheme.colorScheme.primaryContainer
+            else
                 MaterialTheme.colorScheme.surfaceVariant
         ),
         modifier = Modifier
@@ -860,15 +883,15 @@ fun ResultItem(res: ScanResult) {
             Icon(
                 if (res.isWorking) Icons.Default.CheckCircle else Icons.Default.Cancel,
                 contentDescription = null,
-                tint = if (res.isWorking) 
-                    MaterialTheme.colorScheme.primary 
-                else 
+                tint = if (res.isWorking)
+                    MaterialTheme.colorScheme.primary
+                else
                     MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(32.dp)
             )
-            
+
             Spacer(modifier = Modifier.width(12.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = res.subdomain,
@@ -880,15 +903,15 @@ fun ResultItem(res: ScanResult) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (res.errorMsg != null) {
+                res.errorMsg?.let {
                     Text(
-                        text = res.errorMsg,
+                        text = it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
             }
-            
+
             if (res.isCloudflare) {
                 AssistChip(
                     onClick = {},
@@ -935,7 +958,7 @@ fun VerboseLogScreen(onBack: () -> Unit) {
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         Card(
             modifier = Modifier
                 .fillMaxSize()
@@ -963,9 +986,9 @@ fun VerboseLogScreen(onBack: () -> Unit) {
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         Button(
             onClick = { Logger.clear() },
             modifier = Modifier

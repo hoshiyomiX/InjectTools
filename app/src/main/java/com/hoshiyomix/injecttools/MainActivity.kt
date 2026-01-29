@@ -56,7 +56,6 @@ object Logger {
 
     fun log(msg: String) {
         _logs.add(msg)
-        // Memory protection: keep only last 1000 logs
         if (_logs.size > 1000) {
             _logs.removeAt(0)
         }
@@ -71,7 +70,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // Dynamic theme following system settings
             MaterialTheme(
                 colorScheme = dynamicColorScheme()
             ) {
@@ -120,13 +118,12 @@ data class MenuTile(
 @Composable
 fun MainApp() {
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
-    var previousScreen by remember { mutableStateOf(Screen.MENU) } // Track previous screen
+    var previousScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf("") }
     var scanHistory by remember { mutableStateOf(listOf<ScanResult>()) }
     var isVerbose by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Rust/System Integration: Capture logcat for "Rust" tag or general stdout
     LaunchedEffect(isVerbose) {
         if (isVerbose) {
             withContext(Dispatchers.IO) {
@@ -144,7 +141,6 @@ fun MainApp() {
                         }
                     }
                 } catch (_: Exception) {
-                    // Ignore logcat errors
                 }
             }
         }
@@ -224,7 +220,6 @@ fun MainApp() {
                         }
                     }
                 )
-
                 Screen.SINGLE_TEST -> ManualScanScreen(targetHost, isVerbose, onResult = { addResults(listOf(it)) })
                 Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, isVerbose, onResults = { addResults(it) })
                 Screen.RESULTS -> ResultHistoryScreen(scanHistory)
@@ -248,30 +243,9 @@ fun MenuScreen(
     onNavigate: (Screen) -> Unit
 ) {
     val tiles = listOf(
-        MenuTile(
-            1,
-            "Test Single Subdomain",
-            "Quick subdomain check",
-            Icons.Default.Search,
-            Pair(Color(0xFF667EEA), Color(0xFF764BA2)),
-            Screen.SINGLE_TEST
-        ),
-        MenuTile(
-            2,
-            "Scan & Test Subdomain",
-            "Auto-discover & test",
-            Icons.Default.AccountTree,
-            Pair(Color(0xFFF093FB), Color(0xFFF5576C)),
-            Screen.CRTSH_TEST
-        ),
-        MenuTile(
-            3,
-            "History Logs",
-            "View scan history",
-            Icons.Default.List,
-            Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)),
-            Screen.RESULTS
-        )
+        MenuTile(1, "Test Single Subdomain", "Quick subdomain check", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
+        MenuTile(2, "Scan & Test Subdomain", "Auto-discover & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
+        MenuTile(3, "History Logs", "View scan history", Icons.Default.List, Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)), Screen.RESULTS)
     )
 
     var showHostDialog by remember { mutableStateOf(false) }
@@ -286,9 +260,7 @@ fun MenuScreen(
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(20.dp)
             ) {
                 Column(
@@ -340,12 +312,7 @@ fun MenuScreen(
                                 fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
                                 color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                         }
                     }
 
@@ -361,22 +328,11 @@ fun MenuScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(12.dp)
                         ) {
-                            Checkbox(
-                                checked = isVerbose,
-                                onCheckedChange = null
-                            )
+                            Checkbox(checked = isVerbose, onCheckedChange = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
-                                Text(
-                                    text = "Verbose Logs",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Show stdout/stderr debug info",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Text(text = "Verbose Logs", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(text = "Show stdout/stderr debug info", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -401,7 +357,6 @@ fun MenuScreen(
             }
         }
 
-        // Host Edit Dialog
         if (showHostDialog) {
             HostEditDialog(
                 currentHost = tempHost,
@@ -431,23 +386,14 @@ fun HostEditDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Language,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Set Target Host")
             }
         },
         text = {
             Column {
-                Text(
-                    "Enter the domain host to use as injection target.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("Enter the domain host to use as injection target.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = currentHost,
@@ -467,24 +413,14 @@ fun HostEditDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                    onConfirm()
-                },
-                shape = RoundedCornerShape(12.dp)
-            ) {
+            Button(onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() }, shape = RoundedCornerShape(12.dp)) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(12.dp)
-            ) {
+            TextButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
                 Text("Cancel")
             }
         },
@@ -498,48 +434,21 @@ fun MenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(140.dp),
+        modifier = Modifier.fillMaxWidth().height(140.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            tile.gradient.first.copy(alpha = if (enabled) 0.8f else 0.4f),
-                            tile.gradient.second.copy(alpha = if (enabled) 0.8f else 0.4f)
-                        )
-                    )
-                )
+                .background(Brush.linearGradient(colors = listOf(tile.gradient.first.copy(alpha = if (enabled) 0.8f else 0.4f), tile.gradient.second.copy(alpha = if (enabled) 0.8f else 0.4f))))
                 .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Icon(
-                    imageVector = tile.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = Color.White.copy(alpha = if (enabled) 1f else 0.5f)
-                )
-
+            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                Icon(imageVector = tile.icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = Color.White.copy(alpha = if (enabled) 1f else 0.5f))
                 Column {
-                    Text(
-                        text = tile.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = if (enabled) 1f else 0.5f)
-                    )
-                    Text(
-                        text = tile.subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = if (enabled) 0.9f else 0.4f)
-                    )
+                    Text(text = tile.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = if (enabled) 1f else 0.5f))
+                    Text(text = tile.subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = if (enabled) 0.9f else 0.4f))
                 }
             }
         }
@@ -551,105 +460,39 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
     if (history.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
+                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "No scan results yet",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("No scan results yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     } else {
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.List,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp)
-                        )
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(
-                                "History Logs",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "${history.size} results in this session",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Text("History Logs", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("${history.size} results in this session", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            items(history) { res ->
-                ResultItem(res)
-            }
+            items(history) { res -> ResultItem(res) }
         }
     }
 }
 
-// Logic to check network status and confirm scan
-fun checkNetworkAndConfirm(
-    context: android.content.Context,
-    onProceed: () -> Unit
-) {
+fun checkNetworkAndConfirm(context: android.content.Context, onProceed: () -> Unit) {
     val status = NetworkUtils.checkNetworkStatus(context)
-
     when (status) {
-        NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> {
-            // Only this condition allows scan to proceed
-            onProceed()
-        }
-
-        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> {
-            Toast.makeText(
-                context,
-                "❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> {
-            Toast.makeText(
-                context,
-                "❌ BLOCKED: VPN is active! Please disable VPN before scanning.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        NetworkUtils.NetworkStatus.INTERNET_VPN -> {
-            Toast.makeText(
-                context,
-                "❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        NetworkUtils.NetworkStatus.DISCONNECTED -> {
-            Toast.makeText(
-                context,
-                "❌ No network connection. Connect to WiFi/Data first.",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> onProceed()
+        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> Toast.makeText(context, "❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.", Toast.LENGTH_LONG).show()
+        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> Toast.makeText(context, "❌ BLOCKED: VPN is active! Please disable VPN before scanning.", Toast.LENGTH_LONG).show()
+        NetworkUtils.NetworkStatus.INTERNET_VPN -> Toast.makeText(context, "❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.", Toast.LENGTH_LONG).show()
+        NetworkUtils.NetworkStatus.DISCONNECTED -> Toast.makeText(context, "❌ No network connection. Connect to WiFi/Data first.", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -661,33 +504,13 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())\n            .padding(16.dp)
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp)
-                )
+                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Test Single Subdomain",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Test individual subdomain against target",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("Test Single Subdomain", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Test individual subdomain against target", style = MaterialTheme.typography.bodyMedium)
             }
         }
 
@@ -698,9 +521,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
             onValueChange = { subdomain = it },
             label = { Text("Subdomain") },
             placeholder = { Text("cdn.cloudflare.com") },
-            leadingIcon = {
-                Icon(Icons.Default.Language, contentDescription = null)
-            },
+            leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
@@ -711,14 +532,12 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         Button(
             onClick = {
                 if (isScanning || subdomain.isBlank()) return@Button
-
                 checkNetworkAndConfirm(context) {
                     isScanning = true
                     if (isVerbose) {
                         Logger.clear()
                         Logger.log("--- Starting scan for ${subdomain.trim()} ---")
                     }
-
                     scope.launch {
                         val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
                         lastResult = res
@@ -728,16 +547,11 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                 }
             },
             enabled = !isScanning && subdomain.isNotBlank(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(12.dp)
         ) {
             if (isScanning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Scanning...")
             } else {
@@ -750,11 +564,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         Spacer(modifier = Modifier.height(24.dp))
 
         lastResult?.let {
-            Text(
-                "Last Result",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("Last Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             ResultItem(it)
         }
@@ -772,33 +582,13 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Icon(
-                    Icons.Default.AccountTree,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp)
-                )
+                Icon(Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Scan & Test Subdomain",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Auto-discover and test subdomains",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("Scan & Test Subdomain", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Auto-discover and test subdomains", style = MaterialTheme.typography.bodyMedium)
             }
         }
 
@@ -809,9 +599,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
             onValueChange = { domain = it },
             label = { Text("Domain") },
             placeholder = { Text("cloudflare.com") },
-            leadingIcon = {
-                Icon(Icons.Default.Language, contentDescription = null)
-            },
+            leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
@@ -825,7 +613,6 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     isFetching = true
                     scanResults = emptyList()
                     if (isVerbose) Logger.log("Fetching subdomains for $domain from crt.sh...")
-
                     scope.launch {
                         try {
                             subdomains = Crtsh.fetchSubdomains(domain.trim())
@@ -838,16 +625,11 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     }
                 },
                 enabled = !isFetching && !isScanning && domain.isNotBlank(),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
+                modifier = Modifier.weight(1f).height(56.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 if (isFetching) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
                     Icon(Icons.Default.Download, contentDescription = null)
                 }
@@ -858,12 +640,10 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
             Button(
                 onClick = {
                     if (isScanning || subdomains.isEmpty()) return@Button
-
                     checkNetworkAndConfirm(context) {
                         isScanning = true
                         scanResults = emptyList()
                         if (isVerbose) Logger.clear()
-
                         scope.launch {
                             val tempResults = mutableListOf<ScanResult>()
                             val total = subdomains.size
@@ -880,9 +660,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     }
                 },
                 enabled = !isScanning && subdomains.isNotEmpty(),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
+                modifier = Modifier.weight(1f).height(56.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
@@ -893,23 +671,14 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
 
         if (isScanning) {
             Spacer(modifier = Modifier.height(12.dp))
-            LinearProgressIndicator(
-                progress = progress,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                "${(progress * 100).toInt()}% (${scanResults.size}/${subdomains.size})",
-                modifier = Modifier.align(Alignment.End),
-                style = MaterialTheme.typography.labelSmall
-            )
+            LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
+            Text("${(progress * 100).toInt()}% (${scanResults.size}/${subdomains.size})", modifier = Modifier.align(Alignment.End), style = MaterialTheme.typography.labelSmall)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn {
-            items(scanResults) { res ->
-                ResultItem(res)
-            }
+            items(scanResults) { res -> ResultItem(res) }
         }
     }
 }
@@ -918,61 +687,27 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
 @Composable
 fun ResultItem(res: ScanResult) {
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (res.isWorking)
-                MaterialTheme.colorScheme.primaryContainer
-            else
-                MaterialTheme.colorScheme.surfaceVariant
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = if (res.isWorking) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (res.isWorking) Icons.Default.CheckCircle else Icons.Default.Cancel,
                 contentDescription = null,
-                tint = if (res.isWorking)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.error,
+                tint = if (res.isWorking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(32.dp)
             )
-
             Spacer(modifier = Modifier.width(12.dp))
-
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = res.subdomain,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = res.ip.ifBlank { "No IP" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(text = res.subdomain, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(text = res.ip.ifBlank { "No IP" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 res.errorMsg?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             }
-
             if (res.isCloudflare) {
-                AssistChip(
-                    onClick = {},
-                    label = { Text("CF") },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                )
+                AssistChip(onClick = {}, label = { Text("CF") }, colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer))
             }
         }
     }
@@ -980,31 +715,13 @@ fun ResultItem(res: ScanResult) {
 
 @Composable
 fun VerboseLogScreen(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
-                }
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.Close, contentDescription = "Close") }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text(
-                        "Verbose Logs",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Verbose Logs", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("${Logger.logs.size} entries")
                 }
             }
@@ -1012,29 +729,11 @@ fun VerboseLogScreen(onBack: () -> Unit) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Card(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1E1E1E)
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
+        Card(modifier = Modifier.fillMaxSize().weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)), shape = RoundedCornerShape(16.dp)) {
             SelectionContainer {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp)
-                ) {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp)) {
                     items(Logger.logs) { log ->
-                        Text(
-                            text = log,
-                            color = Color(0xFF00FF00),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp
-                        )
+                        Text(text = log, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 16.sp)
                     }
                 }
             }
@@ -1042,13 +741,7 @@ fun VerboseLogScreen(onBack: () -> Unit) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Button(
-            onClick = { Logger.clear() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
+        Button(onClick = { Logger.clear() }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(12.dp)) {
             Icon(Icons.Default.Delete, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text("Clear Logs")

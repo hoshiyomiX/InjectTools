@@ -11,24 +11,20 @@ android {
         applicationId "com.hoshiyomix.injecttools"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1-hotfix"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary true
         }
         
-        // Retaining this (even though ae42fbd didn't have it) because it helps build stability
-        // and reduces size further by stripping unused languages.
+        // Retaining this for build stability/size
         resConfigs "en", "xxhdpi"
     }
 
     buildTypes {
         release {
-            // Configuration from commit ae42fbd:
-            // 1. Minify Code: YES (reduces dex size significantly)
-            // 2. Shrink Resources: NO (prevents the "Java heap space" crash)
             shrinkResources false 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

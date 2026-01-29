@@ -278,7 +278,6 @@ fun MenuScreen(
     var tempHost by remember { mutableStateOf(targetHost) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // CONTENT (Removed blur temporarily to ensure it doesn't block interaction/rendering)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -577,7 +576,8 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically\n                    ) {
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             Icons.Default.List,
                             contentDescription = null,
@@ -664,8 +664,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .verticalScroll(rememberScrollState())\n            .padding(16.dp)
     ) {
         Card(
             colors = CardDefaults.cardColors(
@@ -968,7 +967,9 @@ fun ResultItem(res: ScanResult) {
 
             if (res.isCloudflare) {
                 AssistChip(
-                    onClick = {},\n                    label = { Text("CF") },\n                    colors = AssistChipDefaults.assistChipColors(
+                    onClick = {},
+                    label = { Text("CF") },
+                    colors = AssistChipDefaults.assistChipColors(
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
                 )
@@ -995,15 +996,16 @@ fun VerboseLogScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.Close, contentDescription = \"Close\")
+                    Icon(Icons.Default.Close, contentDescription = "Close")
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        \"Verbose Logs\",\n                        style = MaterialTheme.typography.titleLarge,
+                        "Verbose Logs",
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(\"${Logger.logs.size} entries\")
+                    Text("${Logger.logs.size} entries")
                 }
             }
         }
@@ -1030,7 +1032,8 @@ fun VerboseLogScreen(onBack: () -> Unit) {
                             text = log,
                             color = Color(0xFF00FF00),
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,\n                            lineHeight = 16.sp
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
                         )
                     }
                 }
@@ -1048,7 +1051,7 @@ fun VerboseLogScreen(onBack: () -> Unit) {
         ) {
             Icon(Icons.Default.Delete, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(\"Clear Logs\")
+            Text("Clear Logs")
         }
     }
 }

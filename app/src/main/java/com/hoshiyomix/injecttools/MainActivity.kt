@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import com.hoshiyomix.injecttools.Scanner.ScanResult
 import java.io.BufferedReader
@@ -276,25 +278,12 @@ fun MenuScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    // Detect tap outside to close keyboard and save
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                if (isEditingHost) {
-                    onUpdateHost(tempHost)
-                    isEditingHost = false
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                }
-            }
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Main content (blurred when editing)
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .blur(if (isEditingHost) 8.dp else 0.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
@@ -431,20 +420,42 @@ fun MenuScreen(
                 modifier = Modifier.height(400.dp)
             ) {
                 items(tiles) { tile ->
-                    MenuTileCard(tile) {
-                        tile.screen?.let(onNavigate)
+                    MenuTileCard(tile, enabled = !isEditingHost) {
+                        if (!isEditingHost) {
+                            tile.screen?.let(onNavigate)
+                        }
                     }
                 }
             }
+        }
+
+        // Overlay (only visible when editing)
+        if (isEditingHost) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .zIndex(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        onUpdateHost(tempHost)
+                        isEditingHost = false
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }
+            )
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
+fun MenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
     Card(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(140.dp),
@@ -457,8 +468,8 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            tile.gradient.first.copy(alpha = 0.8f),
-                            tile.gradient.second.copy(alpha = 0.8f)
+                            tile.gradient.first.copy(alpha = if (enabled) 0.8f else 0.4f),
+                            tile.gradient.second.copy(alpha = if (enabled) 0.8f else 0.4f)
                         )
                     )
                 )
@@ -472,7 +483,7 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
                     imageVector = tile.icon,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp),
-                    tint = Color.White
+                    tint = Color.White.copy(alpha = if (enabled) 1f else 0.5f)
                 )
 
                 Column {
@@ -480,12 +491,12 @@ fun MenuTileCard(tile: MenuTile, onClick: () -> Unit) {
                         text = tile.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = Color.White.copy(alpha = if (enabled) 1f else 0.5f)
                     )
                     Text(
                         text = tile.subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.9f)
+                        color = Color.White.copy(alpha = if (enabled) 0.9f else 0.4f)
                     )
                 }
             }

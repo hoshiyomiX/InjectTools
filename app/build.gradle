@@ -11,16 +11,13 @@ android {
         applicationId "com.hoshiyomix.injecttools"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "1.1-hotfix"
+        versionCode 3
+        versionName "1.2-arm64"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary true
         }
-        
-        // Removed conflicting ndk.abiFilters block
-        // Splits block below handles the ABI filtering now
         
         // Retaining this for build stability/size
         resConfigs "en", "xxhdpi"
@@ -28,13 +25,16 @@ android {
 
     buildTypes {
         release {
-            shrinkResources false 
-            minifyEnabled true
+            // ENABLE SHRINKING (R8)
+            isMinifyEnabled = true
+            isShrinkResources = true
+            
+            // Standard optimization rules
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
     
-    // Split APKs by ABI for smaller file sizes
+    // STRICTLY enforce split for arm64-v8a only
     splits {
         abi {
             enable true
@@ -60,6 +60,11 @@ android {
     packagingOptions {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += 'DebugProbesKt.bin'
+        }
+        jniLibs {
+            // FORCE PICK only arm64-v8a if any rogue libs slip in
+            pickFirsts += ['lib/arm64-v8a/**']
         }
     }
 }

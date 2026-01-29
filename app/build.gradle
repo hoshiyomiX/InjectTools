@@ -18,11 +18,15 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+        
+        // LIMIT RESOURCES: Drastically reduces build memory usage by only including English
+        // and standard densities. Prevents OOM in ShrinkProtoResourcesAction.
+        resConfigs "en", "xxhdpi"
     }
 
     buildTypes {
         release {
-            shrinkResources true // Re-enabled for compression
+            shrinkResources true
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

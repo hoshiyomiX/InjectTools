@@ -22,7 +22,7 @@ android {
 
     buildTypes {
         release {
-            shrinkResources true 
+            shrinkResources false // Disabled to prevent Java heap space OOM on CI
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

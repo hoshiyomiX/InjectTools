@@ -616,7 +616,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                 checkNetworkAndConfirm(context) {
                     isScanning = true
                     scope.launch {
-                        val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
+                        val res = Scanner.testSingle(targetHost, subdomain.trim())
                         lastResult = res
                         onResult(res)
                         isScanning = false
@@ -721,7 +721,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                             val tempResults = mutableListOf<ScanResult>()
                             val total = subdomains.size
                             subdomains.forEachIndexed { index, sub ->
-                                val res = Scanner.testSingle(targetHost, sub, false)
+                                val res = Scanner.testSingle(targetHost, sub)
                                 tempResults.add(res)
                                 scanResults = tempResults.toList()
                                 progress = (index + 1) / total.toFloat()

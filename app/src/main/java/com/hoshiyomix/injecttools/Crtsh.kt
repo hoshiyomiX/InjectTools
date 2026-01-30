@@ -10,6 +10,7 @@ import java.util.TreeSet
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import java.net.InetAddress
 import java.net.Inet4Address
 
@@ -28,12 +29,12 @@ object Crtsh {
 
     private val api: CrtShApi by lazy {
         val client = OkHttpClient.Builder()
-            .connectTimeout(120, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(120, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "Mozilla/5.0 (Android 10; Mobile; rv:125.0) Gecko/125.0 Firefox/125.0")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                     .build()
                 chain.proceed(request)
             }
@@ -47,122 +48,80 @@ object Crtsh {
             .create(CrtShApi::class.java)
     }
 
-    // Cloudflare IP ranges for filtering
-    private val CLOUDFLARE_RANGES = listOf(
-        "173.245.48.0/20",
-        "103.21.244.0/22",
-        "103.22.200.0/22",
-        "103.31.4.0/22",
-        "141.101.64.0/18",
-        "108.162.192.0/18",
-        "190.93.240.0/20",
-        "188.114.96.0/20",
-        "197.234.240.0/22",
-        "198.41.128.0/17",
-        "162.158.0.0/15",
-        "104.16.0.0/13",
-        "104.24.0.0/14",
-        "172.64.0.0/13",
-        "131.0.72.0/22"
-    )
-
-    private fun isCloudflareIp(ip: String): Boolean {
-        if (ip.startsWith("104.")) return true
-        if (ip.startsWith("162.158.") || ip.startsWith("162.159.")) return true
-        if (ip.startsWith("188.114.")) return true
-        if (ip.startsWith("198.41.")) return true
-        if (ip.startsWith("197.234.")) return true
-        if (ip.startsWith("190.93.")) return true
-        
-        try {
-            val ipAddr = ipToLong(ip)
-            for (range in CLOUDFLARE_RANGES) {
-                val parts = range.split("/")
-                val rangeIp = ipToLong(parts[0])
-                val bits = parts[1].toInt()
-                val mask = -1 shl (32 - bits)
-                
-                if ((ipAddr and mask.toLong()) == (rangeIp and mask.toLong())) {
-                    return true
-                }
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        return false
-    }
-
-    private fun ipToLong(ip: String): Long {
-        val octets = ip.split(".")
-        var result: Long = 0
-        for (octet in octets) {
-            result = (result shl 8) + (octet.toIntOrNull() ?: 0)
-        }
-        return result
-    }
-
     suspend fun fetchSubdomains(domain: String): List<String> = withContext(Dispatchers.IO) {
-        try {
-            Logger.log("Connecting to crt.sh for $domain...")
-            
-            val entries = api.search(query = "%.$domain")
-            
-            if (entries.isEmpty()) {
-                Logger.log("crt.sh returned 0 entries")
-                return@withContext emptyList()
-            } else {
-                Logger.log("crt.sh returned ${entries.size} raw entries")
-            }
-
-            val uniqueSubdomains = TreeSet<String>()
-            
-            // 1. Collect Valid Subdomains
-            for (entry in entries) {
-                // Safe handling of nullable nameValue
-                val rawName = entry.nameValue ?: continue
-                val names = rawName.split("\n")
-                
-                for (name in names) {
-                    val cleaned = name.trim().replace("*.", "")
-                    if (cleaned.endsWith(domain) && !cleaned.contains(" ")) {
-                        uniqueSubdomains.add(cleaned)
-                    }
+        var attempts = 0
+        val maxRetries = 3
+        var entries: List<CrtShEntry> = emptyList()
+        
+        // 1. Retry Mechanism for API
+        while (attempts < maxRetries) {
+            try {
+                Logger.log("Connecting to crt.sh for $domain (Attempt ${attempts + 1})...")
+                entries = api.search(query = "%.$domain")
+                break // Success
+            } catch (e: Exception) {
+                attempts++
+                val msg = e.message ?: "Unknown"
+                Logger.log("Attempt $attempts failed: $msg")
+                if (attempts == maxRetries) {
+                    Logger.log("Max retries reached. crt.sh might be down.")
+                    return@withContext emptyList()
                 }
+                delay(2000) // Wait 2s before retry
             }
-            
-            Logger.log("Found ${uniqueSubdomains.size} unique subdomains. Filtering Cloudflare IPs...")
-
-            // 2. Filter Cloudflare IPs
-            val cfSubdomains = mutableListOf<String>()
-            val total = uniqueSubdomains.size
-            var processed = 0
-
-            for (sub in uniqueSubdomains) {
-                processed++
-                // Log progress every 10 items
-                if (processed % 10 == 0) {
-                     Logger.log("Filtering: $processed/$total...")
-                }
-
-                try {
-                    val allIps = InetAddress.getAllByName(sub)
-                    val ipv4 = allIps.firstOrNull { it is Inet4Address }?.hostAddress
-                    
-                    if (ipv4 != null && isCloudflareIp(ipv4)) {
-                        cfSubdomains.add(sub)
-                    }
-                } catch (e: Exception) {
-                    // Ignore DNS resolution errors during filtering
-                }
-            }
-            
-            Logger.log("Filtered: ${cfSubdomains.size} Cloudflare subdomains")
-            return@withContext cfSubdomains
-        } catch (e: Exception) {
-            e.printStackTrace()
-            val errorMsg = e.message ?: "Unknown error"
-            Logger.log("Crtsh Error: $errorMsg")
-            return@withContext emptyList()
         }
+
+        if (entries.isEmpty()) {
+            Logger.log("crt.sh returned 0 entries")
+            return@withContext emptyList()
+        } else {
+            Logger.log("crt.sh returned ${entries.size} raw entries")
+        }
+
+        val uniqueSubdomains = TreeSet<String>()
+        
+        // 2. Collect Valid Subdomains
+        for (entry in entries) {
+            val rawName = entry.nameValue ?: continue
+            val names = rawName.split("\n")
+            
+            for (name in names) {
+                val cleaned = name.trim().replace("*.", "")
+                if (cleaned.endsWith(domain) && !cleaned.contains(" ")) {
+                    uniqueSubdomains.add(cleaned)
+                }
+            }
+        }
+        
+        Logger.log("Found ${uniqueSubdomains.size} unique subdomains. Verifying DNS...")
+
+        // 3. Resolve DNS only (Removed strict CF filtering)
+        // We allow non-CF domains to pass through so the Scanner UI can show "Not Cloudflare"
+        // instead of silently hiding them. This gives better feedback.
+        val validSubdomains = mutableListOf<String>()
+        val total = uniqueSubdomains.size
+        var processed = 0
+
+        for (sub in uniqueSubdomains) {
+            processed++
+            if (processed % 20 == 0) {
+                 Logger.log("Verifying: $processed/$total...")
+            }
+
+            try {
+                // Just check if it resolves to an IPv4
+                val allIps = InetAddress.getAllByName(sub)
+                val ipv4 = allIps.firstOrNull { it is Inet4Address }?.hostAddress
+                
+                if (ipv4 != null) {
+                    validSubdomains.add(sub)
+                }
+            } catch (e: Exception) {
+                // Skip domains that don't resolve
+            }
+        }
+        
+        Logger.log("Result: ${validSubdomains.size} resolvable subdomains ready for scan.")
+        return@withContext validSubdomains
     }
 }

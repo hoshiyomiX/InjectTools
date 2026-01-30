@@ -35,6 +35,7 @@ object Crtsh {
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept", "application/json")
                     .build()
                 chain.proceed(request)
             }
@@ -53,21 +54,32 @@ object Crtsh {
         val maxRetries = 3
         var entries: List<CrtShEntry> = emptyList()
         
-        // 1. Retry Mechanism for API
+        // Fix: Use plain domain query instead of wildcard "%." prefix.
+        // Wildcard queries on crt.sh often cause DB timeouts (503) for popular domains.
+        // Searching "example.com" returns certificates for "*.example.com" and "sub.example.com" anyway.
+        val query = domain
+        
         while (attempts < maxRetries) {
             try {
-                Logger.log("Connecting to crt.sh for $domain (Attempt ${attempts + 1})...")
-                entries = api.search(query = "%.$domain")
+                Logger.log("Connecting to crt.sh for $query (Attempt ${attempts + 1})...")
+                entries = api.search(query = query)
                 break // Success
             } catch (e: Exception) {
                 attempts++
                 val msg = e.message ?: "Unknown"
                 Logger.log("Attempt $attempts failed: $msg")
+                
+                // If 503 (server overload), wait longer
+                if (msg.contains("503") || msg.contains("504")) {
+                    delay(3000)
+                } else {
+                    delay(2000)
+                }
+                
                 if (attempts == maxRetries) {
-                    Logger.log("Max retries reached. crt.sh might be down.")
+                    Logger.log("Max retries reached. crt.sh might be down or timed out.")
                     return@withContext emptyList()
                 }
-                delay(2000) // Wait 2s before retry
             }
         }
 
@@ -87,6 +99,7 @@ object Crtsh {
             
             for (name in names) {
                 val cleaned = name.trim().replace("*.", "")
+                // Basic validation: must contain the domain and not have spaces
                 if (cleaned.endsWith(domain) && !cleaned.contains(" ")) {
                     uniqueSubdomains.add(cleaned)
                 }
@@ -95,9 +108,6 @@ object Crtsh {
         
         Logger.log("Found ${uniqueSubdomains.size} unique subdomains. Verifying DNS...")
 
-        // 3. Resolve DNS only (Removed strict CF filtering)
-        // We allow non-CF domains to pass through so the Scanner UI can show "Not Cloudflare"
-        // instead of silently hiding them. This gives better feedback.
         val validSubdomains = mutableListOf<String>()
         val total = uniqueSubdomains.size
         var processed = 0

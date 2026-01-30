@@ -27,13 +27,13 @@ jobs:
       with:
         gradle-version: '8.5'
 
-    # Advanced OOM Prevention: Create 8GB Swap File
+    # Fix: Use unique name to avoid "Text file busy" conflict with system swap
     - name: Configure Swap Space
       run: |
-        sudo fallocate -l 8G /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
+        sudo fallocate -l 8G /swapfile_build
+        sudo chmod 600 /swapfile_build
+        sudo mkswap /swapfile_build
+        sudo swapon /swapfile_build
         echo "Swap created:"
         free -h
         

@@ -93,7 +93,7 @@ object Scanner {
         return result
     }
 
-    suspend fun testSingle(target: String, subdomain: String, verbose: Boolean = false, timeoutMs: Int = 5000): ScanResult = withContext(Dispatchers.IO) {
+    suspend fun testSingle(target: String, subdomain: String): ScanResult = withContext(Dispatchers.IO) {
         var ip = ""
         var isCf = false
         

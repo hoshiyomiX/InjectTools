@@ -2,6 +2,7 @@ package com.hoshiyomix.injecttools
 
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.Socket
 import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLParameters
@@ -23,6 +24,7 @@ object Scanner {
         val errorMsg: String? = null
     )
 
+    // Using the ranges from previous version, as they are standard CF ranges
     private val CLOUDFLARE_RANGES = listOf(
         "173.245.48.0/20",
         "103.21.244.0/22",
@@ -42,6 +44,15 @@ object Scanner {
     )
 
     private fun isCloudflareIp(ip: String): Boolean {
+        // Logic from beta branch (simplified prefix check + existing CIDR check)
+        if (ip.startsWith("104.")) return true
+        if (ip.startsWith("162.158.") || ip.startsWith("162.159.")) return true
+        if (ip.startsWith("188.114.")) return true
+        if (ip.startsWith("198.41.")) return true
+        if (ip.startsWith("197.234.")) return true
+        if (ip.startsWith("190.93.")) return true
+        
+        // CIDR Check for accuracy
         try {
             val ipAddr = ipToLong(ip)
             for (range in CLOUDFLARE_RANGES) {
@@ -60,11 +71,29 @@ object Scanner {
         return false
     }
 
+    // Logic from beta branch: is_private_ip
+    private fun isPrivateIp(ip: String): Boolean {
+        if (ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("127.")) return true
+        if (ip.startsWith("172.")) {
+            val parts = ip.split(".")
+            if (parts.size > 1) {
+                val second = parts[1].toIntOrNull() ?: 0
+                if (second in 16..31) return true
+            }
+        }
+        return false
+    }
+
+    // Logic from beta branch: is_fake_dns_ip
+    private fun isFakeDnsIp(ip: String): Boolean {
+        return ip.startsWith("198.18.") || ip.startsWith("198.19.")
+    }
+
     private fun ipToLong(ip: String): Long {
         val octets = ip.split(".")
         var result: Long = 0
         for (octet in octets) {
-            result = (result shl 8) + octet.toInt()
+            result = (result shl 8) + (octet.toIntOrNull() ?: 0)
         }
         return result
     }
@@ -73,7 +102,7 @@ object Scanner {
         var ip = ""
         var isCf = false
         
-        if (verbose) Logger.log("--> Resolving DNS for: $subdomain (IPv4 Only)")
+        if (verbose) Logger.log("--> Resolving DNS for: $subdomain")
 
         try {
             // 1. DNS Resolution (Force IPv4)
@@ -87,39 +116,54 @@ object Scanner {
             ip = ipv4.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "Invalid IP")
             
             if (verbose) Logger.log("    Resolved IP: $ip")
+
+            // 2. Environment Checks (Beta Logic)
+            if (isFakeDnsIp(ip)) {
+                if (verbose) Logger.log("!!  FAIL: Fake DNS IP detected")
+                return@withContext ScanResult(subdomain, ip, false, false, "Fake DNS IP")
+            }
+            if (isPrivateIp(ip)) {
+                if (verbose) Logger.log("!!  FAIL: Private IP detected")
+                return@withContext ScanResult(subdomain, ip, false, false, "Private IP")
+            }
             
             isCf = isCloudflareIp(ip)
-            if (verbose) {
-                if (isCf) {
-                    Logger.log("    Cloudflare IP: true")
-                } else {
-                    Logger.log("!!  WARNING: Resolved IP is NOT a Cloudflare IP (proceeding anyway)")
-                }
+            if (!isCf) {
+                if (verbose) Logger.log("!!  FAIL: Not a Cloudflare IP")
+                // Beta logic returns "NOT_WORKING" if not CF, so we act same
+                return@withContext ScanResult(subdomain, ip, false, false, "Not Cloudflare IP")
+            } else {
+                 if (verbose) Logger.log("    Cloudflare IP: true")
             }
 
-            // 2. SSL/TLS Connection with SNI
-            if (verbose) Logger.log("--> Starting SSL Handshake (SNI: $target)...")
+            // 3. Latency Check (Beta Logic: <5ms = VPN Interception)
+            val socket = Socket()
+            val start = System.currentTimeMillis()
+            try {
+                socket.connect(InetSocketAddress(ip, 443), 2000) // 2s timeout like beta
+            } catch (e: Exception) {
+                if (verbose) Logger.log("!!  FAIL: TCP Connection Blocked")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "TCP Blocked")
+            }
+            val latency = System.currentTimeMillis() - start
+            if (latency < 5) {
+                socket.close()
+                if (verbose) Logger.log("!!  FAIL: Latency < 5ms (VPN Interception Detected)")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "VPN Interception (Lat < 5ms)")
+            }
+
+            // 4. SSL Handshake & HTTP Check (Beta Logic: Must have CF-Ray)
+            if (verbose) Logger.log("--> Starting SSL Handshake + HTTP Check (SNI: $target)...")
             
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-            val socket = Socket(ip, 443)
-            socket.soTimeout = timeoutMs
-            
-            // Layering SSL over the existing socket connected to IP
             val sslSocket = factory.createSocket(socket, ip, 443, true) as SSLSocket
             
-            // Set SNI to target
             val sslParameters = sslSocket.sslParameters
             sslParameters.serverNames = listOf(SNIHostName(target))
             sslSocket.sslParameters = sslParameters
             
-            // Start Handshake
             sslSocket.startHandshake()
             
-            if (verbose) Logger.log("    SSL Handshake: SUCCESS")
-            
-            // 3. HTTP Request Check (Tunneling Validation)
-            // Send a HEAD request to check if server actually responds to HTTP
-            if (verbose) Logger.log("--> Validating HTTP Tunneling...")
             val writer = PrintWriter(sslSocket.outputStream)
             val reader = BufferedReader(InputStreamReader(sslSocket.inputStream))
             
@@ -129,21 +173,35 @@ object Scanner {
             writer.print("\r\n")
             writer.flush()
             
-            val responseLine = reader.readLine()
+            var line: String?
+            var hasCfRay = false
+            var responseCode = ""
+            
+            // Read headers
+            while (reader.readLine().also { line = it } != null) {
+                if (line.isNullOrBlank()) break
+                
+                if (verbose) Logger.log("    Header: $line")
+                
+                if (line?.startsWith("HTTP/") == true) {
+                    responseCode = line?.split(" ")?.getOrNull(1) ?: ""
+                }
+                
+                if (line?.lowercase()?.startsWith("cf-ray:") == true) {
+                    hasCfRay = true
+                }
+            }
             
             sslSocket.close()
             socket.close()
 
-            if (responseLine.isNullOrBlank()) {
-                if (verbose) Logger.log("!!  FAIL: Server closed connection without response (Offline/Blocked)")
-                return@withContext ScanResult(subdomain, ip, false, isCf, "SSL Handshake OK, but Server Closed Connection (No HTTP)")
+            if (hasCfRay) {
+                if (verbose) Logger.log("    SUCCESS: CF-Ray header found")
+                return@withContext ScanResult(subdomain, ip, true, isCf)
+            } else {
+                if (verbose) Logger.log("!!  FAIL: No CF-Ray header found (Response: $responseCode)")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "No CF-Ray Header")
             }
-
-            if (verbose) Logger.log("    HTTP Response: $responseLine")
-            
-            // If we got a response line like "HTTP/1.1 200 OK" or "HTTP/1.1 404 Not Found" or "HTTP/1.1 101 Switching Protocols"
-            // It means the tunneling path is at least listening and responding.
-            return@withContext ScanResult(subdomain, ip, true, isCf)
 
         } catch (e: Exception) {
             if (verbose) Logger.log("!!  ERROR: ${e.message}")

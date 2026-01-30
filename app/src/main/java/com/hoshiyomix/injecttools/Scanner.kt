@@ -24,7 +24,6 @@ object Scanner {
         val errorMsg: String? = null
     )
 
-    // Using the ranges from previous version, as they are standard CF ranges
     private val CLOUDFLARE_RANGES = listOf(
         "173.245.48.0/20",
         "103.21.244.0/22",
@@ -44,7 +43,6 @@ object Scanner {
     )
 
     private fun isCloudflareIp(ip: String): Boolean {
-        // Logic from beta branch (simplified prefix check + existing CIDR check)
         if (ip.startsWith("104.")) return true
         if (ip.startsWith("162.158.") || ip.startsWith("162.159.")) return true
         if (ip.startsWith("188.114.")) return true
@@ -52,7 +50,6 @@ object Scanner {
         if (ip.startsWith("197.234.")) return true
         if (ip.startsWith("190.93.")) return true
         
-        // CIDR Check for accuracy
         try {
             val ipAddr = ipToLong(ip)
             for (range in CLOUDFLARE_RANGES) {
@@ -71,7 +68,6 @@ object Scanner {
         return false
     }
 
-    // Logic from beta branch: is_private_ip
     private fun isPrivateIp(ip: String): Boolean {
         if (ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("127.")) return true
         if (ip.startsWith("172.")) {
@@ -84,7 +80,6 @@ object Scanner {
         return false
     }
 
-    // Logic from beta branch: is_fake_dns_ip
     private fun isFakeDnsIp(ip: String): Boolean {
         return ip.startsWith("198.18.") || ip.startsWith("198.19.")
     }
@@ -105,7 +100,7 @@ object Scanner {
         if (verbose) Logger.log("--> Resolving DNS for: $subdomain")
 
         try {
-            // 1. DNS Resolution (Force IPv4)
+            // 1. DNS Resolution
             val allIps = InetAddress.getAllByName(subdomain)
             val ipv4 = allIps.firstOrNull { it is Inet4Address }
             
@@ -117,7 +112,7 @@ object Scanner {
             
             if (verbose) Logger.log("    Resolved IP: $ip")
 
-            // 2. Environment Checks (Beta Logic)
+            // 2. Environment Checks
             if (isFakeDnsIp(ip)) {
                 if (verbose) Logger.log("!!  FAIL: Fake DNS IP detected")
                 return@withContext ScanResult(subdomain, ip, false, false, "Fake DNS IP")
@@ -130,17 +125,16 @@ object Scanner {
             isCf = isCloudflareIp(ip)
             if (!isCf) {
                 if (verbose) Logger.log("!!  FAIL: Not a Cloudflare IP")
-                // Beta logic returns "NOT_WORKING" if not CF, so we act same
                 return@withContext ScanResult(subdomain, ip, false, false, "Not Cloudflare IP")
             } else {
                  if (verbose) Logger.log("    Cloudflare IP: true")
             }
 
-            // 3. Latency Check (Beta Logic: <5ms = VPN Interception)
+            // 3. Latency Check
             val socket = Socket()
             val start = System.currentTimeMillis()
             try {
-                socket.connect(InetSocketAddress(ip, 443), 2000) // 2s timeout like beta
+                socket.connect(InetSocketAddress(ip, 443), 2000)
             } catch (e: Exception) {
                 if (verbose) Logger.log("!!  FAIL: TCP Connection Blocked")
                 return@withContext ScanResult(subdomain, ip, false, isCf, "TCP Blocked")
@@ -152,7 +146,7 @@ object Scanner {
                 return@withContext ScanResult(subdomain, ip, false, isCf, "VPN Interception (Lat < 5ms)")
             }
 
-            // 4. SSL Handshake & HTTP Check (Beta Logic: Must have CF-Ray)
+            // 4. SSL Handshake & HTTP Check
             if (verbose) Logger.log("--> Starting SSL Handshake + HTTP Check (SNI: $target)...")
             
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
@@ -196,7 +190,14 @@ object Scanner {
             socket.close()
 
             if (hasCfRay) {
-                if (verbose) Logger.log("    SUCCESS: CF-Ray header found")
+                // Reject Cloudflare Errors (530, 520, 521, 522, 523...)
+                // These mean the SNI host is invalid or unreachable at the edge
+                if (responseCode == "530" || responseCode.startsWith("52")) {
+                    if (verbose) Logger.log("!!  FAIL: CF Error Response (HTTP $responseCode)")
+                    return@withContext ScanResult(subdomain, ip, false, isCf, "CF Error $responseCode")
+                }
+
+                if (verbose) Logger.log("    SUCCESS: CF-Ray found (HTTP $responseCode)")
                 return@withContext ScanResult(subdomain, ip, true, isCf)
             } else {
                 if (verbose) Logger.log("!!  FAIL: No CF-Ray header found (Response: $responseCode)")

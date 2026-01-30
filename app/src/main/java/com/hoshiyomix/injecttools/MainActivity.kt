@@ -1,5 +1,6 @@
 package com.hoshiyomix.injecttools
 
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -49,7 +50,6 @@ import java.io.InputStreamReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// Global log buffer for verbose mode
 object Logger {
     private val _logs = mutableStateListOf<String>()
     val logs: List<String> get() = _logs
@@ -117,12 +117,15 @@ data class MenuTile(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun MainApp() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("InjectToolsPrefs", Context.MODE_PRIVATE) }
+    
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var previousScreen by remember { mutableStateOf(Screen.MENU) }
-    var targetHost by remember { mutableStateOf("") }
+    var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
     var scanHistory by remember { mutableStateOf(listOf<ScanResult>()) }
     var isVerbose by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
 
     LaunchedEffect(isVerbose) {
         if (isVerbose) {
@@ -146,8 +149,15 @@ fun MainApp() {
         }
     }
 
+    fun saveTargetHost(host: String) {
+        targetHost = host
+        prefs.edit().putString("target_host", host).apply()
+    }
+
     fun addResults(newResults: List<ScanResult>) {
-        scanHistory = newResults + scanHistory
+        // Keep only latest 10 results
+        val combined = (newResults + scanHistory).take(10)
+        scanHistory = combined
     }
 
     fun navigateTo(screen: Screen) {
@@ -166,6 +176,17 @@ fun MainApp() {
         } else if (currentScreen != Screen.MENU) {
             currentScreen = Screen.MENU
         }
+    }
+
+    // First Run Dialog
+    if (showFirstRunDialog) {
+        FirstRunDialog(
+            onConfirm = { host ->
+                saveTargetHost(host)
+                prefs.edit().putBoolean("first_run", false).apply()
+                showFirstRunDialog = false
+            }
+        )
     }
 
     Scaffold(
@@ -210,7 +231,7 @@ fun MainApp() {
                 Screen.MENU -> MenuScreen(
                     targetHost = targetHost,
                     isVerbose = isVerbose,
-                    onUpdateHost = { targetHost = it },
+                    onUpdateHost = { saveTargetHost(it) },
                     onToggleVerbose = { isVerbose = it },
                     onNavigate = { screen ->
                         if ((screen == Screen.SINGLE_TEST || screen == Screen.CRTSH_TEST) && targetHost.isBlank()) {
@@ -231,6 +252,66 @@ fun MainApp() {
     BackHandler(enabled = currentScreen != Screen.MENU) {
         navigateBack()
     }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun FirstRunDialog(onConfirm: (String) -> Unit) {
+    var hostInput by remember { mutableStateOf("") }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    AlertDialog(
+        onDismissRequest = {},
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Welcome to InjectTools")
+            }
+        },
+        text = {
+            Column {
+                Text("Set your injection target domain to get started.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = hostInput,
+                    onValueChange = { hostInput = it },
+                    label = { Text("Target Domain Host") },
+                    placeholder = { Text("sg.server.web.id") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (hostInput.isNotBlank()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm(hostInput)
+                        }
+                    }),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (hostInput.isNotBlank()) {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onConfirm(hostInput)
+                    }
+                },
+                enabled = hostInput.isNotBlank(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Continue")
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -274,7 +355,7 @@ fun MenuScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "v3.6.6",
+                        text = "v3.7.0",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -473,14 +554,14 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                         Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("History Logs", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text("${history.size} results in this session", style = MaterialTheme.typography.bodyMedium)
+                            Text("History Logs (Latest 10)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("${history.size} results", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            items(history) { res -> ResultItem(res) }
+            items(history) { res -> ResultItem(res, onTap = {}) }
         }
     }
 }
@@ -534,10 +615,6 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                 if (isScanning || subdomain.isBlank()) return@Button
                 checkNetworkAndConfirm(context) {
                     isScanning = true
-                    if (isVerbose) {
-                        Logger.clear()
-                        Logger.log("--- Starting scan for ${subdomain.trim()} ---")
-                    }
                     scope.launch {
                         val res = Scanner.testSingle(targetHost, subdomain.trim(), isVerbose)
                         lastResult = res
@@ -566,7 +643,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         lastResult?.let {
             Text("Last Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
-            ResultItem(it)
+            ResultItem(it, onTap = { subdomain = it.subdomain })
         }
     }
 }
@@ -612,14 +689,11 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                 onClick = {
                     isFetching = true
                     scanResults = emptyList()
-                    if (isVerbose) Logger.log("Fetching subdomains for $domain from crt.sh...")
                     scope.launch {
                         try {
                             subdomains = Crtsh.fetchSubdomains(domain.trim())
-                            if (isVerbose) Logger.log("Found ${subdomains.size} subdomains")
                         } catch (e: Exception) {
                             subdomains = emptyList()
-                            if (isVerbose) Logger.log("Error: ${e.message}")
                         }
                         isFetching = false
                     }
@@ -643,12 +717,10 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                     checkNetworkAndConfirm(context) {
                         isScanning = true
                         scanResults = emptyList()
-                        if (isVerbose) Logger.clear()
                         scope.launch {
                             val tempResults = mutableListOf<ScanResult>()
                             val total = subdomains.size
                             subdomains.forEachIndexed { index, sub ->
-                                if (isVerbose) Logger.log("[$index/$total]: $sub")
                                 val res = Scanner.testSingle(targetHost, sub, false)
                                 tempResults.add(res)
                                 scanResults = tempResults.toList()
@@ -678,15 +750,16 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn {
-            items(scanResults) { res -> ResultItem(res) }
+            items(scanResults.take(10)) { res -> ResultItem(res, onTap = {}) }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResultItem(res: ScanResult) {
+fun ResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     Card(
+        onClick = { onTap(res) },
         colors = CardDefaults.cardColors(containerColor = if (res.isWorking) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp)

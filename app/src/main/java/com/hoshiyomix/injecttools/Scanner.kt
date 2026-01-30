@@ -117,8 +117,9 @@ object Scanner {
             
             if (verbose) Logger.log("    SSL Handshake: SUCCESS")
             
-            // 3. HTTP Request Check (Optional but good for accuracy)
-            // Send a simple HEAD request to check response code
+            // 3. HTTP Request Check (Tunneling Validation)
+            // Send a HEAD request to check if server actually responds to HTTP
+            if (verbose) Logger.log("--> Validating HTTP Tunneling...")
             val writer = PrintWriter(sslSocket.outputStream)
             val reader = BufferedReader(InputStreamReader(sslSocket.inputStream))
             
@@ -129,11 +130,19 @@ object Scanner {
             writer.flush()
             
             val responseLine = reader.readLine()
-            if (verbose) Logger.log("    HTTP Response: $responseLine")
-
+            
             sslSocket.close()
             socket.close()
+
+            if (responseLine.isNullOrBlank()) {
+                if (verbose) Logger.log("!!  FAIL: Server closed connection without response (Offline/Blocked)")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "SSL Handshake OK, but Server Closed Connection (No HTTP)")
+            }
+
+            if (verbose) Logger.log("    HTTP Response: $responseLine")
             
+            // If we got a response line like "HTTP/1.1 200 OK" or "HTTP/1.1 404 Not Found" or "HTTP/1.1 101 Switching Protocols"
+            // It means the tunneling path is at least listening and responding.
             return@withContext ScanResult(subdomain, ip, true, isCf)
 
         } catch (e: Exception) {

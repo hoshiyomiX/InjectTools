@@ -97,37 +97,28 @@ object Scanner {
         var ip = ""
         var isCf = false
         
-        if (verbose) Logger.log("--> Resolving DNS for: $subdomain")
-
         try {
             // 1. DNS Resolution
             val allIps = InetAddress.getAllByName(subdomain)
             val ipv4 = allIps.firstOrNull { it is Inet4Address }
             
             if (ipv4 == null) {
-                return@withContext ScanResult(subdomain, "", false, false, "No IPv4 address found")
+                return@withContext ScanResult(subdomain, "", false, false, "No IPv4 address")
             }
             
             ip = ipv4.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "Invalid IP")
-            
-            if (verbose) Logger.log("    Resolved IP: $ip")
 
             // 2. Environment Checks
             if (isFakeDnsIp(ip)) {
-                if (verbose) Logger.log("!!  FAIL: Fake DNS IP detected")
-                return@withContext ScanResult(subdomain, ip, false, false, "Fake DNS IP")
+                return@withContext ScanResult(subdomain, ip, false, false, "Fake DNS (VPN Active)")
             }
             if (isPrivateIp(ip)) {
-                if (verbose) Logger.log("!!  FAIL: Private IP detected")
                 return@withContext ScanResult(subdomain, ip, false, false, "Private IP")
             }
             
             isCf = isCloudflareIp(ip)
             if (!isCf) {
-                if (verbose) Logger.log("!!  FAIL: Not a Cloudflare IP")
                 return@withContext ScanResult(subdomain, ip, false, false, "Not Cloudflare IP")
-            } else {
-                 if (verbose) Logger.log("    Cloudflare IP: true")
             }
 
             // 3. Latency Check
@@ -136,19 +127,15 @@ object Scanner {
             try {
                 socket.connect(InetSocketAddress(ip, 443), 2000)
             } catch (e: Exception) {
-                if (verbose) Logger.log("!!  FAIL: TCP Connection Blocked")
-                return@withContext ScanResult(subdomain, ip, false, isCf, "TCP Blocked")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "TCP Port 443 Blocked")
             }
             val latency = System.currentTimeMillis() - start
             if (latency < 5) {
                 socket.close()
-                if (verbose) Logger.log("!!  FAIL: Latency < 5ms (VPN Interception Detected)")
-                return@withContext ScanResult(subdomain, ip, false, isCf, "VPN Interception (Lat < 5ms)")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "VPN Interception (<5ms)")
             }
 
             // 4. SSL Handshake & HTTP Check
-            if (verbose) Logger.log("--> Starting SSL Handshake + HTTP Check (SNI: $target)...")
-            
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
             val sslSocket = factory.createSocket(socket, ip, 443, true) as SSLSocket
             
@@ -171,11 +158,8 @@ object Scanner {
             var hasCfRay = false
             var responseCode = ""
             
-            // Read headers
             while (reader.readLine().also { line = it } != null) {
                 if (line.isNullOrBlank()) break
-                
-                if (verbose) Logger.log("    Header: $line")
                 
                 if (line?.startsWith("HTTP/") == true) {
                     responseCode = line?.split(" ")?.getOrNull(1) ?: ""
@@ -190,23 +174,18 @@ object Scanner {
             socket.close()
 
             if (hasCfRay) {
-                // Reject Cloudflare Errors (530, 520, 521, 522, 523...)
-                // These mean the SNI host is invalid or unreachable at the edge
+                // Reject Cloudflare Errors
                 if (responseCode == "530" || responseCode.startsWith("52")) {
-                    if (verbose) Logger.log("!!  FAIL: CF Error Response (HTTP $responseCode)")
-                    return@withContext ScanResult(subdomain, ip, false, isCf, "CF Error $responseCode")
+                    return@withContext ScanResult(subdomain, ip, false, isCf, "Domain Host Offline (HTTP $responseCode)")
                 }
 
-                if (verbose) Logger.log("    SUCCESS: CF-Ray found (HTTP $responseCode)")
                 return@withContext ScanResult(subdomain, ip, true, isCf)
             } else {
-                if (verbose) Logger.log("!!  FAIL: No CF-Ray header found (Response: $responseCode)")
-                return@withContext ScanResult(subdomain, ip, false, isCf, "No CF-Ray Header")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "No CF-Ray (Incompatible)")
             }
 
         } catch (e: Exception) {
-            if (verbose) Logger.log("!!  ERROR: ${e.message}")
-            return@withContext ScanResult(subdomain, ip, false, isCf, e.message)
+            return@withContext ScanResult(subdomain, ip, false, isCf, e.message ?: "Unknown Error")
         }
     }
 }

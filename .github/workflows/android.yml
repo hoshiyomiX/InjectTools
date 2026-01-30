@@ -26,6 +26,16 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: '8.5'
+
+    # Advanced OOM Prevention: Create 8GB Swap File
+    - name: Configure Swap Space
+      run: |
+        sudo fallocate -l 8G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        echo "Swap created:"
+        free -h
         
     - name: Generate Gradle Wrapper
       run: gradle wrapper --gradle-version=8.5
@@ -63,8 +73,11 @@ jobs:
         
     - name: Build Release APK
       id: build
+      # Added --max-workers=2 to further reduce memory pressure
       run: |
         ./gradlew assembleRelease \
+          --max-workers=2 \
+          --no-daemon \
           -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
           -Pandroid.injected.signing.store.password=android \
           -Pandroid.injected.signing.key.alias=androiddebugkey \

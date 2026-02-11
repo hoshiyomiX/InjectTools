@@ -155,7 +155,7 @@ fun MainApp() {
     }
 
     fun addResults(newResults: List<ScanResult>) {
-        // Keep only latest 10 results
+        // Keep only latest 10 results, newest on top
         val combined = (newResults + scanHistory).take(10)
         scanHistory = combined
     }
@@ -324,7 +324,7 @@ fun MenuScreen(
     onNavigate: (Screen) -> Unit
 ) {
     val tiles = listOf(
-        MenuTile(1, "Test Single Subdomain", "Quick subdomain check", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
+        MenuTile(1, "Test Single Subdomain", "Test individual subdomain connection", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
         MenuTile(2, "Scan & Test Subdomain", "Auto-discover & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
         MenuTile(3, "History Logs", "View scan history", Icons.Default.List, Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)), Screen.RESULTS)
     )
@@ -603,6 +603,13 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
             label = { Text("Subdomain") },
             placeholder = { Text("cdn.cloudflare.com") },
             leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
+            trailingIcon = {
+                if (subdomain.isNotBlank()) {
+                    IconButton(onClick = { subdomain = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
@@ -641,7 +648,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         Spacer(modifier = Modifier.height(24.dp))
 
         lastResult?.let {
-            Text("Last Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Recent Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             ResultItem(it, onTap = { subdomain = it.subdomain })
         }

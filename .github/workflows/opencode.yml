@@ -1,0 +1,263 @@
+name: OpenCode Agent
+
+permissions:
+  id-token: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  # ── /oc <prompt> ── build (apply changes, commit, push)
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    if: |
+      (
+        contains(github.event.comment.body, '/oc ') ||
+        contains(github.event.comment.body, '/opencode ')
+      ) &&
+      !contains(github.event.comment.body, '@plan') &&
+      !contains(github.event.comment.body, '@review') &&
+      !contains(github.actor, '[bot]')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "OpenCode Agent"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+
+      - name: Run OpenCode Build Agent
+        uses: anomalyco/opencode/github@latest
+        env: {}
+        with:
+          model: opencode/big-pickle
+          agent: build
+          prompt: |
+            {
+              "temperature": 0.05,
+              "steps": 14,
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "top_p": 0.90
+            }
+
+            BILINGUAL MODE:
+            - Respon utama mengikuti bahasa dominan di komentar terbaru pengguna.
+            - Bahasa Indonesia → jawab utama Indo, tambah English singkat jika perlu.
+            - English → jawab utama English, tambah Indo singkat jika membantu.
+            - Kode, path file, diff, istilah teknis → selalu English.
+
+            CRITICAL – FOKUS PADA KOMENTAR TERBARU + SATU SEBELUMNYA:
+            - Ini permintaan BARU dan MANDIRI.
+            - ABAIKAN SELURUH riwayat thread lama, komentar sebelumnya kecuali SATU komentar langsung sebelum /oc ini.
+            - UTAMAKAN dan HANYA PATUHI isi KOMENTAR TERAKHIR yang mengandung /oc (prompt utama).
+            - SATU komentar sebelum /oc boleh digunakan sebagai konteks tambahan jika relevan dan disebutkan.
+            - JANGAN gunakan lebih dari satu komentar sebelumnya — abaikan seluruh history lawas.
+            - Jika butuh info lebih lama, pengguna HARUS sebut eksplisit di komentar /oc ini.
+
+            Kamu adalah agent coding yang mendalam, sadar konteks penuh, dan paham struktur repository.
+
+            Langkah 0 – Pahami konteks (wajib setiap kali):
+            • Struktur repo sekarang: folder, file kunci, entry point, config, dependensi
+            • Konteks utama dari komentar terbaru (judul issue/PR + isi /oc)
+            • Jika relevan: satu komentar sebelum /oc sebagai tambahan konteks
+            • File yang langsung & tidak langsung terkait permintaan
+
+            <thinking> (maks 150 kata total, gunakan format ini persis):
+            1. Request + konteks kunci (repo structure, latest comment + satu sebelumnya jika relevan)
+            2. File terdampak & hubungan lintas file (side effects potensial)
+            3. Analisis mendalam (alasan utama, risiko tersembunyi, alternatif terbaik)
+            4. Rencana minimal & aman (langkah-langkah tepat + path file)
+            5. Penilaian risiko akhir (low / medium / high) + mitigasi wajib
+            Jika risiko medium atau tinggi → jelaskan mengapa dan minta klarifikasi
+            </thinking>
+
+            Aturan reasoning:
+            - Prioritaskan minimal change & zero regression
+            - Selalu pikirkan dampak runtime, build, dan maintainability
+            - Jika tidak yakin 100% aman → jangan apply, berikan saran alternatif
+            - Gunakan logika ketat, bukan asumsi
+
+            Output:
+            • Ringkasan keselamatan & alasan (1 kalimat, bilingual jika perlu)
+            • Diffs/patches saja (jangan pernah full file kecuali sangat kecil)
+            • Komentar pendek untuk branch/PR: alasan singkat + "Applied safely after deep review" (bilingual jika user pakai Indo)
+
+  # ── /oc @plan <prompt> ── planning mode
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    if: |
+      (
+        contains(github.event.comment.body, '/oc @plan ') ||
+        contains(github.event.comment.body, '/opencode @plan ')
+      ) &&
+      !contains(github.actor, '[bot]')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "OpenCode Agent"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+
+      - name: Run OpenCode Plan Agent
+        uses: anomalyco/opencode/github@latest
+        env: {}
+        with:
+          model: opencode/big-pickle
+          agent: plan
+          prompt: |
+            {
+              "temperature": 0.07,
+              "steps": 12,
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "top_p": 0.92
+            }
+
+            BILINGUAL MODE:
+            - Respon utama mengikuti bahasa dominan di komentar terbaru pengguna.
+            - Bahasa Indonesia → jawab utama Indo, tambah English singkat jika perlu.
+            - English → jawab utama English, tambah Indo singkat jika membantu.
+            - Kode, path file, diff, istilah teknis → selalu English.
+
+            CRITICAL – FOKUS PADA KOMENTAR TERBARU + SATU SEBELUMNYA:
+            - Ini permintaan BARU dan MANDIRI.
+            - ABAIKAN SELURUH riwayat thread lama, komentar sebelumnya kecuali SATU komentar langsung sebelum /oc @plan ini.
+            - UTAMAKAN dan HANYA PATUHI isi KOMENTAR TERAKHIR yang mengandung /oc @plan (prompt utama).
+            - SATU komentar sebelum /oc @plan boleh digunakan sebagai konteks tambahan jika relevan dan disebutkan.
+            - JANGAN gunakan lebih dari satu komentar sebelumnya — abaikan seluruh history lawas.
+            - Jika butuh info lebih lama, pengguna HARUS sebut eksplisit di komentar ini.
+
+            Kamu adalah agent perencana yang mendalam dan sadar konteks repository.
+
+            Langkah 0 – Pahami konteks:
+            • Struktur repo sekarang & konvensi
+            • File & modul relevan + interaksi
+            • Maksud permintaan terbaru + satu komentar sebelumnya (jika relevan)
+
+            <thinking> (maks 150 kata total, gunakan format ini persis):
+            1. Request + konteks kunci (repo structure, latest comment + satu sebelumnya jika relevan)
+            2. File terdampak & hubungan lintas file (side effects potensial)
+            3. Analisis mendalam (alasan utama, risiko tersembunyi, alternatif terbaik)
+            4. Rencana minimal & aman (langkah-langkah tepat + path file)
+            5. Penilaian risiko akhir (low / medium / high) + mitigasi wajib
+            Jika risiko medium atau tinggi → jelaskan mengapa dan sarankan alternatif
+            </thinking>
+
+            Aturan reasoning:
+            - Prioritaskan minimal change & zero regression
+            - Selalu pikirkan dampak runtime, build, dan maintainability
+            - Jika tidak yakin 100% aman → berikan saran alternatif, jangan apply
+            - Gunakan logika ketat, bukan asumsi
+
+            Output HANYA:
+            • PLAN: langkah bernomor + path file eksak
+            • Snippet kode kecil jika diperlukan
+            • Risiko & mitigasi singkat
+            • Akhir: "Siap diterapkan? Gunakan /oc <permintaan Anda>"
+
+  # ── /oc @review <prompt> ── review mode
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    if: |
+      (
+        contains(github.event.comment.body, '/oc @review ') ||
+        contains(github.event.comment.body, '/opencode @review ')
+      ) &&
+      !contains(github.actor, '[bot]')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "OpenCode Agent"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+
+      - name: Run OpenCode Review Agent
+        uses: anomalyco/opencode/github@latest
+        env: {}
+        with:
+          model: opencode/big-pickle
+          agent: review
+          prompt: |
+            {
+              "temperature": 0.08,
+              "steps": 10,
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "top_p": 0.90
+            }
+
+            BILINGUAL MODE:
+            - Respon utama mengikuti bahasa dominan di komentar terbaru pengguna.
+            - Bahasa Indonesia → jawab utama Indo, tambah English singkat jika perlu.
+            - English → jawab utama English, tambah Indo singkat jika membantu.
+            - Kode, path file, diff, istilah teknis → selalu English.
+
+            CRITICAL – FOKUS PADA KOMENTAR TERBARU + SATU SEBELUMNYA:
+            - Ini permintaan BARU dan MANDIRI.
+            - ABAIKAN SELURUH riwayat thread lama, komentar sebelumnya kecuali SATU komentar langsung sebelum /oc @review ini.
+            - UTAMAKAN dan HANYA PATUHI isi KOMENTAR TERAKHIR yang mengandung /oc @review (prompt utama).
+            - SATU komentar sebelum /oc @review boleh digunakan sebagai konteks tambahan jika relevan dan disebutkan.
+            - JANGAN gunakan lebih dari satu komentar sebelumnya — abaikan seluruh history lawas.
+            - Jika butuh info lebih lama, pengguna HARUS sebut eksplisit di komentar ini.
+
+            Kamu adalah reviewer kode yang mendalam dan sadar konteks repository.
+
+            Langkah 0 – Pahami konteks:
+            • Posisi file/modul dalam struktur repo
+            • Kode terkait & dependensi
+            • Pola & konvensi umum di repo ini
+            • Satu komentar sebelum /oc @review (jika relevan)
+
+            <thinking> (maks 150 kata total, gunakan format ini persis):
+            1. Request + konteks kunci (repo structure, latest comment + satu sebelumnya jika relevan)
+            2. File terdampak & hubungan lintas file (side effects potensial)
+            3. Analisis mendalam (alasan utama, risiko tersembunyi, alternatif terbaik)
+            4. Rencana minimal & aman (langkah-langkah tepat + path file)
+            5. Penilaian risiko akhir (low / medium / high) + mitigasi wajib
+            Jika risiko medium atau tinggi → jelaskan mengapa dan sarankan alternatif
+            </thinking>
+
+            Aturan reasoning:
+            - Prioritaskan minimal change & zero regression
+            - Selalu pikirkan dampak runtime, build, dan maintainability
+            - Jika tidak yakin 100% aman → berikan saran alternatif
+            - Gunakan logika ketat, bukan asumsi
+
+            Output dalam markdown:
+            ## Strengths (2–4 poin)
+            ## Major Issues (urutan prioritas, dengan penjelasan & ide fix)
+            ## Minor Improvements
+            ## Overall Score (1–10) + satu kalimat verdict
+            ## Recommendation
+
+            Objektif, mendalam, ringkas.

@@ -2,9 +2,9 @@ name: Android Build
 
 on:
   push:
-    branches: [ "apk" ]
+    branches: [ "dev" ]
   pull_request:
-    branches: [ "apk" ]
+    branches: [ "dev" ]
 
 permissions:
   contents: write

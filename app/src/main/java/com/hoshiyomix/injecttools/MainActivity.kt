@@ -198,7 +198,7 @@ fun MainApp() {
                         Text(
                             text = when (currentScreen) {
                                 Screen.SINGLE_TEST -> "Test Single Subdomain"
-                                Screen.CRTSH_TEST -> "Scan & Test Subdomain"
+                                Screen.CRTSH_TEST -> "Scan & Batch Test Subdomain"
                                 Screen.RESULTS -> "History Logs"
                                 Screen.VERBOSE_LOGS -> "Verbose Logs"
                                 else -> ""
@@ -326,7 +326,7 @@ fun MenuScreen(
 ) {
     val tiles = listOf(
         MenuTile(1, "Test Single Subdomain", "Test single bug subdomain", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
-        MenuTile(2, "Scan & Test Subdomain", "Discover subdomains from crt.sh & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
+        MenuTile(2, "Scan & Batch Test Subdomain", "Discover subdomains from crt.sh & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
         MenuTile(3, "History Logs", "View scan history", Icons.Default.List, Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)), Screen.RESULTS)
     )
 
@@ -677,7 +677,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
             Column(modifier = Modifier.padding(16.dp)) {
                 Icon(Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Scan & Test Subdomain", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Scan & Batch Test Subdomain", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("Auto-discover and test subdomains", style = MaterialTheme.typography.bodyMedium)
             }
         }

@@ -32,6 +32,7 @@ object Crtsh {
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -54,10 +55,18 @@ object Crtsh {
         val maxRetries = 3
         var entries: List<CrtShEntry> = emptyList()
         
-        // Fix: Use plain domain query instead of wildcard "%." prefix.
-        // Wildcard queries on crt.sh often cause DB timeouts (503) for popular domains.
-        // Searching "example.com" returns certificates for "*.example.com" and "sub.example.com" anyway.
-        val query = domain
+        // Support organization-based queries for major cloud providers
+        val query = when {
+            // Handle known cloud provider organization patterns
+            domain.lowercase().contains("cloudflare") -> "cloudflare.com"
+            domain.lowercase().contains("amazon") || domain.lowercase().contains("aws") -> "amazon.com"
+            domain.lowercase().contains("google") || domain.lowercase().contains("gcp") -> "google.com"
+            domain.lowercase().contains("akamai") -> "akamai.com"
+            // Default: use plain domain query instead of wildcard "%." prefix
+            // Wildcard queries on crt.sh often cause DB timeouts (503) for popular domains.
+            // Searching "example.com" returns certificates for "*.example.com" and "sub.example.com" anyway.
+            else -> domain
+        }
         
         while (attempts < maxRetries) {
             try {

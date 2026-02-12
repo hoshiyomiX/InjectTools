@@ -425,13 +425,10 @@ fun MenuScreen(
     var showHostDialog by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
     
-    // Staggered animation for menu items
-    val visibleItems = remember { mutableStateListOf<Boolean>() }
+    // Simple entrance animation - all items appear together
+    var isLoaded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        tiles.indices.forEach { index ->
-            delay(80L * index)
-            visibleItems.add(true)
-        }
+        isLoaded = true
     }
     
     val pulsateScale = pulsatingAnimation()
@@ -583,20 +580,15 @@ fun MenuScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Menu Tiles with staggered animation
-        tiles.forEachIndexed { index, tile ->
-            AnimatedVisibility(
-                visible = visibleItems.size > index,
-                enter = fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing))
+        // Menu Tiles - smooth entrance animation
+        tiles.forEach { tile ->
+            AnimatedMenuItem(
+                visible = isLoaded,
+                tile = tile,
+                enabled = !showHostDialog
             ) {
-                ModernMenuTileCard(
-                    tile = tile, 
-                    enabled = !showHostDialog,
-                    index = index
-                ) {
-                    if (!showHostDialog) {
-                        tile.screen?.let(onNavigate)
-                    }
+                if (!showHostDialog) {
+                    tile.screen?.let(onNavigate)
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -758,16 +750,50 @@ fun HostEditDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun AnimatedMenuItem(
+    visible: Boolean,
+    tile: MenuTile,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    // Smooth scale and alpha animation
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "itemScale"
+    )
+    
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
+        label = "itemAlpha"
+    )
+    
+    ModernMenuTileCard(
+        tile = tile,
+        enabled = enabled,
+        modifier = Modifier
+            .scale(scale)
+            .graphicsLayer { this.alpha = alpha },
+        onClick = onClick
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun ModernMenuTileCard(
     tile: MenuTile, 
     enabled: Boolean = true,
-    index: Int = 0,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
-    val scale by animateFloatAsState(
+    val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
         label = "tileScale"
@@ -782,10 +808,10 @@ fun ModernMenuTileCard(
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(100.dp)
-            .scale(scale),
+            .scale(pressScale),
         shape = ShapeLarge,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant

@@ -6,6 +6,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,18 +19,22 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +44,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -48,7 +55,6 @@ import com.hoshiyomix.injecttools.Scanner.ScanResult
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 
 
 class MainActivity : ComponentActivity() {
@@ -99,6 +105,12 @@ data class MenuTile(
     val screen: Screen?
 )
 
+// Material 3 Shape constants
+val ShapeExtraLarge = RoundedCornerShape(28.dp)
+val ShapeLarge = RoundedCornerShape(24.dp)
+val ShapeMedium = RoundedCornerShape(16.dp)
+val ShapeSmall = RoundedCornerShape(12.dp)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun MainApp() {
@@ -122,7 +134,6 @@ fun MainApp() {
     }
 
     fun addResults(newResults: List<ScanResult>) {
-        // Keep only latest 20 results, newest on top, success only
         val successResults = newResults.filter { it.isWorking }
         val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
         scanHistory = combined
@@ -154,55 +165,51 @@ fun MainApp() {
 
     // Network Warning Dialog
     if (showNetworkWarningDialog) {
-        AlertDialog(
-            onDismissRequest = { 
+        ModernAlertDialog(
+            icon = Icons.Default.Warning,
+            iconTint = MaterialTheme.colorScheme.error,
+            title = "Network Connection Warning",
+            message = networkWarningMessage,
+            confirmText = "OK",
+            onConfirm = {
                 showNetworkWarningDialog = false
                 networkWarningMessage = ""
             },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Network Connection Warning")
-                }
-            },
-            text = {
-                Text(networkWarningMessage, style = MaterialTheme.typography.bodyMedium)
-            },
-            confirmButton = {
-                Button(
-                    onClick = { 
-                        showNetworkWarningDialog = false
-                        networkWarningMessage = ""
-                    },
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("OK")
-                }
-            },
-            shape = RoundedCornerShape(20.dp)
+            onDismiss = {
+                showNetworkWarningDialog = false
+                networkWarningMessage = ""
+            }
         )
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (currentScreen != Screen.MENU) {
-                TopAppBar(
+            AnimatedVisibility(
+                visible = currentScreen != Screen.MENU,
+                enter = slideInVertically() + fadeIn(),
+                exit = slideOutVertically() + fadeOut()
+            ) {
+                CenterAlignedTopAppBar(
                     title = {
                         Text(
                             text = when (currentScreen) {
-                                Screen.SINGLE_TEST -> "Test Single Subdomain"
-                                Screen.CRTSH_TEST -> "Scan & Batch Test Subdomain"
-                            Screen.RESULTS -> "History Logs"
+                                Screen.SINGLE_TEST -> "Test Subdomain"
+                                Screen.CRTSH_TEST -> "Batch Scan"
+                                Screen.RESULTS -> "History"
                                 else -> ""
-                            }
+                            },
+                            fontWeight = FontWeight.SemiBold
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { navigateBack() }) {
+                        FilledTonalIconButton(onClick = { navigateBack() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent
+                    )
                 )
             }
         }
@@ -214,7 +221,7 @@ fun MainApp() {
                     onUpdateHost = { saveTargetHost(it) },
                     onNavigate = { screen ->
                         if ((screen == Screen.SINGLE_TEST || screen == Screen.CRTSH_TEST) && targetHost.isBlank()) {
-                            Toast.makeText(context, "⚠️ Set target host in header first!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "⚠️ Set target host first!", Toast.LENGTH_SHORT).show()
                         } else {
                             navigateTo(screen)
                         }
@@ -246,30 +253,58 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
     val focusManager = LocalFocusManager.current
 
     Dialog(onDismissRequest = {}) {
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Welcome to InjectTools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                // Icon with gradient background
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.RocketLaunch,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    "Set your injection target domain to get started.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "Welcome to InjectTools",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Set your injection target domain to get started",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 OutlinedTextField(
                     value = hostInput,
@@ -286,12 +321,16 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                             onConfirm(hostInput)
                         }
                     }),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = ShapeMedium,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Button(
+                FilledTonalButton(
                     onClick = {
                         if (hostInput.isNotBlank()) {
                             keyboardController?.hide()
@@ -300,12 +339,14 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                         }
                     },
                     enabled = hostInput.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = ShapeLarge
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null)
+                    Icon(Icons.Default.ArrowForward, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Continue", fontSize = 16.sp)
+                    Text("Get Started", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -320,112 +361,189 @@ fun MenuScreen(
     onNavigate: (Screen) -> Unit
 ) {
     val tiles = listOf(
-        MenuTile(1, "Test Single Subdomain", "Test single bug subdomain", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
-        MenuTile(2, "Scan & Batch Test Subdomain", "Discover subdomains from crt.sh & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
-        MenuTile(3, "History Logs", "View scan history", Icons.Default.List, Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)), Screen.RESULTS)
+        MenuTile(1, "Test Subdomain", "Test single subdomain connection", Icons.Outlined.Search, Pair(Color(0xFF6750A4), Color(0xFF9A82DB)), Screen.SINGLE_TEST),
+        MenuTile(2, "Batch Scan", "Discover & test from crt.sh", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
+        MenuTile(3, "History", "View scan results", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
     )
 
     var showHostDialog by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Modern Header Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(20.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
+                            )
+                        )
+                    )
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // App Logo with animation
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Bolt,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Text(
                         text = "InjectTools",
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurface
                     )
+
                     Text(
                         text = "v3.7.0",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                            .clickable { 
-                                tempHost = targetHost
-                                showHostDialog = true 
-                            }
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = "DOMAIN HOST",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = targetHost.ifBlank { "contoh: sg.server.web.id" },
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (targetHost.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
-                                color = if (targetHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                            Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    // Domain Host Card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ShapeLarge,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        onClick = {
+                            tempHost = targetHost
+                            showHostDialog = true
                         }
-                    }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Dns,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
 
+                            Spacer(modifier = Modifier.width(16.dp))
 
-                }
-            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Target Host",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = targetHost.ifBlank { "Tap to set domain" },
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (targetHost.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (targetHost.isNotBlank()) 
+                                        MaterialTheme.colorScheme.onSurface 
+                                    else 
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.height(480.dp)
-            ) {
-                items(tiles) { tile ->
-                    MenuTileCard(tile, enabled = !showHostDialog) {
-                        if (!showHostDialog) {
-                            tile.screen?.let(onNavigate)
+                            Icon(
+                                Icons.Default.Edit, 
+                                contentDescription = "Edit", 
+                                modifier = Modifier.size(20.dp), 
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
             }
         }
 
-        if (showHostDialog) {
-            HostEditDialog(
-                currentHost = tempHost,
-                onHostChange = { tempHost = it },
-                onDismiss = { showHostDialog = false },
-                onConfirm = {
-                    onUpdateHost(tempHost)
-                    showHostDialog = false
-                }
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Section Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Features",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.outlineVariant
             )
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Menu Tiles
+        tiles.forEach { tile ->
+            ModernMenuTileCard(
+                tile = tile, 
+                enabled = !showHostDialog
+            ) {
+                if (!showHostDialog) {
+                    tile.screen?.let(onNavigate)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+
+    if (showHostDialog) {
+        HostEditDialog(
+            currentHost = tempHost,
+            onHostChange = { tempHost = it },
+            onDismiss = { showHostDialog = false },
+            onConfirm = {
+                onUpdateHost(tempHost)
+                showHostDialog = false
+            }
+        )
     }
 }
 
@@ -441,30 +559,48 @@ fun HostEditDialog(
     val focusManager = LocalFocusManager.current
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Set Target Host", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Language,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    "Enter the domain host to use as injection target.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "Set Target Host",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Enter the domain host for injection target",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                 OutlinedTextField(
                     value = currentHost,
@@ -479,7 +615,10 @@ fun HostEditDialog(
                         focusManager.clearFocus()
                         onConfirm()
                     }),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = ShapeMedium,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Dns, contentDescription = null)
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -490,19 +629,27 @@ fun HostEditDialog(
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
                     ) {
-                        Text("Cancel", fontSize = 16.sp)
+                        Text("Cancel")
                     }
-                    Button(
-                        onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() },
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
+                    FilledTonalButton(
+                        onClick = { 
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm() 
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Save", fontSize = 16.sp)
+                        Icon(Icons.Default.Check, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save")
                     }
                 }
             }
@@ -512,27 +659,69 @@ fun HostEditDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
+fun ModernMenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().height(180.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp),
+        shape = ShapeLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.linearGradient(colors = listOf(tile.gradient.first.copy(alpha = if (enabled) 0.8f else 0.4f), tile.gradient.second.copy(alpha = if (enabled) 0.8f else 0.4f))))
-                .padding(16.dp)
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-                Icon(imageVector = tile.icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = Color.White.copy(alpha = if (enabled) 1f else 0.5f))
-                Column {
-                    Text(text = tile.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = if (enabled) 1f else 0.5f))
-                    Text(text = tile.subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = if (enabled) 0.9f else 0.4f))
-                }
+            // Icon Container with gradient
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(ShapeMedium)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                tile.gradient.first.copy(alpha = if (enabled) 0.9f else 0.4f),
+                                tile.gradient.second.copy(alpha = if (enabled) 0.9f else 0.4f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = tile.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = Color.White.copy(alpha = if (enabled) 1f else 0.6f)
+                )
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = tile.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.5f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = tile.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.5f)
+                )
+            }
+
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 0.6f else 0.3f)
+            )
         }
     }
 }
@@ -540,29 +729,89 @@ fun MenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {
     if (history.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("No scan results yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "No scan results yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Results will appear here after scanning",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         }
     } else {
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+        LazyColumn(
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(32.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ShapeLarge,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.List,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
                         Column {
-                            Text("Recent Result (Latest 20)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text("${history.size} successful results", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Recent Results",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "${history.size} successful scans",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
             }
-            items(history.take(20)) { res -> ResultItem(res, onTap = {}) }
+
+            items(history.take(20)) { res ->
+                ModernResultItem(res, onTap = {})
+            }
         }
     }
 }
@@ -575,13 +824,14 @@ fun checkNetworkAndConfirm(
     val status = NetworkUtils.checkNetworkStatus(context)
     when (status) {
         NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> onProceed()
-        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.")
-        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> showWarningDialog("❌ BLOCKED: VPN is active! Please disable VPN before scanning.")
-        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.")
+        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("❌ Regular internet detected! Disable WiFi/Data or use injection mode.")
+        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> showWarningDialog("❌ VPN is active! Please disable VPN before scanning.")
+        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("❌ VPN + Internet detected! Disable both VPN and regular connection.")
         NetworkUtils.NetworkStatus.DISCONNECTED -> showWarningDialog("❌ No network connection. Connect to WiFi/Data first.")
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var subdomain by remember { mutableStateOf("") }
@@ -590,83 +840,155 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        // Header Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(16.dp)
+            shape = ShapeLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(48.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Test Single Subdomain", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Test individual subdomain against target", style = MaterialTheme.typography.bodyMedium)
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        "Test Subdomain",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Test individual subdomain connection",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        OutlinedTextField(
-            value = subdomain,
-            onValueChange = { subdomain = it },
-            label = { Text("Subdomain") },
-            placeholder = { Text("Contoh: api.instagram.com") },
-            leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
-            trailingIcon = {
-                if (subdomain.isNotBlank()) {
-                    IconButton(onClick = { subdomain = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+        // Input Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                OutlinedTextField(
+                    value = subdomain,
+                    onValueChange = { subdomain = it },
+                    label = { Text("Subdomain") },
+                    placeholder = { Text("api.instagram.com") },
+                    leadingIcon = { 
+                        Icon(Icons.Outlined.Language, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (subdomain.isNotBlank()) {
+                            IconButton(onClick = { subdomain = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = ShapeMedium
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                FilledTonalButton(
+                    onClick = {
+                        if (isScanning || subdomain.isBlank()) return@FilledTonalButton
+                        checkNetworkAndConfirm(context, {
+                            isScanning = true
+                            scope.launch {
+                                val res = Scanner.testSingle(targetHost, subdomain.trim())
+                                recentResults = (listOf(res) + recentResults).take(10)
+                                onResult(res)
+                                isScanning = false
+                            }
+                        }, onShowNetworkWarning)
+                    },
+                    enabled = !isScanning && subdomain.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = ShapeLarge
+                ) {
+                    if (isScanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Scanning...")
+                    } else {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Test Connection")
                     }
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                if (isScanning || subdomain.isBlank()) return@Button
-                checkNetworkAndConfirm(context, {
-                    isScanning = true
-                    scope.launch {
-                        val res = Scanner.testSingle(targetHost, subdomain.trim())
-                        recentResults = (listOf(res) + recentResults).take(10)
-                        onResult(res)
-                        isScanning = false
-                    }
-                }, onShowNetworkWarning)
-            },
-            enabled = !isScanning && subdomain.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            if (isScanning) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Scanning...")
-            } else {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Test Connection", fontSize = 16.sp)
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Results Section
         if (recentResults.isNotEmpty()) {
-            Text("Recent Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Recent Results",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                HorizontalDivider(
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             recentResults.take(10).forEach { result ->
-                ResultItem(result, onTap = { subdomain = result.subdomain })
+                ModernResultItem(result, onTap = { subdomain = result.subdomain })
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var domain by remember { mutableStateOf("") }
@@ -681,188 +1003,429 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp)
+    ) {
+        // Header Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(16.dp)
+            shape = ShapeLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Icon(Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(48.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Scan & Batch Test Subdomain", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Auto-discover and test subdomains", style = MaterialTheme.typography.bodyMedium)
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Hub,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        "Batch Scan",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Discover & test subdomains from crt.sh",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        OutlinedTextField(
-            value = domain,
-            onValueChange = { domain = it },
-            label = { Text("Domain") },
-            placeholder = { Text("cloudflare.com") },
-            leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
-            trailingIcon = {
-                if (domain.isNotBlank()) {
-                    IconButton(onClick = { domain = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear")
-                    }
-                }
-            },
+        // Input Card
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    isFetching = true
-                    scanResults = emptyList()
-                    fetchSummary = ""
-                    scope.launch {
-                        try {
-                            subdomains = Crtsh.fetchSubdomains(domain.trim())
-                            lastFetchedDomain = domain.trim()
-                            fetchSummary = "Found ${subdomains.size} subdomains from crt.sh for $domain"
-                        } catch (e: Exception) {
-                            subdomains = emptyList()
-                            fetchSummary = "Failed to fetch subdomains: ${e.message}"
-                        }
-                        isFetching = false
-                    }
-                },
-                enabled = !isFetching && !isScanning && domain.isNotBlank() && !(subdomains.isNotEmpty() && lastFetchedDomain == domain.trim()),
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                if (isFetching) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Icon(Icons.Default.Download, contentDescription = null)
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (isFetching) "Fetching..." else "Fetch")
-            }
-
-            Button(
-                onClick = {
-                    if (isScanning || subdomains.isEmpty()) return@Button
-                    checkNetworkAndConfirm(context, {
-                        isScanning = true
-                        scanResults = emptyList()
-                        scope.launch {
-                            val tempResults = mutableListOf<ScanResult>()
-                            val total = subdomains.size
-                            subdomains.forEachIndexed { index, sub ->
-                                val res = Scanner.testSingle(targetHost, sub)
-                                tempResults.add(res)
-                                scanResults = tempResults.toList()
-                                progress = (index + 1) / total.toFloat()
+            shape = ShapeLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                OutlinedTextField(
+                    value = domain,
+                    onValueChange = { domain = it },
+                    label = { Text("Domain") },
+                    placeholder = { Text("cloudflare.com") },
+                    leadingIcon = { Icon(Icons.Outlined.Language, contentDescription = null) },
+                    trailingIcon = {
+                        if (domain.isNotBlank()) {
+                            IconButton(onClick = { domain = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
                             }
-                            onResults(tempResults)
-                            isScanning = false
                         }
-                    }, onShowNetworkWarning)
-                },
-                enabled = !isScanning && subdomains.isNotEmpty(),
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (isScanning) "Scanning" else if (scanResults.isNotEmpty() && lastFetchedDomain == domain.trim()) "Re-scan" else "Scan All")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = ShapeMedium
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilledTonalButton(
+                        onClick = {
+                            isFetching = true
+                            scanResults = emptyList()
+                            fetchSummary = ""
+                            scope.launch {
+                                try {
+                                    subdomains = Crtsh.fetchSubdomains(domain.trim())
+                                    lastFetchedDomain = domain.trim()
+                                    fetchSummary = "Found ${subdomains.size} subdomains from crt.sh"
+                                } catch (e: Exception) {
+                                    subdomains = emptyList()
+                                    fetchSummary = "Failed: ${e.message}"
+                                }
+                                isFetching = false
+                            }
+                        },
+                        enabled = !isFetching && !isScanning && domain.isNotBlank() && !(subdomains.isNotEmpty() && lastFetchedDomain == domain.trim()),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
+                    ) {
+                        if (isFetching) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Download, contentDescription = null)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isFetching) "Fetching..." else "Fetch")
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            if (isScanning || subdomains.isEmpty()) return@FilledTonalButton
+                            checkNetworkAndConfirm(context, {
+                                isScanning = true
+                                scanResults = emptyList()
+                                scope.launch {
+                                    val tempResults = mutableListOf<ScanResult>()
+                                    val total = subdomains.size
+                                    subdomains.forEachIndexed { index, sub ->
+                                        val res = Scanner.testSingle(targetHost, sub)
+                                        tempResults.add(res)
+                                        scanResults = tempResults.toList()
+                                        progress = (index + 1) / total.toFloat()
+                                    }
+                                    onResults(tempResults)
+                                    isScanning = false
+                                }
+                            }, onShowNetworkWarning)
+                        },
+                        enabled = !isScanning && subdomains.isNotEmpty(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isScanning) "Scanning" else if (scanResults.isNotEmpty() && lastFetchedDomain == domain.trim()) "Re-scan" else "Scan All")
+                    }
+                }
             }
         }
 
+        // Progress indicator
         if (isScanning) {
-            Spacer(modifier = Modifier.height(12.dp))
-            LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
-            Text("${(progress * 100).toInt()}% (${scanResults.size}/${subdomains.size})", modifier = Modifier.align(Alignment.End), style = MaterialTheme.typography.labelSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ShapeMedium,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Progress",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            "${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "${scanResults.size} / ${subdomains.size} subdomains",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Summary Card
         if (fetchSummary.isNotEmpty()) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), shape = RoundedCornerShape(12.dp)) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = fetchSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ShapeMedium,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Outlined.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = fetchSummary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        LazyColumn {
-            items(scanResults.take(20).filter { it.isWorking }) { res -> ResultItem(res, onTap = {}) }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Results
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(scanResults.take(20).filter { it.isWorking }) { res ->
+                ModernResultItem(res, onTap = {})
+            }
         }
     }
 
-    // Back handler with warning dialog
+    // Back handler
     BackHandler(enabled = isFetching || isScanning) {
         showBackWarningDialog = true
     }
 
-    // Warning dialog for back navigation during operations
     if (showBackWarningDialog) {
-        AlertDialog(
-            onDismissRequest = { showBackWarningDialog = false },
-            title = { Text("Operation in Progress") },
-            text = { Text("Fetch or scan is still running. Going back will cancel the current operation. Continue?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showBackWarningDialog = false
-                        isFetching = false
-                        isScanning = false
-                    }
-                ) {
-                    Text("Yes, Go Back")
-                }
+        ModernAlertDialog(
+            icon = Icons.Default.Warning,
+            iconTint = MaterialTheme.colorScheme.error,
+            title = "Operation in Progress",
+            message = "Fetch or scan is still running. Going back will cancel the current operation. Continue?",
+            confirmText = "Yes, Go Back",
+            dismissText = "Cancel",
+            onConfirm = {
+                showBackWarningDialog = false
+                isFetching = false
+                isScanning = false
             },
-            dismissButton = {
-                TextButton(onClick = { showBackWarningDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-            shape = RoundedCornerShape(20.dp)
+            onDismiss = {
+                showBackWarningDialog = false
+            }
         )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
+fun ModernResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     Card(
         onClick = { onTap(res) },
-        colors = CardDefaults.cardColors(containerColor = if (res.isWorking) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp)
+        modifier = Modifier.fillMaxWidth(),
+        shape = ShapeMedium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (res.isWorking) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else 
+                MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                if (res.isWorking) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                contentDescription = null,
-                tint = if (res.isWorking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(32.dp)
-            )
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (res.isWorking) 
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        else 
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (res.isWorking) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                    contentDescription = null,
+                    tint = if (res.isWorking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = res.subdomain, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(text = res.ip.ifBlank { "No IP" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = res.subdomain,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = res.ip.ifBlank { "No IP resolved" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 res.errorMsg?.let {
-                    Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
+
             if (res.isCloudflare) {
-                AssistChip(onClick = {}, label = { Text("CF") }, colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer))
+                Surface(
+                    shape = ShapeSmall,
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Text(
+                        "CF",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
             }
         }
     }
 }
 
+@Composable
+fun ModernAlertDialog(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    message: String,
+    confirmText: String = "OK",
+    dismissText: String? = null,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = iconTint
+                    )
+                }
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    dismissText?.let {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp),
+                            shape = ShapeLarge
+                        ) {
+                            Text(it)
+                        }
+                    }
+                    FilledTonalButton(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
+                    ) {
+                        Text(confirmText)
+                    }
+                }
+            }
+        }
+    }
+}

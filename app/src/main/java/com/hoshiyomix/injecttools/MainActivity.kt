@@ -256,7 +256,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeExtraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 6.dp
         ) {
             Column(
@@ -382,7 +382,7 @@ fun MenuScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeExtraLarge,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
             Box(
@@ -512,7 +512,7 @@ fun MenuScreen(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.width(8.dp))
-            HorizontalDivider(
+            Divider(
                 modifier = Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.outlineVariant
             )
@@ -562,7 +562,7 @@ fun HostEditDialog(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeExtraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -668,7 +668,7 @@ fun ModernMenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> U
             .height(100.dp),
         shape = ShapeLarge,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
@@ -738,7 +738,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                     modifier = Modifier
                         .size(80.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -895,7 +895,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeLarge,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -972,7 +972,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                HorizontalDivider(
+                Divider(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.outlineVariant
                 )
@@ -1057,7 +1057,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeLarge,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -1182,7 +1182,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = { progress },
+                        progress = progress,
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                         trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)
@@ -1276,7 +1276,7 @@ fun ModernResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
             containerColor = if (res.isWorking) 
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
             else 
-                MaterialTheme.colorScheme.surfaceContainerHigh
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
@@ -1359,7 +1359,7 @@ fun ModernAlertDialog(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeExtraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),

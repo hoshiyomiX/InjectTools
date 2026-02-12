@@ -324,7 +324,7 @@ fun MenuScreen(
     onNavigate: (Screen) -> Unit
 ) {
     val tiles = listOf(
-        MenuTile(1, "Test Single Subdomain", "Test individual subdomain connection", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
+        MenuTile(1, "Test Single Subdomain", "Test single bug subdomain", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
         MenuTile(2, "Scan & Test Subdomain", "Auto-discover & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
         MenuTile(3, "History Logs", "View scan history", Icons.Default.List, Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)), Screen.RESULTS)
     )
@@ -581,7 +581,7 @@ fun checkNetworkAndConfirm(context: android.content.Context, onProceed: () -> Un
 fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResult) -> Unit) {
     var subdomain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
-    var lastResult by remember { mutableStateOf<ScanResult?>(null) }
+    var recentResults by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -601,7 +601,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
             value = subdomain,
             onValueChange = { subdomain = it },
             label = { Text("Subdomain") },
-            placeholder = { Text("cdn.cloudflare.com") },
+            placeholder = { Text("Contoh: api.instagram.com") },
             leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
             trailingIcon = {
                 if (subdomain.isNotBlank()) {
@@ -624,7 +624,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                     isScanning = true
                     scope.launch {
                         val res = Scanner.testSingle(targetHost, subdomain.trim())
-                        lastResult = res
+                        recentResults = (listOf(res) + recentResults).take(10)
                         onResult(res)
                         isScanning = false
                     }
@@ -647,10 +647,13 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        lastResult?.let {
-            Text("Recent Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (recentResults.isNotEmpty()) {
+            Text("Recent Results", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
-            ResultItem(it, onTap = { subdomain = it.subdomain })
+            recentResults.take(10).forEach { result ->
+                ResultItem(result, onTap = { subdomain = result.subdomain })
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }

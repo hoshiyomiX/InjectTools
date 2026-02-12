@@ -281,20 +281,9 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val pulsateScale = pulsatingAnimation()
-    var visible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        delay(100)
-        visible = true
-    }
 
     Dialog(onDismissRequest = {}) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(200))
-        ) {
-            Surface(
+        Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = ShapeExtraLarge,
                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -669,61 +658,50 @@ fun HostEditDialog(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    var visible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        delay(100)
-        visible = true
-    }
 
     Dialog(onDismissRequest = onDismiss) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(200))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ShapeExtraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.Language,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        "Set Target Host",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        Icons.Outlined.Language,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        "Enter the domain host for injection target",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                Text(
+                    "Set Target Host",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Enter the domain host for injection target",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                     OutlinedTextField(
                         value = currentHost,
@@ -776,7 +754,6 @@ fun HostEditDialog(
                     }
                 }
             }
-        }
     }
 }
 
@@ -1593,86 +1570,73 @@ fun ModernAlertDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var visible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        delay(100)
-        visible = true
-    }
-    
     Dialog(onDismissRequest = onDismiss) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(200))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ShapeExtraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(iconTint.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = iconTint
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = iconTint
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        dismissText?.let {
-                            OutlinedButton(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp),
-                                shape = ShapeLarge
-                            ) {
-                                Text(it)
-                            }
-                        }
-                        AnimatedButton(
-                            onClick = onConfirm,
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    dismissText?.let {
+                        OutlinedButton(
+                            onClick = onDismiss,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp)
+                                .height(52.dp),
+                            shape = ShapeLarge
                         ) {
-                            Text(confirmText)
+                            Text(it)
                         }
+                    }
+                    AnimatedButton(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                    ) {
+                        Text(confirmText)
                     }
                 }
             }

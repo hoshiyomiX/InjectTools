@@ -70,13 +70,13 @@ object Crtsh {
         
         while (attempts < maxRetries) {
             try {
-                Logger.log("Connecting to crt.sh for $query (Attempt ${attempts + 1})...")
+
                 entries = api.search(query = query)
                 break // Success
             } catch (e: Exception) {
                 attempts++
                 val msg = e.message ?: "Unknown"
-                Logger.log("Attempt $attempts failed: $msg")
+
                 
                 // If 503 (server overload), wait longer
                 if (msg.contains("503") || msg.contains("504")) {
@@ -86,17 +86,17 @@ object Crtsh {
                 }
                 
                 if (attempts == maxRetries) {
-                    Logger.log("Max retries reached. crt.sh might be down or timed out.")
+
                     return@withContext emptyList()
                 }
             }
         }
 
         if (entries.isEmpty()) {
-            Logger.log("crt.sh returned 0 entries")
+
             return@withContext emptyList()
         } else {
-            Logger.log("crt.sh returned ${entries.size} raw entries")
+
         }
 
         val uniqueSubdomains = TreeSet<String>()
@@ -115,7 +115,7 @@ object Crtsh {
             }
         }
         
-        Logger.log("Found ${uniqueSubdomains.size} unique subdomains. Verifying DNS...")
+
 
         val validSubdomains = mutableListOf<String>()
         val total = uniqueSubdomains.size
@@ -124,7 +124,7 @@ object Crtsh {
         for (sub in uniqueSubdomains) {
             processed++
             if (processed % 20 == 0) {
-                 Logger.log("Verifying: $processed/$total...")
+
             }
 
             try {
@@ -140,7 +140,7 @@ object Crtsh {
             }
         }
         
-        Logger.log("Result: ${validSubdomains.size} resolvable subdomains ready for scan.")
+
         return@withContext validSubdomains
     }
 }

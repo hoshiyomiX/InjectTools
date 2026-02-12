@@ -386,9 +386,10 @@ fun MenuScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                columns = GridCells.Adaptive(minSize = 160.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
                 modifier = Modifier.height(480.dp)
             ) {
                 items(tiles) { tile ->
@@ -457,14 +458,22 @@ fun HostEditDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() }, shape = RoundedCornerShape(12.dp)) {
+            Button(
+                onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
                 Text("Cancel")
             }
         },

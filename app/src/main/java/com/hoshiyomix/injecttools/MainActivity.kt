@@ -386,7 +386,7 @@ fun MenuScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(1),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.height(480.dp)
@@ -457,14 +457,22 @@ fun HostEditDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() }, shape = RoundedCornerShape(12.dp)) {
+            Button(
+                onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() }, 
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(48.dp).widthIn(min = 100.dp)
+            ) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
+            TextButton(
+                onClick = onDismiss, 
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(48.dp).widthIn(min = 100.dp)
+            ) {
                 Text("Cancel")
             }
         },
@@ -478,7 +486,7 @@ fun MenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().height(180.dp),
+        modifier = Modifier.fillMaxWidth().height(160.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {

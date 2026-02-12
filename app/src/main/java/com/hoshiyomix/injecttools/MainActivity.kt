@@ -135,22 +135,6 @@ fun pulsatingAnimation(): Float {
     return scale
 }
 
-// Shimmer loading effect
-@Composable
-fun shimmerAnimation(): Float {
-    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
-    val translateAnim by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmer"
-    )
-    return translateAnim
-}
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun MainApp() {
@@ -165,8 +149,6 @@ fun MainApp() {
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
     var showNetworkWarningDialog by remember { mutableStateOf(false) }
     var networkWarningMessage by remember { mutableStateOf("") }
-
-
 
     fun saveTargetHost(host: String) {
         targetHost = host
@@ -227,14 +209,8 @@ fun MainApp() {
         topBar = {
             AnimatedVisibility(
                 visible = currentScreen != Screen.MENU,
-                enter = slideInVertically(
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                    initialOffsetY = { -it }
-                ) + fadeIn(animationSpec = tween(300)),
-                exit = slideOutVertically(
-                    animationSpec = tween(250, easing = FastOutSlowInEasing),
-                    targetOffsetY = { -it }
-                ) + fadeOut(animationSpec = tween(250))
+                enter = fadeIn(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(250))
             ) {
                 CenterAlignedTopAppBar(
                     title = {
@@ -261,36 +237,10 @@ fun MainApp() {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            // Animated content transition
-            AnimatedContent(
+            // Simple crossfade for screen transitions
+            Crossfade(
                 targetState = currentScreen,
-                transitionSpec = {
-                    when {
-                        targetState == Screen.MENU -> {
-                            slideInHorizontally(
-                                animationSpec = tween(350, easing = FastOutSlowInEasing),
-                                initialOffsetX = { -it / 3 }
-                            ) + fadeIn(tween(350)) togetherWith
-                            slideOutHorizontally(
-                                animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                targetOffsetX = { it / 2 }
-                            ) + fadeOut(tween(300))
-                        }
-                        initialState == Screen.MENU -> {
-                            slideInHorizontally(
-                                animationSpec = tween(350, easing = FastOutSlowInEasing),
-                                initialOffsetX = { it / 2 }
-                            ) + fadeIn(tween(350)) togetherWith
-                            slideOutHorizontally(
-                                animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                targetOffsetX = { -it / 3 }
-                            ) + fadeOut(tween(300))
-                        }
-                        else -> {
-                            fadeIn(tween(300)) togetherWith fadeOut(tween(300))
-                        }
-                    }
-                },
+                animationSpec = tween(350, easing = FastOutSlowInEasing),
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
@@ -334,14 +284,15 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
     var visible by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
+        delay(100)
         visible = true
     }
 
     Dialog(onDismissRequest = {}) {
         AnimatedVisibility(
             visible = visible,
-            enter = scaleIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) + fadeIn(),
-            exit = scaleOut() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -648,15 +599,7 @@ fun MenuScreen(
         tiles.forEachIndexed { index, tile ->
             AnimatedVisibility(
                 visible = visibleItems.size > index,
-                enter = slideInVertically(
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
-                    initialOffsetY = { it / 2 }
-                ) + fadeIn(
-                    animationSpec = tween(300, easing = FastOutSlowInEasing)
-                ) + scaleIn(
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
-                    initialScale = 0.9f
-                )
+                enter = fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing))
             ) {
                 ModernMenuTileCard(
                     tile = tile, 
@@ -729,14 +672,15 @@ fun HostEditDialog(
     var visible by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
+        delay(100)
         visible = true
     }
 
     Dialog(onDismissRequest = onDismiss) {
         AnimatedVisibility(
             visible = visible,
-            enter = scaleIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) + fadeIn(),
-            exit = scaleOut() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -930,9 +874,9 @@ fun ModernMenuTileCard(
 
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {
-    // Staggered animation
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        delay(100)
         visible = true
     }
     
@@ -943,7 +887,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = scaleIn(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+                enter = fadeIn(animationSpec = tween(300))
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val pulsateScale = pulsatingAnimation()
@@ -986,7 +930,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
             item {
                 AnimatedVisibility(
                     visible = visible,
-                    enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+                    enter = fadeIn(animationSpec = tween(300))
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1063,6 +1007,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
     
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        delay(100)
         visible = true
     }
 
@@ -1075,7 +1020,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+            enter = fadeIn(animationSpec = tween(300))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1124,9 +1069,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Input Section with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f), initialOffsetY = { it / 3 }) + fadeIn(
-                animationSpec = tween(300, delayMillis = 100)
-            )
+            enter = fadeIn(animationSpec = tween(300, delayMillis = 100))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1199,7 +1142,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Results Section with animation
         AnimatedVisibility(
             visible = recentResults.isNotEmpty(),
-            enter = slideInVertically() + fadeIn()
+            enter = fadeIn(animationSpec = tween(300))
         ) {
             Column {
                 Row(
@@ -1247,6 +1190,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        delay(100)
         visible = true
     }
     
@@ -1265,7 +1209,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+            enter = fadeIn(animationSpec = tween(300))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1314,9 +1258,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Input Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f), initialOffsetY = { it / 3 }) + fadeIn(
-                animationSpec = tween(300, delayMillis = 100)
-            )
+            enter = fadeIn(animationSpec = tween(300, delayMillis = 100))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1419,8 +1361,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Progress indicator with animation
         AnimatedVisibility(
             visible = isScanning,
-            enter = slideInVertically() + fadeIn(),
-            exit = slideOutVertically() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
@@ -1470,8 +1412,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Summary Card with animation
         AnimatedVisibility(
             visible = fetchSummary.isNotEmpty(),
-            enter = slideInVertically() + fadeIn(),
-            exit = slideOutVertically() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1551,12 +1493,13 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        delay(50)
         visible = true
     }
 
     AnimatedVisibility(
         visible = visible,
-        enter = slideInHorizontally(animationSpec = spring(dampingRatio = 0.6f), initialOffsetX = { it / 2 }) + fadeIn()
+        enter = fadeIn(animationSpec = tween(200))
     ) {
         Card(
             onClick = { onTap(res) },
@@ -1653,14 +1596,15 @@ fun ModernAlertDialog(
     var visible by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
+        delay(100)
         visible = true
     }
     
     Dialog(onDismissRequest = onDismiss) {
         AnimatedVisibility(
             visible = visible,
-            enter = scaleIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) + fadeIn(),
-            exit = scaleOut() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -1671,24 +1615,11 @@ fun ModernAlertDialog(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Animated icon with shake effect for warnings
-                    val shakeTranslation = rememberInfiniteTransition(label = "shake")
-                    val translate by shakeTranslation.animateFloat(
-                        initialValue = -2f,
-                        targetValue = 2f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(100, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "translate"
-                    )
-                    
                     Box(
                         modifier = Modifier
                             .size(56.dp)
                             .clip(CircleShape)
-                            .background(iconTint.copy(alpha = 0.1f))
-                            .graphicsLayer { translationX = translate },
+                            .background(iconTint.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(

@@ -1,434 +1,191 @@
-# InjectTools v2.3
+# InjectTools
 
-[![Termux Build](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/termux-release.yml)
+[![Android Build](https://github.com/hoshiyomiX/InjectTools/actions/workflows/android.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/android.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Bug Inject Scanner for Cloudflare Subdomains** - Android/Termux Only
+**Bug Inject Scanner for Cloudflare Subdomains** - Android Native App
 
-High-performance Rust implementation optimized for Android devices running Termux.
+High-performance Android app with Material You design for scanning Cloudflare subdomains.
 
-## 🚀 Quick Install
-
-```bash
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
-```
-
----
-
-## ✨ Features v2.3
+## 🚀 Features
 
 ### Core Features
-- ⚡ **Async Concurrent Scanning** - Powered by Tokio
+- ⚡ **Fast Scanning** - Concurrent subdomain testing
 - 🔍 **DNS Resolution** - Multi-resolver with fallback
 - ☁️ **Cloudflare Detection** - Auto-detect CF IP ranges
-- 📊 **Real-time Progress** - Live progress bars & statistics
-- 💾 **Config Persistence** - TOML-based configuration
+- 📊 **Real-time Progress** - Live progress tracking
+- 💾 **Scan History** - View previous scan results
 - 🌐 **crt.sh Integration** - Automatic subdomain discovery
-- 📝 **Export Results** - Save scan results with timestamps
-- 📂 **View Results** - Browse previous scan results
-- ⏸️ **Signal Handling** - Graceful interrupt (Ctrl+C)
 
-### Menu Options
-1. 🎯 **Test Target Host** - Verify target reachability
-2. 🔍 **Test Single Subdomain** - Quick single test
-3. 🌐 **Fetch & Test dari crt.sh** - Auto-discover subdomains
-4. 📊 **View Exported Results** - Browse past scans
-5. ⚙️ **Settings** - Configure target & timeout
-6. 🚪 **Exit**
+### UI/UX
+- 🎨 **Material You Design** - Modern Android design
+- 🌙 **Dark Theme** - Eye-friendly dark mode
+- ✨ **Smooth Animations** - Fluid transitions
+- 📱 **Native Performance** - Built with Jetpack Compose
 
 ---
 
-## Installation
+## 📥 Installation
+
+### Download APK
+
+Download the latest APK from [GitHub Releases](https://github.com/hoshiyomiX/InjectTools/releases)
 
 ### Requirements
-- **Android device** with Termux installed
-- **ARM64** (aarch64) or **ARMv7** architecture
+- **Android 7.0+** (API 24+)
+- **ARM64** device (most modern phones)
 - Internet connection
 
-### Method 1: One-Liner (Recommended)
-
-```bash
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash
-```
-
-**Features:**
-- ✅ Auto-detect latest release
-- ✅ Fallback to build from source
-- ✅ Auto-install dependencies
-- ✅ Backup existing installation
-
-### Method 2: Install Specific Version
-
-```bash
-# Install specific release
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s termux-v2.3.0
-
-# Or any other version
-curl -sSL https://raw.githubusercontent.com/hoshiyomiX/InjectTools/main/install.sh | bash -s v1.1.0
-```
-
-### Method 3: Manual Installation
-
-**Step 1: Check Architecture**
-```bash
-uname -m
-# aarch64 = ARM64 (modern devices)
-# armv7l/armv8l = ARMv7 (older devices)
-```
-
-**Step 2: Download Binary**
-
-**For ARM64:**
-```bash
-wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-arm64.tar.gz
-tar xzf injecttools-termux-arm64.tar.gz
-mv injecttools $PREFIX/bin/
-chmod +x $PREFIX/bin/injecttools
-```
-
-**For ARMv7:**
-```bash
-wget https://github.com/hoshiyomiX/InjectTools/releases/latest/download/injecttools-termux-armv7.tar.gz
-tar xzf injecttools-termux-armv7.tar.gz
-mv injecttools $PREFIX/bin/
-chmod +x $PREFIX/bin/injecttools
-```
-
-**Step 3: Run**
-```bash
-injecttools
-```
-
-### Method 4: Build from Source
-
-```bash
-# Install dependencies
-pkg install rust git binutils -y
-
-# Clone & build
-git clone https://github.com/hoshiyomiX/InjectTools.git
-cd InjectTools
-cargo build --release --target aarch64-linux-android
-
-# Install
-cp target/aarch64-linux-android/release/injecttools $PREFIX/bin/
-injecttools --version
-```
+### Install
+1. Download APK
+2. Enable "Install from unknown sources" in settings
+3. Open APK and install
+4. Launch app and set your target host
 
 ---
 
-## Usage
+## 📱 Usage
 
-### Interactive Mode
-```bash
-injecttools
-```
+### First Run
+1. Open app
+2. Enter your target host (e.g., `tunnel.example.com`)
+3. Click "Get Started"
 
-### CLI Mode
+### Test Single Subdomain
+1. Tap "Test Subdomain"
+2. Enter subdomain to test
+3. View results instantly
 
-**Test Target Host:**
-```bash
-injecttools -t tunnel.example.com
-```
+### Batch Scan via crt.sh
+1. Tap "Batch Scan"
+2. Enter domain (e.g., `cloudflare.com`)
+3. App fetches subdomains from crt.sh
+4. Tests all subdomains automatically
+5. View working bugs in History
 
-**Test Single Subdomain:**
-```bash
-injecttools -t tunnel.example.com -s cdn.cloudflare.com
-```
-
-**Fetch from crt.sh & Test:**
-```bash
-injecttools -t tunnel.example.com -d cloudflare.com --crtsh
-```
-
-**View Results:**
-```bash
-injecttools --view-results
-```
-
-### CLI Options
-```
-Options:
-  -t, --target <TARGET>      Target host (tunnel/proxy)
-  -d, --domain <DOMAIN>      Domain to scan (with --crtsh)
-  -s, --subdomain <SUB>      Test single subdomain
-      --crtsh                Fetch from crt.sh
-      --timeout <SECS>       Timeout [default: 10]
-      --non-interactive      CLI mode only
-      --view-results         View scan results
-  -h, --help                 Print help
-  -V, --version              Print version
-```
+### View History
+- Tap "History" to see previous scan results
+- Shows working bugs with IP addresses
+- Indicates Cloudflare status
 
 ---
 
-## Configuration
+## 🎯 What It Does
 
-**Config Location:**
-```
-/sdcard/InjectTools/config.toml
-```
+InjectTools scans subdomains to find "bug inject" targets that work with your tunnel/proxy host:
 
-**Results Location:**
-```
-/sdcard/InjectTools/results/
-```
-
-**Config Format:**
-```toml
-target_host = "tunnel.example.com"
-timeout = 10
-```
-
-**Accessing Files:**
-```bash
-# View config
-cat /sdcard/InjectTools/config.toml
-
-# List results
-ls -lh /sdcard/InjectTools/results/
-
-# View latest result
-cat /sdcard/InjectTools/results/*.txt | tail -100
-```
+1. **Resolve DNS** - Get IP address of subdomain
+2. **Test Connection** - Check if subdomain is reachable
+3. **Detect Cloudflare** - Identify CF-protected domains
+4. **Report Results** - Show working bugs with details
 
 ---
 
-## Output Example
+## 🔧 Technical Details
 
-```
-════════════════════════════════════════════════════════════
-                    HASIL SCAN
-════════════════════════════════════════════════════════════
+### Built With
+- **Kotlin** - Primary language
+- **Jetpack Compose** - Modern UI toolkit
+- **Material You** - Design system
+- **Retrofit** - HTTP client
+- **Coroutines** - Async operations
 
-✅ Working Bugs (3):
-  🟢 cdn.cloudflare.com (104.16.1.1)
-  🟢 api.cloudflare.com (104.16.2.2)
-  🟢 static.cloudflare.com (104.16.3.3)
+### Architecture
+- MVVM pattern
+- Single Activity app
+- Compose Navigation
 
-────────────────────────────────────────────────────────────
-Statistik:
-  Scanned: 250/250 (100%)
-  CF Found: 3 | Non-CF: 45
-  
-File: scan_cloudflare_com_20260115_135530.txt
-Path: /sdcard/InjectTools/results/scan_cloudflare_com_20260115_135530.txt
-```
+### Permissions
+- `INTERNET` - For network operations
+- `ACCESS_NETWORK_STATE` - Network status
 
 ---
 
-## What's New in v2.3
-
-✅ **crt.sh Integration** - Automatic subdomain discovery  
-✅ **Export Results** - Save scans with timestamps  
-✅ **View Results** - Browse past scan results  
-✅ **Signal Handling** - Graceful Ctrl+C interrupt  
-✅ **Improved UI** - Better progress tracking  
-✅ **Settings Menu** - Configure target & timeout  
-✅ **Android Optimized** - `/sdcard/InjectTools` storage  
-🚨 **BREAKING** - Android/Termux only (Linux/Windows/macOS support removed)  
-
----
-
-## Performance
-
-| Device | Subdomains | Time | Speed |
-|--------|------------|------|-------|
-| Snapdragon 8 Gen 2 | 250 subs | ~30s | 8.3 req/s |
-| Snapdragon 888 | 250 subs | ~40s | 6.2 req/s |
-| Exynos 2100 | 250 subs | ~50s | 5 req/s |
-| MediaTek Dimensity 1200 | 250 subs | ~45s | 5.5 req/s |
-
-*Tested with 10s timeout on Termux*
-
----
-
-## Project Structure
+## 📊 Project Structure
 
 ```
 InjectTools/
-├── src/
-│   ├── main.rs        # Entry point & menu
-│   ├── config.rs      # Config management
-│   ├── scanner.rs     # Scan engine
-│   ├── dns.rs         # DNS + CF detection
-│   ├── crtsh.rs       # crt.sh integration
-│   ├── results.rs     # Export & view results
-│   └── ui.rs          # Terminal UI
-├── .github/workflows/
-│   └── termux-release.yml # Termux build
-├── install.sh        # Smart installer
-├── Cargo.toml        # Dependencies
-└── README.md
+├── app/
+│   ├── src/main/
+│   │   ├── java/com/hoshiyomix/injecttools/
+│   │   │   ├── MainActivity.kt    # UI & Navigation
+│   │   │   ├── Scanner.kt         # Scan Engine
+│   │   │   ├── NetworkUtils.kt    # Network utilities
+│   │   │   └── Crtsh.kt           # crt.sh API
+│   │   ├── res/                   # Resources
+│   │   └── AndroidManifest.xml
+│   └── build.gradle               # Build config
+├── gradle/                        # Gradle wrapper
+├── build.gradle.kts               # Root config
+└── settings.gradle.kts            # Settings
 ```
 
 ---
 
-## Troubleshooting
-
-### Installation Issues
-
-**curl not found:**
-```bash
-pkg install curl
-```
-
-**wget not found:**
-```bash
-pkg install wget
-```
-
-**Permission denied:**
-```bash
-chmod +x $PREFIX/bin/injecttools
-```
-
-**Storage permission denied:**
-```bash
-termux-setup-storage
-# Allow storage access when prompted
-```
-
-**No release available:**
-```bash
-# Installer will auto-build from source
-# Or manually:
-pkg install rust git binutils
-git clone https://github.com/hoshiyomiX/InjectTools.git
-cd InjectTools
-cargo build --release --target aarch64-linux-android
-```
-
-### Runtime Issues
-
-**DNS errors:**
-```bash
-pkg install dnsutils
-```
-
-**SSL/TLS errors:**
-```bash
-pkg install ca-certificates openssl
-```
-
-**Wrong architecture:**
-```bash
-uname -m  # Check your arch
-# Download matching binary (arm64 or armv7)
-```
-
-**Config file errors:**
-```bash
-# Remove old config
-rm /sdcard/InjectTools/config.toml
-# Run again to recreate
-injecttools
-```
-
-### Build from Source Issues
-
-**Rust not installed:**
-```bash
-pkg install rust
-```
-
-**Out of memory during build:**
-```bash
-# Use swap file
-pkg install tsu
-sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
-sudo mkswap /swapfile
-sudo swapon /swapfile
-```
-
-**Compilation errors:**
-```bash
-# Update packages
-pkg update && pkg upgrade
-# Clean and rebuild
-cargo clean
-cargo build --release
-```
-
----
-
-## Device Compatibility
-
-### Supported Architectures
-- ✅ **ARM64** (aarch64) - Most devices 2018+
-- ✅ **ARMv7** (armv7l) - Older devices 2015-2018
-
-### Tested Devices
-- ✅ Samsung Galaxy S21/S22/S23 series
-- ✅ Xiaomi Redmi Note series
-- ✅ POCO X3/X4/F3/F4 series
-- ✅ OnePlus 7/8/9/10 series
-- ✅ Realme GT series
+## 🔄 Build from Source
 
 ### Requirements
-- **Termux** app (from F-Droid, not Google Play)
-- **Android 7.0+** (API 24+)
-- **Storage permission** granted
-- **100MB** free space (after installation: ~10MB)
+- Android Studio Hedgehog or newer
+- JDK 17
+- Android SDK 34
+
+### Steps
+```bash
+# Clone repository
+git clone https://github.com/hoshiyomiX/InjectTools.git
+cd InjectTools
+
+# Open in Android Studio
+# OR build via command line:
+./gradlew assembleRelease
+
+# APK location:
+# app/build/outputs/apk/release/
+```
 
 ---
 
-## Changelog
+## 📝 Changelog
 
-### v2.3.0 (2026-01-15)
-- ✨ NEW: crt.sh integration for subdomain discovery
-- ✨ NEW: Export results to file with timestamps
-- ✨ NEW: View exported results
-- ✨ NEW: Signal handling (Ctrl+C graceful exit)
-- ✨ NEW: Settings menu
-- 🐛 FIX: Android /sdcard path support
-- 🚀 IMPROVE: Better progress tracking
-- 🚀 IMPROVE: Enhanced UI/UX
-- 🚨 BREAKING: Android/Termux only (removed Linux/Windows/macOS support)
+### v1.1.0 (Current)
+- ✨ Material You redesign
+- ✨ Smooth animations with custom easing
+- ✨ New app logo
+- 🐛 Bug fixes and performance improvements
 
-### v2.0.0 (2026-01-14)
-- Initial Rust implementation
-- Migration from Bash script
-- Async concurrent scanning
-- Native Termux binary
-- Config persistence
+### v1.0.0
+- Initial Android release
+- Single subdomain test
+- crt.sh batch scan
+- Scan history
 
 ---
 
-## Documentation
-
-- 📖 [README.md](README.md) - This file
-- 📱 [BUILD.md](TERMUX_BUILD.md) - Build guide for Termux
-- 💾 [install.sh](install.sh) - Installer script
-
----
-
-## Contributing
+## 🤝 Contributing
 
 Contributions welcome! Submit a Pull Request.
 
 ---
 
-## License
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE)
 
 ---
 
-## Credits
+## 👤 Credits
 
 **Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)
 
 **Powered by:**
-- [Rust](https://www.rust-lang.org/) - Programming language
-- [Tokio](https://tokio.rs/) - Async runtime
-- [Reqwest](https://github.com/seanmonstar/reqwest) - HTTP client
-- [Trust-DNS](https://github.com/bluejekyll/trust-dns) - DNS resolver
+- [Kotlin](https://kotlinlang.org/)
+- [Jetpack Compose](https://developer.android.com/jetpack/compose)
+- [Material Design](https://m3.material.io/)
 - [crt.sh](https://crt.sh) - Certificate transparency logs
 
 ---
 
-## Disclaimer
+## ⚠️ Disclaimer
 
 For **educational purposes** and **authorized testing only**.
 

@@ -114,41 +114,37 @@ val ShapeLarge = RoundedCornerShape(24.dp)
 val ShapeMedium = RoundedCornerShape(16.dp)
 val ShapeSmall = RoundedCornerShape(12.dp)
 
-// Animation specs
-val smoothSpring = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-val fastSpring = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-val tweenSpec = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
+// Custom easing curves for ultra-smooth animations
+val SmoothEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)  // Smooth deceleration
+val EaseOutQuart = CubicBezierEasing(0.25f, 1.0f, 0.5f, 1.0f)   // Quick start, smooth end
+val EaseOutExpo = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)    // Dramatic ease out
+val EaseInOutQuart = CubicBezierEasing(0.76f, 0.0f, 0.24f, 1.0f) // Smooth both ends
 
-// Pulsating animation for icons
+// Animation specs with smooth interpolation
+val smoothTween = tween<Float>(durationMillis = 350, easing = SmoothEasing)
+val quickTween = tween<Float>(durationMillis = 200, easing = EaseOutQuart)
+val enterTween = tween<Float>(durationMillis = 400, easing = EaseOutExpo)
+
+// Smooth spring with natural physics
+val naturalSpring = spring<Float>(
+    dampingRatio = 0.8f,
+    stiffness = 300f
+)
+
+// Gentle breathing animation for logo with smooth sine wave
 @Composable
-fun pulsatingAnimation(): Float {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulsating")
+fun breathingAnimation(): Float {
+    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.08f,
+        targetValue = 1.025f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
+            animation = tween(2500, easing = EaseInOutQuart),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
     )
     return scale
-}
-
-// Shimmer loading effect
-@Composable
-fun shimmerAnimation(): Float {
-    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
-    val translateAnim by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmer"
-    )
-    return translateAnim
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -165,8 +161,6 @@ fun MainApp() {
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
     var showNetworkWarningDialog by remember { mutableStateOf(false) }
     var networkWarningMessage by remember { mutableStateOf("") }
-
-
 
     fun saveTargetHost(host: String) {
         targetHost = host
@@ -227,14 +221,8 @@ fun MainApp() {
         topBar = {
             AnimatedVisibility(
                 visible = currentScreen != Screen.MENU,
-                enter = slideInVertically(
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                    initialOffsetY = { -it }
-                ) + fadeIn(animationSpec = tween(300)),
-                exit = slideOutVertically(
-                    animationSpec = tween(250, easing = FastOutSlowInEasing),
-                    targetOffsetY = { -it }
-                ) + fadeOut(animationSpec = tween(250))
+                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
+                exit = fadeOut(animationSpec = tween(200, easing = SmoothEasing))
             ) {
                 CenterAlignedTopAppBar(
                     title = {
@@ -261,36 +249,10 @@ fun MainApp() {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            // Animated content transition
-            AnimatedContent(
+            // Smooth crossfade for screen transitions
+            Crossfade(
                 targetState = currentScreen,
-                transitionSpec = {
-                    when {
-                        targetState == Screen.MENU -> {
-                            slideInHorizontally(
-                                animationSpec = tween(350, easing = FastOutSlowInEasing),
-                                initialOffsetX = { -it / 3 }
-                            ) + fadeIn(tween(350)) togetherWith
-                            slideOutHorizontally(
-                                animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                targetOffsetX = { it / 2 }
-                            ) + fadeOut(tween(300))
-                        }
-                        initialState == Screen.MENU -> {
-                            slideInHorizontally(
-                                animationSpec = tween(350, easing = FastOutSlowInEasing),
-                                initialOffsetX = { it / 2 }
-                            ) + fadeIn(tween(350)) togetherWith
-                            slideOutHorizontally(
-                                animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                targetOffsetX = { -it / 3 }
-                            ) + fadeOut(tween(300))
-                        }
-                        else -> {
-                            fadeIn(tween(300)) togetherWith fadeOut(tween(300))
-                        }
-                    }
-                },
+                animationSpec = tween(300, easing = EaseOutExpo),
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
@@ -330,112 +292,101 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
     var hostInput by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val pulsateScale = pulsatingAnimation()
-    var visible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        visible = true
-    }
+    val breathingScale = breathingAnimation()
 
     Dialog(onDismissRequest = {}) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = scaleIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) + fadeIn(),
-            exit = scaleOut() + fadeOut()
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 6.dp
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ShapeExtraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 6.dp
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Animated icon with pulsating effect
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .scale(pulsateScale)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        MaterialTheme.colorScheme.tertiaryContainer
-                                    )
+                // Animated icon with pulsating effect
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .scale(breathingScale)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.tertiaryContainer
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.RocketLaunch,
-                            contentDescription = null,
-                            modifier = Modifier.size(36.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        "Welcome to InjectTools",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.RocketLaunch,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    Text(
-                        "Set your injection target domain to get started",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                Text(
+                    "Welcome to InjectTools",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Set your injection target domain to get started",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                OutlinedTextField(
+                    value = hostInput,
+                    onValueChange = { hostInput = it },
+                    label = { Text("Target Domain Host") },
+                    placeholder = { Text("sg.server.web.id") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (hostInput.isNotBlank()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm(hostInput)
+                        }
+                    }),
+                    shape = ShapeMedium,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                     )
+                )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    OutlinedTextField(
-                        value = hostInput,
-                        onValueChange = { hostInput = it },
-                        label = { Text("Target Domain Host") },
-                        placeholder = { Text("sg.server.web.id") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            if (hostInput.isNotBlank()) {
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                                onConfirm(hostInput)
-                            }
-                        }),
-                        shape = ShapeMedium,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    AnimatedButton(
-                        onClick = {
-                            if (hostInput.isNotBlank()) {
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                                onConfirm(hostInput)
-                            }
-                        },
-                        enabled = hostInput.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Icon(Icons.Default.ArrowForward, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Get Started", style = MaterialTheme.typography.labelLarge)
-                    }
+                AnimatedButton(
+                    onClick = {
+                        if (hostInput.isNotBlank()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm(hostInput)
+                        }
+                    },
+                    enabled = hostInput.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Get Started", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -454,8 +405,11 @@ fun AnimatedButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessHigh),
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 400f
+        ),
         label = "buttonScale"
     )
 
@@ -486,16 +440,13 @@ fun MenuScreen(
     var showHostDialog by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
     
-    // Staggered animation for menu items
-    val visibleItems = remember { mutableStateListOf<Boolean>() }
+    // Simple entrance animation - all items appear together
+    var isLoaded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        tiles.indices.forEach { index ->
-            delay(80L * index)
-            visibleItems.add(true)
-        }
+        isLoaded = true
     }
     
-    val pulsateScale = pulsatingAnimation()
+    val breathingScale = breathingAnimation()
 
     Column(
         modifier = Modifier
@@ -533,7 +484,7 @@ fun MenuScreen(
                     Box(
                         modifier = Modifier
                             .size(80.dp)
-                            .scale(pulsateScale)
+                            .scale(breathingScale)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
@@ -644,28 +595,15 @@ fun MenuScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Menu Tiles with staggered animation
-        tiles.forEachIndexed { index, tile ->
-            AnimatedVisibility(
-                visible = visibleItems.size > index,
-                enter = slideInVertically(
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
-                    initialOffsetY = { it / 2 }
-                ) + fadeIn(
-                    animationSpec = tween(300, easing = FastOutSlowInEasing)
-                ) + scaleIn(
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
-                    initialScale = 0.9f
-                )
+        // Menu Tiles - smooth entrance animation
+        tiles.forEach { tile ->
+            AnimatedMenuItem(
+                visible = isLoaded,
+                tile = tile,
+                enabled = !showHostDialog
             ) {
-                ModernMenuTileCard(
-                    tile = tile, 
-                    enabled = !showHostDialog,
-                    index = index
-                ) {
-                    if (!showHostDialog) {
-                        tile.screen?.let(onNavigate)
-                    }
+                if (!showHostDialog) {
+                    tile.screen?.let(onNavigate)
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -697,7 +635,10 @@ fun AnimatedCard(
     
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
+        animationSpec = spring(
+            dampingRatio = 0.7f,
+            stiffness = 500f
+        ),
         label = "cardScale"
     )
 
@@ -726,60 +667,50 @@ fun HostEditDialog(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    var visible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        visible = true
-    }
 
     Dialog(onDismissRequest = onDismiss) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = scaleIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) + fadeIn(),
-            exit = scaleOut() + fadeOut()
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ShapeExtraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.Language,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        "Set Target Host",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        Icons.Outlined.Language,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        "Enter the domain host for injection target",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                Text(
+                    "Set Target Host",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Enter the domain host for injection target",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                     OutlinedTextField(
                         value = currentHost,
@@ -832,8 +763,41 @@ fun HostEditDialog(
                     }
                 }
             }
-        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnimatedMenuItem(
+    visible: Boolean,
+    tile: MenuTile,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    // Smooth entrance with spring physics
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = 0.65f,
+            stiffness = 250f
+        ),
+        label = "itemScale"
+    )
+    
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(300, easing = EaseOutQuart),
+        label = "itemAlpha"
+    )
+    
+    ModernMenuTileCard(
+        tile = tile,
+        enabled = enabled,
+        modifier = Modifier
+            .scale(scale)
+            .graphicsLayer { this.alpha = alpha },
+        onClick = onClick
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -841,31 +805,34 @@ fun HostEditDialog(
 fun ModernMenuTileCard(
     tile: MenuTile, 
     enabled: Boolean = true,
-    index: Int = 0,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
-    val scale by animateFloatAsState(
+    val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 400f
+        ),
         label = "tileScale"
     )
     
     val elevation by animateDpAsState(
-        targetValue = if (isPressed) 2.dp else 0.dp,
-        animationSpec = tween(200),
+        targetValue = if (isPressed) 3.dp else 0.dp,
+        animationSpec = tween(200, easing = EaseOutQuart),
         label = "tileElevation"
     )
 
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(100.dp)
-            .scale(scale),
+            .scale(pressScale),
         shape = ShapeLarge,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -930,7 +897,6 @@ fun ModernMenuTileCard(
 
 @Composable
 fun ResultHistoryScreen(history: List<ScanResult>) {
-    // Staggered animation
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         visible = true
@@ -943,15 +909,15 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = scaleIn(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val pulsateScale = pulsatingAnimation()
+                    val breathingScale = breathingAnimation()
                     
                     Box(
                         modifier = Modifier
                             .size(80.dp)
-                            .scale(pulsateScale)
+                            .scale(breathingScale)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
@@ -986,7 +952,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
             item {
                 AnimatedVisibility(
                     visible = visible,
-                    enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+                    enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1075,7 +1041,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1124,9 +1090,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Input Section with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f), initialOffsetY = { it / 3 }) + fadeIn(
-                animationSpec = tween(300, delayMillis = 100)
-            )
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1199,7 +1163,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Results Section with animation
         AnimatedVisibility(
             visible = recentResults.isNotEmpty(),
-            enter = slideInVertically() + fadeIn()
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Column {
                 Row(
@@ -1253,7 +1217,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     // Animated progress
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        animationSpec = tween(350, easing = EaseOutQuart),
         label = "progressAnim"
     )
 
@@ -1265,7 +1229,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f)) + fadeIn()
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1314,9 +1278,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Input Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = spring(dampingRatio = 0.6f), initialOffsetY = { it / 3 }) + fadeIn(
-                animationSpec = tween(300, delayMillis = 100)
-            )
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1419,8 +1381,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Progress indicator with animation
         AnimatedVisibility(
             visible = isScanning,
-            enter = slideInVertically() + fadeIn(),
-            exit = slideOutVertically() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
@@ -1470,8 +1432,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Summary Card with animation
         AnimatedVisibility(
             visible = fetchSummary.isNotEmpty(),
-            enter = slideInVertically() + fadeIn(),
-            exit = slideOutVertically() + fadeOut()
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
+            exit = fadeOut(animationSpec = tween(200))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1545,47 +1507,41 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 450f
+        ),
         label = "resultScale"
     )
-    
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        visible = true
-    }
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInHorizontally(animationSpec = spring(dampingRatio = 0.6f), initialOffsetX = { it / 2 }) + fadeIn()
+    Card(
+        onClick = { onTap(res) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale),
+        shape = ShapeMedium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (res.isWorking) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else 
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        interactionSource = interactionSource
     ) {
-        Card(
-            onClick = { onTap(res) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(scale),
-            shape = ShapeMedium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (res.isWorking) 
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                else 
-                    MaterialTheme.colorScheme.surfaceVariant
-            ),
-            interactionSource = interactionSource
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Animated success/error icon
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (res.isWorking) 
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            else 
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+            // Animated success/error icon
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (res.isWorking) 
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        else 
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1636,7 +1592,6 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -1650,98 +1605,73 @@ fun ModernAlertDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var visible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        visible = true
-    }
-    
     Dialog(onDismissRequest = onDismiss) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = scaleIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) + fadeIn(),
-            exit = scaleOut() + fadeOut()
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ShapeExtraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Animated icon with shake effect for warnings
-                    val shakeTranslation = rememberInfiniteTransition(label = "shake")
-                    val translate by shakeTranslation.animateFloat(
-                        initialValue = -2f,
-                        targetValue = 2f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(100, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "translate"
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = iconTint
                     )
-                    
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(iconTint.copy(alpha = 0.1f))
-                            .graphicsLayer { translationX = translate },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = iconTint
-                        )
-                    }
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        dismissText?.let {
-                            OutlinedButton(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp),
-                                shape = ShapeLarge
-                            ) {
-                                Text(it)
-                            }
-                        }
-                        AnimatedButton(
-                            onClick = onConfirm,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    dismissText?.let {
+                        OutlinedButton(
+                            onClick = onDismiss,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp)
+                                .height(52.dp),
+                            shape = ShapeLarge
                         ) {
-                            Text(confirmText)
+                            Text(it)
                         }
+                    }
+                    AnimatedButton(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                    ) {
+                        Text(confirmText)
                     }
                 }
             }

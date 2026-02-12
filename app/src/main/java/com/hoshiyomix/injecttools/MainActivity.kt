@@ -245,19 +245,32 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    AlertDialog(
-        onDismissRequest = {},
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Welcome to InjectTools")
-            }
-        },
-        text = {
-            Column {
-                Text("Set your injection target domain to get started.", style = MaterialTheme.typography.bodyMedium)
+    Dialog(onDismissRequest = {}) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Welcome to InjectTools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "Set your injection target domain to get started.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 OutlinedTextField(
                     value = hostInput,
                     onValueChange = { hostInput = it },
@@ -275,27 +288,28 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                     }),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        if (hostInput.isNotBlank()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm(hostInput)
+                        }
+                    },
+                    enabled = hostInput.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Continue", fontSize = 16.sp)
+                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (hostInput.isNotBlank()) {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                        onConfirm(hostInput)
-                    }
-                },
-                enabled = hostInput.isNotBlank(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Continue")
-            }
-        },
-        shape = RoundedCornerShape(20.dp)
-    )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -426,19 +440,32 @@ fun HostEditDialog(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Set Target Host")
-            }
-        },
-        text = {
-            Column {
-                Text("Enter the domain host to use as injection target.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Set Target Host", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "Enter the domain host to use as injection target.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 OutlinedTextField(
                     value = currentHost,
                     onValueChange = onHostChange,
@@ -454,22 +481,33 @@ fun HostEditDialog(
                     }),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancel", fontSize = 16.sp)
+                    }
+                    Button(
+                        onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() },
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Save", fontSize = 16.sp)
+                    }
+                }
             }
-        },
-        confirmButton = {
-            Button(onClick = { keyboardController?.hide(); focusManager.clearFocus(); onConfirm() }, shape = RoundedCornerShape(12.dp)) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
-                Text("Cancel")
-            }
-        },
-        shape = RoundedCornerShape(20.dp)
-    )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

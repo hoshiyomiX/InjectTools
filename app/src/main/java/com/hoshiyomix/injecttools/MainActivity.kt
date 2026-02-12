@@ -114,20 +114,30 @@ val ShapeLarge = RoundedCornerShape(24.dp)
 val ShapeMedium = RoundedCornerShape(16.dp)
 val ShapeSmall = RoundedCornerShape(12.dp)
 
-// Animation specs
-val smoothSpring = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-val fastSpring = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+// Animation specs - smooth and natural
+val smoothSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessLow
+)
+val fastSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMedium
+)
+val bouncySpring = spring<Float>(
+    dampingRatio = 0.7f,
+    stiffness = Spring.StiffnessLow
+)
 val tweenSpec = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
 
-// Pulsating animation for icons
+// Subtle breathing animation for logo
 @Composable
-fun pulsatingAnimation(): Float {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulsating")
+fun breathingAnimation(): Float {
+    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.08f,
+        targetValue = 1.03f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
+            animation = tween(2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
@@ -237,10 +247,10 @@ fun MainApp() {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            // Simple crossfade for screen transitions
+            // Smooth crossfade for screen transitions
             Crossfade(
                 targetState = currentScreen,
-                animationSpec = tween(350, easing = FastOutSlowInEasing),
+                animationSpec = tween(250, easing = FastOutSlowInEasing),
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
@@ -280,7 +290,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
     var hostInput by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val pulsateScale = pulsatingAnimation()
+    val breathingScale = breathingAnimation()
 
     Dialog(onDismissRequest = {}) {
         Surface(
@@ -297,7 +307,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                 Box(
                     modifier = Modifier
                         .size(72.dp)
-                        .scale(pulsateScale)
+                        .scale(breathingScale)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
@@ -393,8 +403,8 @@ fun AnimatedButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessHigh),
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = tween(150, easing = FastOutSlowInEasing),
         label = "buttonScale"
     )
 
@@ -431,7 +441,7 @@ fun MenuScreen(
         isLoaded = true
     }
     
-    val pulsateScale = pulsatingAnimation()
+    val breathingScale = breathingAnimation()
 
     Column(
         modifier = Modifier
@@ -469,7 +479,7 @@ fun MenuScreen(
                     Box(
                         modifier = Modifier
                             .size(80.dp)
-                            .scale(pulsateScale)
+                            .scale(breathingScale)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
@@ -619,8 +629,8 @@ fun AnimatedCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(150, easing = FastOutSlowInEasing),
         label = "cardScale"
     )
 
@@ -758,17 +768,14 @@ fun AnimatedMenuItem(
 ) {
     // Smooth scale and alpha animation
     val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.92f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        targetValue = if (visible) 1f else 0.95f,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "itemScale"
     )
     
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(250, easing = FastOutSlowInEasing),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "itemAlpha"
     )
     
@@ -794,14 +801,14 @@ fun ModernMenuTileCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(150, easing = FastOutSlowInEasing),
         label = "tileScale"
     )
     
     val elevation by animateDpAsState(
         targetValue = if (isPressed) 2.dp else 0.dp,
-        animationSpec = tween(200),
+        animationSpec = tween(150),
         label = "tileElevation"
     )
 
@@ -892,12 +899,12 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                 enter = fadeIn(animationSpec = tween(300))
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val pulsateScale = pulsatingAnimation()
+                    val breathingScale = breathingAnimation()
                     
                     Box(
                         modifier = Modifier
                             .size(80.dp)
-                            .scale(pulsateScale)
+                            .scale(breathingScale)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
@@ -1488,49 +1495,39 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh),
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(150, easing = FastOutSlowInEasing),
         label = "resultScale"
     )
-    
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(50)
-        visible = true
-    }
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = tween(200))
+    Card(
+        onClick = { onTap(res) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale),
+        shape = ShapeMedium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (res.isWorking) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else 
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        interactionSource = interactionSource
     ) {
-        Card(
-            onClick = { onTap(res) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(scale),
-            shape = ShapeMedium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (res.isWorking) 
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                else 
-                    MaterialTheme.colorScheme.surfaceVariant
-            ),
-            interactionSource = interactionSource
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Animated success/error icon
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (res.isWorking) 
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            else 
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+            // Animated success/error icon
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (res.isWorking) 
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        else 
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1581,7 +1578,6 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
                 }
             }
         }
-    }
 }
 
 @Composable

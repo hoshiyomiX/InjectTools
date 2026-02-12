@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::process::Command;
 use tokio::net::TcpStream;
+use terminal_size;
 
 use crate::dns;
 
@@ -168,10 +169,16 @@ pub async fn test_target(target: &str, _timeout: u64, verbose: bool) -> anyhow::
 }
 
 pub async fn test_single(target: &str, subdomain: &str, _timeout: u64, verbose: bool) -> anyhow::Result<()> {
-    println!("\n{}", "==================== CHECKING ====================".blue());
+    let width = terminal_size::terminal_size()
+        .map(|(w, _)| w.0 as usize)
+        .unwrap_or(60);
+    
+    println!("\n{}", "═".repeat(width).blue());
+    println!("{}", format!("{:^1$}", "CHECKING", width).bold());
+    println!("{}", "═".repeat(width).blue());
     println!("Subdomain : {}", subdomain.yellow());
     println!("Target    : {}", target.cyan());
-    println!("------------------------------------------------");
+    println!("{}", "─".repeat(width).bright_black());
 
     // 1. Resolve Subdomain
     let sub_ip = match dns::resolve_domain_first(subdomain).await {
@@ -310,8 +317,14 @@ pub async fn test_single(target: &str, subdomain: &str, _timeout: u64, verbose: 
 }
 
 fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_status: &str, note: &str) {
+    let width = terminal_size::terminal_size()
+        .map(|(w, _)| w.0 as usize)
+        .unwrap_or(60);
+    
     println!("");
-    println!("{}", "==================== RESULT ====================".blue());
+    println!("{}", "═".repeat(width).blue());
+    println!("{}", format!("{:^1$}", "RESULT", width).bold());
+    println!("{}", "═".repeat(width).blue());
     
     let t_color = match t_status {
         "ONLINE" => "green",
@@ -325,7 +338,7 @@ fn print_report(target: &str, t_status: &str, subdomain: &str, ip: &str, b_statu
     println!("BUG   : {} -> {} | {}", subdomain, ip, b_status.color(b_color));
     
     println!("NOTE  : {}", note);
-    println!("{}", "================================================".blue());
+    println!("{}", "═".repeat(width).blue());
     println!("");
 }
 

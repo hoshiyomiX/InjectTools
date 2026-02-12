@@ -553,7 +553,11 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            shape = RoundedCornerShape(16.dp)
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))
@@ -640,7 +644,11 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            shape = RoundedCornerShape(16.dp)
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Icon(Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))

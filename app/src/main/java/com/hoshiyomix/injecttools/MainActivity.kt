@@ -114,30 +114,32 @@ val ShapeLarge = RoundedCornerShape(24.dp)
 val ShapeMedium = RoundedCornerShape(16.dp)
 val ShapeSmall = RoundedCornerShape(12.dp)
 
-// Animation specs - smooth and natural
-val smoothSpring = spring<Float>(
-    dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = Spring.StiffnessLow
-)
-val fastSpring = spring<Float>(
-    dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = Spring.StiffnessMedium
-)
-val bouncySpring = spring<Float>(
-    dampingRatio = 0.7f,
-    stiffness = Spring.StiffnessLow
-)
-val tweenSpec = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
+// Custom easing curves for ultra-smooth animations
+val SmoothEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)  // Smooth deceleration
+val EaseOutQuart = CubicBezierEasing(0.25f, 1.0f, 0.5f, 1.0f)   // Quick start, smooth end
+val EaseOutExpo = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)    // Dramatic ease out
+val EaseInOutQuart = CubicBezierEasing(0.76f, 0.0f, 0.24f, 1.0f) // Smooth both ends
 
-// Subtle breathing animation for logo
+// Animation specs with smooth interpolation
+val smoothTween = tween<Float>(durationMillis = 350, easing = SmoothEasing)
+val quickTween = tween<Float>(durationMillis = 200, easing = EaseOutQuart)
+val enterTween = tween<Float>(durationMillis = 400, easing = EaseOutExpo)
+
+// Smooth spring with natural physics
+val naturalSpring = spring<Float>(
+    dampingRatio = 0.8f,
+    stiffness = 300f
+)
+
+// Gentle breathing animation for logo with smooth sine wave
 @Composable
 fun breathingAnimation(): Float {
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.03f,
+        targetValue = 1.025f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
+            animation = tween(2500, easing = EaseInOutQuart),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
@@ -219,8 +221,8 @@ fun MainApp() {
         topBar = {
             AnimatedVisibility(
                 visible = currentScreen != Screen.MENU,
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(250))
+                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
+                exit = fadeOut(animationSpec = tween(200, easing = SmoothEasing))
             ) {
                 CenterAlignedTopAppBar(
                     title = {
@@ -250,7 +252,7 @@ fun MainApp() {
             // Smooth crossfade for screen transitions
             Crossfade(
                 targetState = currentScreen,
-                animationSpec = tween(250, easing = FastOutSlowInEasing),
+                animationSpec = tween(300, easing = EaseOutExpo),
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
@@ -403,8 +405,11 @@ fun AnimatedButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = tween(150, easing = FastOutSlowInEasing),
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 400f
+        ),
         label = "buttonScale"
     )
 
@@ -629,8 +634,11 @@ fun AnimatedCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = tween(150, easing = FastOutSlowInEasing),
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.7f,
+            stiffness = 500f
+        ),
         label = "cardScale"
     )
 
@@ -766,16 +774,19 @@ fun AnimatedMenuItem(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    // Smooth scale and alpha animation
+    // Smooth entrance with spring physics
     val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.95f,
-        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        targetValue = if (visible) 1f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = 0.65f,
+            stiffness = 250f
+        ),
         label = "itemScale"
     )
     
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        animationSpec = tween(300, easing = EaseOutQuart),
         label = "itemAlpha"
     )
     
@@ -801,14 +812,17 @@ fun ModernMenuTileCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = tween(150, easing = FastOutSlowInEasing),
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 400f
+        ),
         label = "tileScale"
     )
     
     val elevation by animateDpAsState(
-        targetValue = if (isPressed) 2.dp else 0.dp,
-        animationSpec = tween(150),
+        targetValue = if (isPressed) 3.dp else 0.dp,
+        animationSpec = tween(200, easing = EaseOutQuart),
         label = "tileElevation"
     )
 
@@ -885,7 +899,6 @@ fun ModernMenuTileCard(
 fun ResultHistoryScreen(history: List<ScanResult>) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(100)
         visible = true
     }
     
@@ -896,7 +909,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(animationSpec = tween(300))
+                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val breathingScale = breathingAnimation()
@@ -939,7 +952,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
             item {
                 AnimatedVisibility(
                     visible = visible,
-                    enter = fadeIn(animationSpec = tween(300))
+                    enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1016,7 +1029,6 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
     
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(100)
         visible = true
     }
 
@@ -1029,7 +1041,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300))
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1078,7 +1090,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Input Section with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300, delayMillis = 100))
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1151,7 +1163,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Results Section with animation
         AnimatedVisibility(
             visible = recentResults.isNotEmpty(),
-            enter = fadeIn(animationSpec = tween(300))
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Column {
                 Row(
@@ -1199,14 +1211,13 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(100)
         visible = true
     }
     
     // Animated progress
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        animationSpec = tween(350, easing = EaseOutQuart),
         label = "progressAnim"
     )
 
@@ -1218,7 +1229,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300))
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1267,7 +1278,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Input Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300, delayMillis = 100))
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1370,7 +1381,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Progress indicator with animation
         AnimatedVisibility(
             visible = isScanning,
-            enter = fadeIn(animationSpec = tween(300)),
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -1421,7 +1432,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Summary Card with animation
         AnimatedVisibility(
             visible = fetchSummary.isNotEmpty(),
-            enter = fadeIn(animationSpec = tween(300)),
+            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
             Card(
@@ -1495,8 +1506,11 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = tween(150, easing = FastOutSlowInEasing),
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 450f
+        ),
         label = "resultScale"
     )
 

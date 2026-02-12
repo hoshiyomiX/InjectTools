@@ -10,14 +10,14 @@ pub fn center_text(text: &str) {
     let width = terminal_size::terminal_size()
         .map(|(w, _)| w.0 as usize)
         .unwrap_or(60);
-    
+
     let text_len = text.len();
     let padding = if width > text_len {
         (width - text_len) / 2
     } else {
         0
     };
-    
+
     println!("{}{}", " ".repeat(padding), text.bold());
 }
 
@@ -25,7 +25,7 @@ pub fn print_header(title: &str) {
     let width = terminal_size::terminal_size()
         .map(|(w, _)| w.0 as usize)
         .unwrap_or(60);
-    
+
     println!("{}", "═".repeat(width).cyan());
     center_text(title);
     println!("{}", "═".repeat(width).cyan());
@@ -36,6 +36,42 @@ pub fn read_line() -> String {
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     input.trim().to_string()
+}
+
+pub fn read_line_with_clear() -> String {
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+
+    loop {
+        io::stdin().read_line(&mut input).unwrap();
+        let trimmed = input.trim();
+
+        if trimmed == "x" || trimmed == "X" {
+            return String::new();
+        }
+
+        return trimmed.to_string();
+    }
+}
+
+pub fn prompt_with_clear(prompt: &str) -> String {
+    print!("{} [x to clear]: ", prompt);
+    io::stdout().flush().unwrap();
+
+    loop {
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        let trimmed = input.trim();
+
+        if trimmed == "x" || trimmed == "X" {
+            print!("\r\x1B[K{} [x to clear]: ", prompt);
+            io::stdout().flush().unwrap();
+            input.clear();
+            continue;
+        }
+
+        return trimmed.to_string();
+    }
 }
 
 pub fn pause() {

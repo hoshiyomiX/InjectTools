@@ -57,6 +57,33 @@ struct TargetStatus {
     last_check: Instant,
 }
 
+// Track scanned domains for re-scan logic
+#[derive(Debug, Clone)]
+struct ScanHistory {
+    last_scanned_domain: String,
+    last_scan_time: Instant,
+}
+
+impl ScanHistory {
+    fn new() -> Self {
+        Self {
+            last_scanned_domain: String::new(),
+            last_scan_time: Instant::now() - Duration::from_secs(86400), // 24 hours ago
+        }
+    }
+    
+    fn should_rescan(&self, domain: &str) -> bool {
+        !self.last_scanned_domain.is_empty() 
+            && self.last_scanned_domain == domain 
+            && self.last_scan_time.elapsed() < Duration::from_secs(3600) // Within 1 hour
+    }
+    
+    fn update_scan(&mut self, domain: &str) {
+        self.last_scanned_domain = domain.to_string();
+        self.last_scan_time = Instant::now();
+    }
+}
+
 impl TargetStatus {
     fn new() -> Self {
         Self {
@@ -139,6 +166,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Target status cache
     let target_status = Arc::new(Mutex::new(TargetStatus::new()));
+    
+    // Scan history for re-scan logic
+    let scan_history = Arc::new(Mutex::new(ScanHistory::new()));
 
     // Interactive mode
     loop {
@@ -190,10 +220,10 @@ async fn main() -> anyhow::Result<()> {
         
         // Tiles Menu Layout
         println!("  ┌──────────────────────┐   ┌──────────────────────┐");
-        println!("  │ 1. Single Subdomain  │   │ 2. Crt.sh Discovery  │");
+        println!("  │ 1. Single Subdomain  │   │ 2. Scan & Test Subdomain  │");
         println!("  └──────────────────────┘   └──────────────────────┘");
         println!("  ┌──────────────────────┐   ┌──────────────────────┐");
-        println!("  │ 3. History Results   │   │ x. Exit App          │");
+        println!("  │ 3. Recent Results    │   │ x. Exit App          │");
         println!("  └──────────────────────┘   └──────────────────────┘");
         
         print!("\n{} ", "Menu >".bold());
@@ -208,8 +238,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 
                 ui::print_header("TEST SINGLE SUBDOMAIN");
-                print!("\nMasukkan subdomain: ");
-                let subdomain = ui::read_line();
+                let subdomain = ui::prompt_with_clear("\nMasukkan subdomain");
                 if !subdomain.is_empty() {
                     scanner::test_single(&config.target_host, &subdomain, args.timeout, args.verbose).await?;
                 }
@@ -223,13 +252,37 @@ async fn main() -> anyhow::Result<()> {
                 }
                 
                 ui::print_header("CRTSH SUBDOMAIN DISCOVERY");
-                print!("\nMasukkan domain (contoh: cloudflare.com): ");
-                let domain = ui::read_line();
+                let domain = ui::prompt_with_clear("\nMasukkan domain (contoh: cloudflare.com)");
                 if !domain.is_empty() {
-                    println!("\n{}", "📡 Fetching subdomains dari crt.sh...".cyan());
+                    // Check if should show "Re-scan" instead of "Scan"
+                    let should_rescan = {
+                        let history = scan_history.lock().unwrap();
+                        history.should_rescan(&domain)
+                    };
+                    
+                    if should_rescan {
+                        println!("\n{} {}", "🔄 Re-scanning domain:".cyan().bold(), domain.cyan());
+                    } else {
+                        println!("\n{}", "📡 Fetching subdomains dari crt.sh...".cyan());
+                    }
+                    
                     match crtsh::fetch_subdomains(&domain).await {
                         Ok(subdomains) => {
                             println!("{} {} subdomains ditemukan\n", "✓".green(), subdomains.len());
+                            
+                            // Display summary of fetched results
+                            println!("{}", "─".repeat(50).cyan());
+                            println!("{}", "CRT.SH FETCH SUMMARY".bold());
+                            println!("{}", "─".repeat(50).cyan());
+                            println!("{}: {}", "Domain".bright_black(), domain.cyan());
+                            println!("{}: {}", "Total Subdomains".bright_black(), subdomains.len().to_string().green());
+                            if !subdomains.is_empty() {
+                                println!("{}: {}", "Sample Subdomains".bright_black(), subdomains.iter().take(5).cloned().collect::<Vec<_>>().join(", ").yellow());
+                                if subdomains.len() > 5 {
+                                    println!("{}: ... and {} more", "Additional".bright_black(), (subdomains.len() - 5).to_string().yellow());
+                                }
+                            }
+                            println!("{}", "─".repeat(50).cyan());
                             
                             if subdomains.is_empty() {
                                 println!("{}", "Tidak ada subdomain ditemukan".yellow());
@@ -243,7 +296,11 @@ async fn main() -> anyhow::Result<()> {
                                     args.verbose,
                                 ).await?;
                                 
-                                results::export_results(&results, &domain)?;
+results::export_results(&results, &domain)?;
+                                
+                                // Update scan history after successful scan
+                                let mut history = scan_history.lock().unwrap();
+                                history.update_scan(&domain);
                             }
                         }
                         Err(e) => {
@@ -265,8 +322,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("\n{} {}", "Current target:".bright_black(), config.target_host.cyan());
                 }
                 
-                print!("\nMasukkan target host baru: ");
-                let target = ui::read_line();
+                let target = ui::prompt_with_clear("\nMasukkan target host baru");
                 
                 if !target.is_empty() {
                     // Test target connection

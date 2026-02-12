@@ -45,26 +45,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import com.hoshiyomix.injecttools.Scanner.ScanResult
-import java.io.BufferedReader
-import java.io.InputStreamReader
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-object Logger {
-    private val _logs = mutableStateListOf<String>()
-    val logs: List<String> get() = _logs
 
-    fun log(msg: String) {
-        _logs.add(msg)
-        if (_logs.size > 1000) {
-            _logs.removeAt(0)
-        }
-    }
-
-    fun clear() {
-        _logs.clear()
-    }
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +87,7 @@ fun dynamicColorScheme(): ColorScheme {
 }
 
 enum class Screen {
-    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS, VERBOSE_LOGS
+    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS
 }
 
 data class MenuTile(
@@ -124,30 +109,12 @@ fun MainApp() {
     var previousScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
     var scanHistory by remember { mutableStateOf(listOf<ScanResult>()) }
-    var isVerbose by remember { mutableStateOf(false) }
-    var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
 
-    LaunchedEffect(isVerbose) {
-        if (isVerbose) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val process = Runtime.getRuntime().exec("logcat -d -v time")
-                    val reader = BufferedReader(InputStreamReader(process.inputStream))
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        line?.let {
-                            if (it.contains("System.out") || it.contains("Rust")) {
-                                withContext(Dispatchers.Main) {
-                                    Logger.log(it)
-                                }
-                            }
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-            }
-        }
-    }
+    var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
+    var showNetworkWarningDialog by remember { mutableStateOf(false) }
+    var networkWarningMessage by remember { mutableStateOf("") }
+
+
 
     fun saveTargetHost(host: String) {
         targetHost = host
@@ -169,12 +136,7 @@ fun MainApp() {
     }
 
     fun navigateBack() {
-        if (currentScreen == Screen.VERBOSE_LOGS) {
-            currentScreen = previousScreen
-            if (currentScreen == Screen.VERBOSE_LOGS) {
-                currentScreen = Screen.MENU
-            }
-        } else if (currentScreen != Screen.MENU) {
+        if (currentScreen != Screen.MENU) {
             currentScreen = Screen.MENU
         }
     }
@@ -190,6 +152,38 @@ fun MainApp() {
         )
     }
 
+    // Network Warning Dialog
+    if (showNetworkWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showNetworkWarningDialog = false
+                networkWarningMessage = ""
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Network Connection Warning")
+                }
+            },
+            text = {
+                Text(networkWarningMessage, style = MaterialTheme.typography.bodyMedium)
+            },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        showNetworkWarningDialog = false
+                        networkWarningMessage = ""
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("OK")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     Scaffold(
         topBar = {
             if (currentScreen != Screen.MENU) {
@@ -199,8 +193,7 @@ fun MainApp() {
                             text = when (currentScreen) {
                                 Screen.SINGLE_TEST -> "Test Single Subdomain"
                                 Screen.CRTSH_TEST -> "Scan & Batch Test Subdomain"
-                                Screen.RESULTS -> "History Logs"
-                                Screen.VERBOSE_LOGS -> "Verbose Logs"
+                            Screen.RESULTS -> "History Logs"
                                 else -> ""
                             }
                         )
@@ -208,19 +201,6 @@ fun MainApp() {
                     navigationIcon = {
                         IconButton(onClick = { navigateBack() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        if (currentScreen != Screen.VERBOSE_LOGS) {
-                            IconButton(onClick = { navigateTo(Screen.VERBOSE_LOGS) }) {
-                                if (isVerbose) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                        Icon(Icons.Default.Terminal, contentDescription = "Logs")
-                                    }
-                                } else {
-                                    Icon(Icons.Default.Terminal, contentDescription = "Logs")
-                                }
-                            }
                         }
                     }
                 )
@@ -231,9 +211,7 @@ fun MainApp() {
             when (currentScreen) {
                 Screen.MENU -> MenuScreen(
                     targetHost = targetHost,
-                    isVerbose = isVerbose,
                     onUpdateHost = { saveTargetHost(it) },
-                    onToggleVerbose = { isVerbose = it },
                     onNavigate = { screen ->
                         if ((screen == Screen.SINGLE_TEST || screen == Screen.CRTSH_TEST) && targetHost.isBlank()) {
                             Toast.makeText(context, "⚠️ Set target host in header first!", Toast.LENGTH_SHORT).show()
@@ -242,10 +220,15 @@ fun MainApp() {
                         }
                     }
                 )
-                Screen.SINGLE_TEST -> ManualScanScreen(targetHost, isVerbose, onResult = { addResults(listOf(it)) })
-                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, isVerbose, onResults = { addResults(it) })
+                Screen.SINGLE_TEST -> ManualScanScreen(targetHost, onResult = { addResults(listOf(it)) }, onShowNetworkWarning = { message ->
+                    networkWarningMessage = message
+                    showNetworkWarningDialog = true
+                })
+                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) }, onShowNetworkWarning = { message ->
+                    networkWarningMessage = message
+                    showNetworkWarningDialog = true
+                })
                 Screen.RESULTS -> ResultHistoryScreen(scanHistory)
-                Screen.VERBOSE_LOGS -> VerboseLogScreen(onBack = { navigateBack() })
             }
         }
     }
@@ -319,9 +302,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
 @Composable
 fun MenuScreen(
     targetHost: String,
-    isVerbose: Boolean,
     onUpdateHost: (String) -> Unit,
-    onToggleVerbose: (Boolean) -> Unit,
     onNavigate: (Screen) -> Unit
 ) {
     val tiles = listOf(
@@ -398,26 +379,7 @@ fun MenuScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        onClick = { onToggleVerbose(!isVerbose) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                            Checkbox(checked = isVerbose, onCheckedChange = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(text = "Verbose Logs", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                Text(text = "Show stdout/stderr debug info", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
                 }
             }
 
@@ -427,7 +389,7 @@ fun MenuScreen(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.height(400.dp)
+                modifier = Modifier.height(480.dp)
             ) {
                 items(tiles) { tile ->
                     MenuTileCard(tile, enabled = !showHostDialog) {
@@ -516,7 +478,7 @@ fun MenuTileCard(tile: MenuTile, enabled: Boolean = true, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().height(140.dp),
+        modifier = Modifier.fillMaxWidth().height(180.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -567,19 +529,23 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
     }
 }
 
-fun checkNetworkAndConfirm(context: android.content.Context, onProceed: () -> Unit) {
+fun checkNetworkAndConfirm(
+    context: android.content.Context, 
+    onProceed: () -> Unit,
+    showWarningDialog: (String) -> Unit
+) {
     val status = NetworkUtils.checkNetworkStatus(context)
     when (status) {
         NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> onProceed()
-        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> Toast.makeText(context, "❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.", Toast.LENGTH_LONG).show()
-        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> Toast.makeText(context, "❌ BLOCKED: VPN is active! Please disable VPN before scanning.", Toast.LENGTH_LONG).show()
-        NetworkUtils.NetworkStatus.INTERNET_VPN -> Toast.makeText(context, "❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.", Toast.LENGTH_LONG).show()
-        NetworkUtils.NetworkStatus.DISCONNECTED -> Toast.makeText(context, "❌ No network connection. Connect to WiFi/Data first.", Toast.LENGTH_SHORT).show()
+        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("❌ BLOCKED: Regular internet detected! Disable WiFi/Data or use injection mode.")
+        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> showWarningDialog("❌ BLOCKED: VPN is active! Please disable VPN before scanning.")
+        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("❌ BLOCKED: VPN + Internet detected! Disable both VPN and regular connection.")
+        NetworkUtils.NetworkStatus.DISCONNECTED -> showWarningDialog("❌ No network connection. Connect to WiFi/Data first.")
     }
 }
 
 @Composable
-fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResult) -> Unit) {
+fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var subdomain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var recentResults by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
@@ -621,7 +587,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         Button(
             onClick = {
                 if (isScanning || subdomain.isBlank()) return@Button
-                checkNetworkAndConfirm(context) {
+                checkNetworkAndConfirm(context, {
                     isScanning = true
                     scope.launch {
                         val res = Scanner.testSingle(targetHost, subdomain.trim())
@@ -629,7 +595,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
                         onResult(res)
                         isScanning = false
                     }
-                }
+                }, onShowNetworkWarning)
             },
             enabled = !isScanning && subdomain.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -660,7 +626,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
 }
 
 @Composable
-fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<ScanResult>) -> Unit) {
+fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var domain by remember { mutableStateOf("") }
     var subdomains by remember { mutableStateOf(listOf<String>()) }
     var scanResults by remember { mutableStateOf(listOf<ScanResult>()) }
@@ -739,7 +705,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
             Button(
                 onClick = {
                     if (isScanning || subdomains.isEmpty()) return@Button
-                    checkNetworkAndConfirm(context) {
+                    checkNetworkAndConfirm(context, {
                         isScanning = true
                         scanResults = emptyList()
                         scope.launch {
@@ -754,7 +720,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                             onResults(tempResults)
                             isScanning = false
                         }
-                    }
+                    }, onShowNetworkWarning)
                 },
                 enabled = !isScanning && subdomains.isNotEmpty(),
                 modifier = Modifier.weight(1f).height(56.dp),
@@ -853,38 +819,4 @@ fun ResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     }
 }
 
-@Composable
-fun VerboseLogScreen(onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(16.dp)) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.Close, contentDescription = "Close") }
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text("Verbose Logs", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("${Logger.logs.size} entries")
-                }
-            }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Card(modifier = Modifier.fillMaxSize().weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)), shape = RoundedCornerShape(16.dp)) {
-            SelectionContainer {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                    items(Logger.logs) { log ->
-                        Text(text = log, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 16.sp)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Button(onClick = { Logger.clear() }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(12.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Clear Logs")
-        }
-    }
-}

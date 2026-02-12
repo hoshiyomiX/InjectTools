@@ -669,6 +669,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     var progress by remember { mutableStateOf(0f) }
     var lastFetchedDomain by remember { mutableStateOf("") }
     var fetchSummary by remember { mutableStateOf("") }
+    var showBackWarningDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -722,7 +723,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                         isFetching = false
                     }
                 },
-                enabled = !isFetching && !isScanning && domain.isNotBlank(),
+                enabled = !isFetching && !isScanning && domain.isNotBlank() && !(subdomains.isNotEmpty() && lastFetchedDomain == domain.trim()),
                 modifier = Modifier.weight(1f).height(56.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -787,6 +788,37 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
         LazyColumn {
             items(scanResults.take(20).filter { it.isWorking }) { res -> ResultItem(res, onTap = {}) }
         }
+    }
+
+    // Back handler with warning dialog
+    BackHandler(enabled = isFetching || isScanning) {
+        showBackWarningDialog = true
+    }
+
+    // Warning dialog for back navigation during operations
+    if (showBackWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackWarningDialog = false },
+            title = { Text("Operation in Progress") },
+            text = { Text("Fetch or scan is still running. Going back will cancel the current operation. Continue?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showBackWarningDialog = false
+                        isFetching = false
+                        isScanning = false
+                    }
+                ) {
+                    Text("Yes, Go Back")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackWarningDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 }
 

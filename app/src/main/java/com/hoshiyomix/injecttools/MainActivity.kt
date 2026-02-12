@@ -284,98 +284,97 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
 
     Dialog(onDismissRequest = {}) {
         Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ShapeExtraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 6.dp
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Animated icon with pulsating effect
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .scale(pulsateScale)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        MaterialTheme.colorScheme.tertiaryContainer
-                                    )
+                // Animated icon with pulsating effect
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .scale(pulsateScale)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.tertiaryContainer
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.RocketLaunch,
-                            contentDescription = null,
-                            modifier = Modifier.size(36.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        "Welcome to InjectTools",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.RocketLaunch,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    Text(
-                        "Set your injection target domain to get started",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                Text(
+                    "Welcome to InjectTools",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Set your injection target domain to get started",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                OutlinedTextField(
+                    value = hostInput,
+                    onValueChange = { hostInput = it },
+                    label = { Text("Target Domain Host") },
+                    placeholder = { Text("sg.server.web.id") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (hostInput.isNotBlank()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm(hostInput)
+                        }
+                    }),
+                    shape = ShapeMedium,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                     )
+                )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    OutlinedTextField(
-                        value = hostInput,
-                        onValueChange = { hostInput = it },
-                        label = { Text("Target Domain Host") },
-                        placeholder = { Text("sg.server.web.id") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            if (hostInput.isNotBlank()) {
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                                onConfirm(hostInput)
-                            }
-                        }),
-                        shape = ShapeMedium,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    AnimatedButton(
-                        onClick = {
-                            if (hostInput.isNotBlank()) {
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                                onConfirm(hostInput)
-                            }
-                        },
-                        enabled = hostInput.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Icon(Icons.Default.ArrowForward, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Get Started", style = MaterialTheme.typography.labelLarge)
-                    }
+                AnimatedButton(
+                    onClick = {
+                        if (hostInput.isNotBlank()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onConfirm(hostInput)
+                        }
+                    },
+                    enabled = hostInput.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Get Started", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }

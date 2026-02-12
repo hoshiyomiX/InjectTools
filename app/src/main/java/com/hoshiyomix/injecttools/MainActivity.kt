@@ -155,8 +155,9 @@ fun MainApp() {
     }
 
     fun addResults(newResults: List<ScanResult>) {
-        // Keep only latest 10 results, newest on top
-        val combined = (newResults + scanHistory).take(10)
+        // Keep only latest 20 results, newest on top, success only
+        val successResults = newResults.filter { it.isWorking }
+        val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
         scanHistory = combined
     }
 
@@ -325,7 +326,7 @@ fun MenuScreen(
 ) {
     val tiles = listOf(
         MenuTile(1, "Test Single Subdomain", "Test single bug subdomain", Icons.Default.Search, Pair(Color(0xFF667EEA), Color(0xFF764BA2)), Screen.SINGLE_TEST),
-        MenuTile(2, "Scan & Test Subdomain", "Auto-discover & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
+        MenuTile(2, "Scan & Test Subdomain", "Discover subdomains from crt.sh & test", Icons.Default.AccountTree, Pair(Color(0xFFF093FB), Color(0xFFF5576C)), Screen.CRTSH_TEST),
         MenuTile(3, "History Logs", "View scan history", Icons.Default.List, Pair(Color(0xFF4FACFE), Color(0xFF00F2FE)), Screen.RESULTS)
     )
 
@@ -554,14 +555,14 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                         Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("History Logs (Latest 10)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text("${history.size} results", style = MaterialTheme.typography.bodyMedium)
+                            Text("Recent Result (Latest 20)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("${history.size} successful results", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            items(history) { res -> ResultItem(res, onTap = {}) }
+            items(history.take(20)) { res -> ResultItem(res, onTap = {}) }
         }
     }
 }
@@ -648,7 +649,7 @@ fun ManualScanScreen(targetHost: String, isVerbose: Boolean, onResult: (ScanResu
         Spacer(modifier = Modifier.height(24.dp))
 
         if (recentResults.isNotEmpty()) {
-            Text("Recent Results", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Recent Result", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             recentResults.take(10).forEach { result ->
                 ResultItem(result, onTap = { subdomain = result.subdomain })
@@ -666,6 +667,8 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
     var isFetching by remember { mutableStateOf(false) }
     var isScanning by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
+    var lastFetchedDomain by remember { mutableStateOf("") }
+    var fetchSummary by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -687,6 +690,13 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
             label = { Text("Domain") },
             placeholder = { Text("cloudflare.com") },
             leadingIcon = { Icon(Icons.Default.Language, contentDescription = null) },
+            trailingIcon = {
+                if (domain.isNotBlank()) {
+                    IconButton(onClick = { domain = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
@@ -699,11 +709,15 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
                 onClick = {
                     isFetching = true
                     scanResults = emptyList()
+                    fetchSummary = ""
                     scope.launch {
                         try {
                             subdomains = Crtsh.fetchSubdomains(domain.trim())
+                            lastFetchedDomain = domain.trim()
+                            fetchSummary = "Found ${subdomains.size} subdomains from crt.sh for $domain"
                         } catch (e: Exception) {
                             subdomains = emptyList()
+                            fetchSummary = "Failed to fetch subdomains: ${e.message}"
                         }
                         isFetching = false
                     }
@@ -747,7 +761,7 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(if (isScanning) "Scanning" else "Scan All")
+                Text(if (isScanning) "Scanning" else if (scanResults.isNotEmpty() && lastFetchedDomain == domain.trim()) "Re-scan" else "Scan All")
             }
         }
 
@@ -759,8 +773,19 @@ fun CrtshScanScreen(targetHost: String, isVerbose: Boolean, onResults: (List<Sca
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        if (fetchSummary.isNotEmpty()) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), shape = RoundedCornerShape(12.dp)) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = fetchSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
         LazyColumn {
-            items(scanResults.take(10)) { res -> ResultItem(res, onTap = {}) }
+            items(scanResults.take(20).filter { it.isWorking }) { res -> ResultItem(res, onTap = {}) }
         }
     }
 }

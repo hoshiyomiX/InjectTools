@@ -914,6 +914,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             statusText = "Complete! ${scanResults.count { it.isWorking }} working bugs found"
             progress = 1f
             isScanning = false
+            // Clear pending after successful test
+            pendingSubdomains = emptyList()
         }
     }
 
@@ -1034,6 +1036,92 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             )
         }
 
+        // Pending Subdomains Card - Show retry option when subdomains are fetched but not tested yet
+        if (pendingSubdomains.isNotEmpty() && !isScanning && !isFetching && results.isEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ShapeLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.HourglassTop,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "${pendingSubdomains.size} Subdomains Ready",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                "Switch to injection mode, then tap retry",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                // User explicitly cancels - clear pending
+                                pendingSubdomains = emptyList()
+                                statusText = ""
+                                progress = 0f
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = ShapeMedium
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Cancel")
+                        }
+                        Button(
+                            onClick = {
+                                // Check injection mode and start testing
+                                checkNetworkAndConfirm(context, {
+                                    startTesting(pendingSubdomains)
+                                }, onShowNetworkWarning)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = ShapeMedium
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Retry Test")
+                        }
+                    }
+                }
+            }
+        }
+
         // Results
         if (results.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
@@ -1072,15 +1160,21 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             onConfirm = {
                 showTestConfirmDialog = false
                 // STEP 4: Check injection mode conditions before testing
+                // Note: If network check fails, pendingSubdomains is preserved so user can retry
                 checkNetworkAndConfirm(context, {
                     startTesting(pendingSubdomains)
                 }, onShowNetworkWarning)
             },
-            onDismiss = {
+            onCancel = {
+                // User explicitly cancels - clear everything
                 showTestConfirmDialog = false
                 pendingSubdomains = emptyList()
                 statusText = ""
                 progress = 0f
+            },
+            onDismiss = {
+                // User taps outside dialog - just close, keep pendingSubdomains for retry
+                showTestConfirmDialog = false
             }
         )
     }
@@ -1094,6 +1188,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
 fun TestConfirmationDialog(
     subdomainCount: Int,
     onConfirm: () -> Unit,
+    onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -1145,7 +1240,7 @@ fun TestConfirmationDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDismiss,
+                        onClick = onCancel,
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp),

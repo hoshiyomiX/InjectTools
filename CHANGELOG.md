@@ -2,6 +2,27 @@
 
 All notable changes to InjectTools will be documented in this file.
 
+## [1.2.2] - 2026-02-13
+
+### Fixed
+- **Retry Without Re-fetch**: User no longer needs to re-fetch from crt.sh after network validation fails
+  - Added "Pending Subdomains Card" with retry button when subdomains are fetched but not tested
+  - Split dialog callbacks: `onCancel` (clear data) vs `onDismiss` (preserve data)
+  - `pendingSubdomains` now preserved when network check fails during testing phase
+
+### Added
+- New `Pending Subdomains Card` UI component showing:
+  - Count of fetched subdomains ready for testing
+  - Reminder to switch to injection mode
+  - "Retry Test" button to attempt testing again
+  - "Cancel" button to discard fetched data
+
+### Technical
+- `TestConfirmationDialog` now has 3 callbacks: `onConfirm`, `onCancel`, `onDismiss`
+- Clear pending subdomains only after successful test or explicit user cancel
+
+---
+
 ## [1.2.1] - 2026-02-13
 
 ### Fixed

@@ -164,7 +164,7 @@ fun breathingAnimation(): Float {
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetedValue = 1.015f,
+        targetValue = 1.015f,
         animationSpec = infiniteRepeatable(
             animation = tween(3500, easing = IOSStandard),
             repeatMode = RepeatMode.Reverse
@@ -308,29 +308,37 @@ fun MainApp() {
                     // Slide + fade for forward navigation
                     if (targetState != Screen.MENU && initialState == Screen.MENU) {
                         // Going into a screen
-                        slideInHorizontally(
-                            animationSpec = tween(400, easing = MaterialEmphasized),
-                            initialOffsetX = { it / 3 }
-                        ) + fadeIn(
-                            animationSpec = tween(350, easing = IOSDecelerate)
-                        ) togetherWith slideOutHorizontally(
-                            animationSpec = tween(350, easing = MaterialEmphasizedAccelerate),
-                            targetOffsetX = { -it / 4 }
-                        ) + fadeOut(
-                            animationSpec = tween(200, easing = IOSAccelerate)
+                        (
+                            slideInHorizontally(
+                                animationSpec = tween(400, easing = MaterialEmphasized),
+                                initialOffsetX = { it / 3 }
+                            ) + fadeIn(
+                                animationSpec = tween(350, easing = IOSDecelerate)
+                            )
+                        ) togetherWith (
+                            slideOutHorizontally(
+                                animationSpec = tween(350, easing = MaterialEmphasizedAccelerate),
+                                targetOffsetX = { -it / 4 }
+                            ) + fadeOut(
+                                animationSpec = tween(200, easing = IOSAccelerate)
+                            )
                         )
                     } else {
                         // Going back to menu
-                        slideInHorizontally(
-                            animationSpec = tween(350, easing = MaterialEmphasized),
-                            initialOffsetX = { -it / 4 }
-                        ) + fadeIn(
-                            animationSpec = tween(300, easing = IOSDecelerate)
-                        ) togetherWith slideOutHorizontally(
-                            animationSpec = tween(400, easing = MaterialEmphasizedAccelerate),
-                            targetOffsetX = { it / 3 }
-                        ) + fadeOut(
-                            animationSpec = tween(250, easing = IOSAccelerate)
+                        (
+                            slideInHorizontally(
+                                animationSpec = tween(350, easing = MaterialEmphasized),
+                                initialOffsetX = { -it / 4 }
+                            ) + fadeIn(
+                                animationSpec = tween(300, easing = IOSDecelerate)
+                            )
+                        ) togetherWith (
+                            slideOutHorizontally(
+                                animationSpec = tween(400, easing = MaterialEmphasizedAccelerate),
+                                targetOffsetX = { it / 3 }
+                            ) + fadeOut(
+                                animationSpec = tween(250, easing = IOSAccelerate)
+                            )
                         )
                     }
                 },

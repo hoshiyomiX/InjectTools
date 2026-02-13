@@ -103,7 +103,11 @@ fun MainApp() {
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
     // Load history from SharedPreferences on app start (persists across app restarts)
-    var scanHistory by remember { mutableStateOf(Scanner.loadHistory(prefs)) }
+    var scanHistory by remember { 
+        mutableStateOf(Scanner.loadHistory(prefs).also { 
+            android.util.Log.d("InjectTools", "Loaded ${it.size} history items on start")
+        }) 
+    }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
     var showNetworkWarningDialog by remember { mutableStateOf(false) }
@@ -118,8 +122,9 @@ fun MainApp() {
         val successResults = newResults.filter { it.isWorking }
         val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
         scanHistory = combined
-        // Persist history to SharedPreferences
-        Scanner.saveHistory(prefs, combined)
+        // Persist history to SharedPreferences (synchronous save)
+        val saved = Scanner.saveHistory(prefs, combined)
+        android.util.Log.d("InjectTools", "Saved ${combined.size} items to history: $saved")
     }
 
     fun navigateTo(screen: Screen) {
@@ -745,12 +750,14 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                     )
                 ) {
                     Row(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(56.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -758,6 +765,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                             Icon(
                                 Icons.Default.List,
                                 contentDescription = null,
+                                modifier = Modifier.size(28.dp),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
@@ -765,12 +773,13 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                         Column {
                             Text(
                                 "Recent Results",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 "${history.size} successful scans",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

@@ -34,12 +34,18 @@ object Scanner {
 
     /**
      * Save scan history to SharedPreferences
+     * Uses commit() for synchronous save to ensure data persists even if app is closed quickly
      * @param prefs SharedPreferences instance
      * @param history List of ScanResult to save (max 20 items)
      */
-    fun saveHistory(prefs: SharedPreferences, history: List<ScanResult>) {
-        val json = gson.toJson(history)
-        prefs.edit().putString(PREFS_KEY_HISTORY, json).apply()
+    fun saveHistory(prefs: SharedPreferences, history: List<ScanResult>): Boolean {
+        return try {
+            val json = gson.toJson(history)
+            prefs.edit().putString(PREFS_KEY_HISTORY, json).commit()
+        } catch (e: Exception) {
+            android.util.Log.e("Scanner", "Failed to save history: ${e.message}")
+            false
+        }
     }
 
     /**
@@ -48,11 +54,18 @@ object Scanner {
      * @return List of ScanResult (empty if not found or error)
      */
     fun loadHistory(prefs: SharedPreferences): List<ScanResult> {
-        val json = prefs.getString(PREFS_KEY_HISTORY, null) ?: return emptyList()
+        val json = prefs.getString(PREFS_KEY_HISTORY, null)
+        if (json == null) {
+            android.util.Log.d("Scanner", "No saved history found")
+            return emptyList()
+        }
         return try {
             val type = object : TypeToken<List<ScanResult>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
+            val result: List<ScanResult> = gson.fromJson(json, type) ?: emptyList()
+            android.util.Log.d("Scanner", "Loaded ${result.size} history items")
+            result
         } catch (e: Exception) {
+            android.util.Log.e("Scanner", "Failed to load history: ${e.message}")
             emptyList()
         }
     }

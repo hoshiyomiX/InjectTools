@@ -2,6 +2,16 @@
 
 All notable changes to InjectTools will be documented in this file.
 
+## [1.2.4] - 2026-02-13
+
+### Fixed
+- **HostEditDialog Button Style**: Unified Save button style across all dialogs
+  - Changed from `FilledTonalButton` to `Button` for consistency
+  - Removed check icon (✓) from Save button text
+  - Now matches style of other confirm buttons in the app
+
+---
+
 ## [1.2.3] - 2026-02-13
 
 ### Added

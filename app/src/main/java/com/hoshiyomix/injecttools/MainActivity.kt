@@ -587,19 +587,17 @@ fun HostEditDialog(
                     ) {
                         Text("Cancel")
                     }
-                    FilledTonalButton(
-                        onClick = { 
+                    Button(
+                        onClick = {
                             keyboardController?.hide()
                             focusManager.clearFocus()
-                            onConfirm() 
+                            onConfirm()
                         },
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp),
                         shape = ShapeLarge
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("Save")
                     }
                 }

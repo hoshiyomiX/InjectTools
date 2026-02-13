@@ -99,10 +99,11 @@ val ShapeSmall = RoundedCornerShape(12.dp)
 fun MainApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("InjectToolsPrefs", Context.MODE_PRIVATE) }
-    
+
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
-    var scanHistory by remember { mutableStateOf(listOf<ScanResult>()) }
+    // Load history from SharedPreferences on app start (persists across app restarts)
+    var scanHistory by remember { mutableStateOf(Scanner.loadHistory(prefs)) }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
     var showNetworkWarningDialog by remember { mutableStateOf(false) }
@@ -117,6 +118,8 @@ fun MainApp() {
         val successResults = newResults.filter { it.isWorking }
         val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
         scanHistory = combined
+        // Persist history to SharedPreferences
+        Scanner.saveHistory(prefs, combined)
     }
 
     fun navigateTo(screen: Screen) {

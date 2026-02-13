@@ -2,6 +2,21 @@
 
 All notable changes to InjectTools will be documented in this file.
 
+## [1.2.5] - 2026-02-13
+
+### Fixed
+- **Scan History Persistence**: History no longer cleared when app is closed
+  - Added SharedPreferences persistence for scan history
+  - History now survives app restarts and device reboots
+  - Max 20 items stored to prevent storage bloat
+
+### Technical
+- Added `Scanner.saveHistory()` and `Scanner.loadHistory()` helper functions
+- Using Gson for JSON serialization of ScanResult list
+- History automatically loaded on app start
+
+---
+
 ## [1.2.4] - 2026-02-13
 
 ### Fixed

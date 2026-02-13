@@ -1,5 +1,8 @@
 package com.hoshiyomix.injecttools
 
+import android.content.SharedPreferences
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -23,6 +26,43 @@ object Scanner {
         val isCloudflare: Boolean,
         val errorMsg: String? = null
     )
+
+    // Gson instance for serialization
+    private val gson = Gson()
+    private const val PREFS_KEY_HISTORY = "scan_history"
+
+    /**
+     * Save scan history to SharedPreferences
+     * @param prefs SharedPreferences instance
+     * @param history List of ScanResult to save (max 20 items)
+     */
+    fun saveHistory(prefs: SharedPreferences, history: List<ScanResult>) {
+        val json = gson.toJson(history)
+        prefs.edit().putString(PREFS_KEY_HISTORY, json).apply()
+    }
+
+    /**
+     * Load scan history from SharedPreferences
+     * @param prefs SharedPreferences instance
+     * @return List of ScanResult (empty if not found or error)
+     */
+    fun loadHistory(prefs: SharedPreferences): List<ScanResult> {
+        val json = prefs.getString(PREFS_KEY_HISTORY, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<ScanResult>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Clear scan history from SharedPreferences
+     * @param prefs SharedPreferences instance
+     */
+    fun clearHistory(prefs: SharedPreferences) {
+        prefs.edit().remove(PREFS_KEY_HISTORY).apply()
+    }
 
     private val CLOUDFLARE_RANGES = listOf(
         "173.245.48.0/20",

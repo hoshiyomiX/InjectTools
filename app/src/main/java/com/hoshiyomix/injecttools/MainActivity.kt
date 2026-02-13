@@ -895,7 +895,10 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
             )
             Spacer(modifier = Modifier.height(12.dp))
             recentResults.first().let { res ->
-                ResultItem(res, onTap = {})
+                ResultItem(res, onTap = { scanResult ->
+                    // Tap to paste subdomain to input box
+                    subdomain = scanResult.subdomain
+                })
             }
         }
     }
@@ -927,13 +930,14 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             subdomains.forEachIndexed { index, sub ->
                 val result = Scanner.testSingle(targetHost, sub)
                 scanResults.add(result)
+                // Real-time update: show results as they come in
+                results = scanResults.toList()
+                onResults(scanResults.toList())
                 // Test phase: 10% - 100%
                 progress = 0.1f + (0.9f * (index + 1) / subdomains.size)
-                statusText = "Testing ${index + 1}/${subdomains.size}: $sub"
+                statusText = "Testing ${index + 1}/${subdomains.size}: $sub (${scanResults.count { it.isWorking }} working)"
             }
             
-            results = scanResults
-            onResults(scanResults)
             statusText = "Complete! ${scanResults.count { it.isWorking }} working bugs found"
             progress = 1f
             isScanning = false

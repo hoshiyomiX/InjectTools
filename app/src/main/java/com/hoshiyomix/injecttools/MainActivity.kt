@@ -205,7 +205,7 @@ fun MainApp() {
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
                 })
-                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) }, onShowNetworkWarning = { message ->
+                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) }, onNavigateToHistory = { currentScreen = Screen.RESULTS }, onShowNetworkWarning = { message ->
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
                 })
@@ -295,6 +295,13 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                         }
                     }),
                     shape = ShapeMedium,
+                    trailingIcon = {
+                        if (hostInput.isNotEmpty()) {
+                            IconButton(onClick = { hostInput = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
@@ -303,7 +310,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                FilledTonalButton(
+                Button(
                     onClick = {
                         if (hostInput.isNotBlank()) {
                             keyboardController?.hide()
@@ -381,7 +388,7 @@ fun MenuScreen(
                     )
 
                     Text(
-                        text = "v1.2.0",
+                        text = "v1.2.6",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -572,6 +579,13 @@ fun HostEditDialog(
                     shape = ShapeMedium,
                     leadingIcon = {
                         Icon(Icons.Outlined.Dns, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (currentHost.isNotEmpty()) {
+                            IconButton(onClick = { onHostChange("") }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
                     }
                 )
 
@@ -827,6 +841,13 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     leadingIcon = {
                         Icon(Icons.Outlined.Language, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (subdomain.isNotEmpty()) {
+                            IconButton(onClick = { subdomain = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
                     }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -882,7 +903,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onShowNetworkWarning: (String) -> Unit) {
+fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onNavigateToHistory: () -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var domain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var isFetching by remember { mutableStateOf(false) }
@@ -959,6 +980,13 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     leadingIcon = {
                         Icon(Icons.Outlined.Public, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (domain.isNotEmpty()) {
+                            IconButton(onClick = { domain = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
                     }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -1134,6 +1162,10 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Results
         if (results.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
+            val workingResults = results.filter { it.isWorking }
+            val maxDisplay = 5
+            val hasMore = workingResults.size > maxDisplay
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1145,7 +1177,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "${results.count { it.isWorking }} working",
+                    "${workingResults.size} working",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1153,10 +1185,27 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             Spacer(modifier = Modifier.height(12.dp))
             
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f, fill = false)
             ) {
-                items(results.filter { it.isWorking }) { res ->
+                items(workingResults.take(maxDisplay)) { res ->
                     ResultItem(res, onTap = {})
+                }
+                
+                // Show "View All in History" button if more than maxDisplay
+                if (hasMore) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onNavigateToHistory,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = ShapeMedium
+                        ) {
+                            Icon(Icons.Default.History, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("View All ${workingResults.size} Results in History")
+                        }
+                    }
                 }
             }
         }
@@ -1321,6 +1370,15 @@ fun ResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
+                // Show target host if available
+                if (res.targetHost.isNotEmpty() && res.isWorking) {
+                    Text(
+                        "→ ${res.targetHost}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
+                    )
+                }
                 Text(
                     if (res.isWorking) "${res.ip} ${if (res.isCloudflare) "CF" else ""}"
                     else res.errorMsg ?: "Failed",

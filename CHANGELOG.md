@@ -2,6 +2,37 @@
 
 All notable changes to InjectTools will be documented in this file.
 
+## [1.2.6] - 2026-02-13
+
+### Added
+- **Clear Input Button**: Added clear (X) button to all input fields
+  - FirstRunDialog: Target Domain Host input
+  - HostEditDialog: Domain Host input
+  - ManualScanScreen: Subdomain input
+  - CrtshScanScreen: Domain input for batch scan
+
+### Changed
+- **Button Style Consistency**: "Get Started" button now uses `Button` instead of `FilledTonalButton`
+  - Matches style of other action buttons throughout the app
+  - Consistent primary color appearance
+
+### Fixed
+- **Result Display**: Scan result now shows the target host used during scan
+  - Added `targetHost` field to `ScanResult` data class
+  - Result item displays: subdomain → target host → IP
+
+### Added
+- **History Shortcut**: In Batch Scan, when working results exceed 5 items
+  - Shows "View All X Results in History" button
+  - Quick navigation to History screen
+
+### Technical
+- `ScanResult` data class now includes `targetHost: String` parameter
+- `CrtshScanScreen` has new `onNavigateToHistory` callback
+- Maximum 5 results shown inline in Batch Scan screen
+
+---
+
 ## [1.2.5] - 2026-02-13
 
 ### Fixed

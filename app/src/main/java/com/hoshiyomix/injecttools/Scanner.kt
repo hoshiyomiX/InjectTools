@@ -24,7 +24,8 @@ object Scanner {
         val ip: String,
         val isWorking: Boolean,
         val isCloudflare: Boolean,
-        val errorMsg: String? = null
+        val errorMsg: String? = null,
+        val targetHost: String = "" // Target host yang digunakan saat scan
     )
 
     // Gson instance for serialization
@@ -143,22 +144,22 @@ object Scanner {
             val ipv4 = allIps.firstOrNull { it is Inet4Address }
             
             if (ipv4 == null) {
-                return@withContext ScanResult(subdomain, "", false, false, "No IPv4 address")
+                return@withContext ScanResult(subdomain, "", false, false, "No IPv4 address", target)
             }
             
-            ip = ipv4.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "Invalid IP")
+            ip = ipv4.hostAddress ?: return@withContext ScanResult(subdomain, "", false, false, "Invalid IP", target)
 
             // 2. Environment Checks
             if (isFakeDnsIp(ip)) {
-                return@withContext ScanResult(subdomain, ip, false, false, "Fake DNS (VPN Active)")
+                return@withContext ScanResult(subdomain, ip, false, false, "Fake DNS (VPN Active)", target)
             }
             if (isPrivateIp(ip)) {
-                return@withContext ScanResult(subdomain, ip, false, false, "Private IP")
+                return@withContext ScanResult(subdomain, ip, false, false, "Private IP", target)
             }
             
             isCf = isCloudflareIp(ip)
             if (!isCf) {
-                return@withContext ScanResult(subdomain, ip, false, false, "Not Cloudflare IP")
+                return@withContext ScanResult(subdomain, ip, false, false, "Not Cloudflare IP", target)
             }
 
             // 3. Latency Check
@@ -167,12 +168,12 @@ object Scanner {
             try {
                 socket.connect(InetSocketAddress(ip, 443), 2000)
             } catch (e: Exception) {
-                return@withContext ScanResult(subdomain, ip, false, isCf, "TCP Port 443 Blocked")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "TCP Port 443 Blocked", target)
             }
             val latency = System.currentTimeMillis() - start
             if (latency < 5) {
                 socket.close()
-                return@withContext ScanResult(subdomain, ip, false, isCf, "VPN Interception (<5ms)")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "VPN Interception (<5ms)", target)
             }
 
             // 4. SSL Handshake & HTTP Check
@@ -216,16 +217,16 @@ object Scanner {
             if (hasCfRay) {
                 // Reject Cloudflare Errors
                 if (responseCode == "530" || responseCode.startsWith("52")) {
-                    return@withContext ScanResult(subdomain, ip, false, isCf, "Domain Host Offline (HTTP $responseCode)")
+                    return@withContext ScanResult(subdomain, ip, false, isCf, "Domain Host Offline (HTTP $responseCode)", target)
                 }
 
-                return@withContext ScanResult(subdomain, ip, true, isCf)
+                return@withContext ScanResult(subdomain, ip, true, isCf, targetHost = target)
             } else {
-                return@withContext ScanResult(subdomain, ip, false, isCf, "No CF-Ray (Incompatible)")
+                return@withContext ScanResult(subdomain, ip, false, isCf, "No CF-Ray (Incompatible)", target)
             }
 
         } catch (e: Exception) {
-            return@withContext ScanResult(subdomain, ip, false, isCf, e.message ?: "Unknown Error")
+            return@withContext ScanResult(subdomain, ip, false, isCf, e.message ?: "Unknown Error", target)
         }
     }
 }

@@ -1572,7 +1572,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = { animatedProgress },
+                        progress = animatedProgress,
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                         trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)

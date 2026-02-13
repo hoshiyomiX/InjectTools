@@ -114,37 +114,142 @@ val ShapeLarge = RoundedCornerShape(24.dp)
 val ShapeMedium = RoundedCornerShape(16.dp)
 val ShapeSmall = RoundedCornerShape(12.dp)
 
-// Custom easing curves for ultra-smooth animations
-val SmoothEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)  // Smooth deceleration
-val EaseOutQuart = CubicBezierEasing(0.25f, 1.0f, 0.5f, 1.0f)   // Quick start, smooth end
-val EaseOutExpo = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)    // Dramatic ease out
-val EaseInOutQuart = CubicBezierEasing(0.76f, 0.0f, 0.24f, 1.0f) // Smooth both ends
+// ============================================
+// PROFESSIONAL ANIMATION SYSTEM
+// Based on Material Motion & iOS Animation Principles
+// ============================================
 
-// Animation specs with smooth interpolation
-val smoothTween = tween<Float>(durationMillis = 350, easing = SmoothEasing)
-val quickTween = tween<Float>(durationMillis = 200, easing = EaseOutQuart)
-val enterTween = tween<Float>(durationMillis = 400, easing = EaseOutExpo)
+// Standard Material Motion Easing Curves
+// These provide natural, physics-based motion that feels smooth
+val FastOutSlowIn = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)      // Standard deceleration
+val LinearOutSlowIn = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)    // For entering elements
+val FastOutLinearIn = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)    // For exiting elements
 
-// Smooth spring with natural physics
-val naturalSpring = spring<Float>(
-    dampingRatio = 0.8f,
+// Premium easing curves for special effects
+val EaseOutBack = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1.0f)     // Slight overshoot for pop effect
+val EaseOutCubic = CubicBezierEasing(0.33f, 1.0f, 0.68f, 1.0f)     // Smooth deceleration
+val EaseInOutCubic = CubicBezierEasing(0.65f, 0.0f, 0.35f, 1.0f)   // Smooth both ends
+
+// Animation Duration Constants (Material Design standard)
+const val DURATION_QUICK = 150
+const val DURATION_MEDIUM = 300
+const val DURATION_SLOW = 500
+const val DURATION_ENTER = 350
+
+// Slide transition distances
+val SlideDistance = 30.dp
+
+// Premium Spring Specs for different use cases
+val BouncySpring = spring<Float>(
+    dampingRatio = 0.6f,
+    stiffness = 400f
+)
+
+val SmoothSpring = spring<Float>(
+    dampingRatio = 0.85f,
     stiffness = 300f
 )
 
-// Gentle breathing animation for logo with smooth sine wave
+val SnappySpring = spring<Float>(
+    dampingRatio = 0.9f,
+    stiffness = 500f
+)
+
+// Enter transitions with slide + fade
+fun slideInVertically(): EnterTransition {
+    return androidx.compose.animation.slideInVertically(
+        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn),
+        initialOffsetY = { it / 3 }
+    ) + fadeIn(
+        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+    )
+}
+
+fun slideOutVertically(): ExitTransition {
+    return androidx.compose.animation.slideOutVertically(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutLinearIn),
+        targetOffsetY = { it / 3 }
+    ) + fadeOut(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutLinearIn)
+    )
+}
+
+// Horizontal slide for screen transitions
+fun slideInFromRight(): EnterTransition {
+    return androidx.compose.animation.slideInHorizontally(
+        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn),
+        initialOffsetX = { it / 2 }
+    ) + fadeIn(
+        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+    )
+}
+
+fun slideOutToLeft(): ExitTransition {
+    return androidx.compose.animation.slideOutHorizontally(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutLinearIn),
+        targetOffsetX = { -it / 3 }
+    ) + fadeOut(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutLinearIn)
+    )
+}
+
+fun slideInFromLeft(): EnterTransition {
+    return androidx.compose.animation.slideInHorizontally(
+        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn),
+        initialOffsetX = { -it / 3 }
+    ) + fadeIn(
+        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+    )
+}
+
+fun slideOutToRight(): ExitTransition {
+    return androidx.compose.animation.slideOutHorizontally(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutLinearIn),
+        targetOffsetX = { it / 2 }
+    ) + fadeOut(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutLinearIn)
+    )
+}
+
+// Scale + fade for dialogs and cards
+fun scaleIn(): EnterTransition {
+    return scaleIn(
+        animationSpec = tween(DURATION_MEDIUM, easing = EaseOutBack),
+        initialScale = 0.9f
+    ) + fadeIn(
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutSlowIn)
+    )
+}
+
+fun scaleOut(): ExitTransition {
+    return scaleOut(
+        animationSpec = tween(DURATION_QUICK, easing = FastOutLinearIn),
+        targetScale = 0.95f
+    ) + fadeOut(
+        animationSpec = tween(DURATION_QUICK, easing = FastOutLinearIn)
+    )
+}
+
+// Gentle breathing animation for logo - very subtle and elegant
 @Composable
 fun breathingAnimation(): Float {
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.025f,
+        targetValue = 1.02f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = EaseInOutQuart),
+            animation = tween(3000, easing = EaseInOutCubic),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
     )
     return scale
+}
+
+// Staggered animation delay calculator
+@Composable
+fun staggerDelay(index: Int, baseDelay: Int = 50): Int {
+    return index * baseDelay
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -221,8 +326,8 @@ fun MainApp() {
         topBar = {
             AnimatedVisibility(
                 visible = currentScreen != Screen.MENU,
-                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
-                exit = fadeOut(animationSpec = tween(200, easing = SmoothEasing))
+                enter = slideInVertically(),
+                exit = slideOutVertically()
             ) {
                 CenterAlignedTopAppBar(
                     title = {
@@ -249,10 +354,18 @@ fun MainApp() {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            // Smooth crossfade for screen transitions
-            Crossfade(
+            // Premium screen transitions with slide animations
+            AnimatedContent(
                 targetState = currentScreen,
-                animationSpec = tween(300, easing = EaseOutExpo),
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        // Navigating forward - slide from right
+                        slideInFromRight() with slideOutToLeft()
+                    } else {
+                        // Navigating back - slide from left
+                        slideInFromLeft() with slideOutToRight()
+                    }
+                },
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
@@ -404,12 +517,10 @@ fun AnimatedButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Premium spring physics for natural press feedback
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 400f
-        ),
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = SmoothSpring,
         label = "buttonScale"
     )
 
@@ -440,10 +551,15 @@ fun MenuScreen(
     var showHostDialog by remember { mutableStateOf(false) }
     var tempHost by remember { mutableStateOf(targetHost) }
     
-    // Simple entrance animation - all items appear together
-    var isLoaded by remember { mutableStateOf(false) }
+    // Staggered entrance animation state
+    var headerVisible by remember { mutableStateOf(false) }
+    var sectionVisible by remember { mutableStateOf(false) }
+    
     LaunchedEffect(Unit) {
-        isLoaded = true
+        // Stagger the animations for premium feel
+        headerVisible = true
+        kotlinx.coroutines.delay(100)
+        sectionVisible = true
     }
     
     val breathingScale = breathingAnimation()
@@ -456,117 +572,123 @@ fun MenuScreen(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Modern Header Card with animated gradient
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = ShapeExtraLarge,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+        // Modern Header Card with staggered entrance
+        AnimatedVisibility(
+            visible = headerVisible,
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
             )
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ShapeExtraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
+                                )
                             )
                         )
-                    )
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // App Logo with pulsating animation
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .scale(breathingScale)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            Icons.Default.Bolt,
-                            contentDescription = null,
-                            modifier = Modifier.size(44.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "InjectTools",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = "v3.7.0",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Domain Host Card with press animation
-                    AnimatedCard(
-                        onClick = {
-                            tempHost = targetHost
-                            showHostDialog = true
-                        }
-                    ) {
-                        Row(
+                        // App Logo with subtle breathing animation
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .size(80.dp)
+                                .scale(breathingScale)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Dns,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
+                            Icon(
+                                Icons.Default.Bolt,
+                                contentDescription = null,
+                                modifier = Modifier.size(44.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "InjectTools",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Text(
+                            text = "v3.7.0",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Domain Host Card with press animation
+                        AnimatedCard(
+                            onClick = {
+                                tempHost = targetHost
+                                showHostDialog = true
                             }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Dns,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
 
-                            Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(16.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Target Host",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = targetHost.ifBlank { "Tap to set domain" },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (targetHost.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (targetHost.isNotBlank()) 
-                                        MaterialTheme.colorScheme.onSurface 
-                                    else 
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Target Host",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = targetHost.ifBlank { "Tap to set domain" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (targetHost.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (targetHost.isNotBlank()) 
+                                            MaterialTheme.colorScheme.onSurface 
+                                        else 
                                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                 )
-                            }
 
-                            Icon(
-                                Icons.Default.Edit, 
-                                contentDescription = "Edit", 
-                                modifier = Modifier.size(20.dp), 
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                                Icon(
+                                    Icons.Default.Edit, 
+                                    contentDescription = "Edit", 
+                                    modifier = Modifier.size(20.dp), 
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }
@@ -575,31 +697,37 @@ fun MenuScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Section Header with animation
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        // Section Header with staggered animation
+        AnimatedVisibility(
+            visible = sectionVisible,
+            enter = fadeIn(animationSpec = tween(DURATION_MEDIUM, easing = LinearOutSlowIn))
         ) {
-            Text(
-                text = "Features",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Divider(
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Features",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                HorizontalDivider(
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Menu Tiles - smooth entrance animation
-        tiles.forEach { tile ->
+        // Menu Tiles with staggered entrance animation
+        tiles.forEachIndexed { index, tile ->
             AnimatedMenuItem(
-                visible = isLoaded,
+                visible = sectionVisible,
                 tile = tile,
+                index = index,
                 enabled = !showHostDialog
             ) {
                 if (!showHostDialog) {
@@ -633,12 +761,10 @@ fun AnimatedCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Premium spring physics for press feedback
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.7f,
-            stiffness = 500f
-        ),
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = SmoothSpring,
         label = "cardScale"
     )
 
@@ -771,33 +897,43 @@ fun HostEditDialog(
 fun AnimatedMenuItem(
     visible: Boolean,
     tile: MenuTile,
+    index: Int = 0,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    // Smooth entrance with spring physics
-    val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.92f,
-        animationSpec = spring(
-            dampingRatio = 0.65f,
-            stiffness = 250f
+    // Staggered entrance with delay based on index
+    var itemVisible by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(visible) {
+        if (visible) {
+            // Stagger delay: 60ms per item for smooth cascade
+            kotlinx.coroutines.delay((index * 60).toLong())
+            itemVisible = true
+        } else {
+            itemVisible = false
+        }
+    }
+    
+    // Smooth entrance animation with slide + fade + scale
+    AnimatedVisibility(
+        visible = itemVisible,
+        enter = slideInVertically() + fadeIn(
+            animationSpec = tween(DURATION_MEDIUM, easing = LinearOutSlowIn)
+        ) + scaleIn(
+            animationSpec = spring(
+                dampingRatio = 0.7f,
+                stiffness = 300f
+            ),
+            initialScale = 0.9f
         ),
-        label = "itemScale"
-    )
-    
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(300, easing = EaseOutQuart),
-        label = "itemAlpha"
-    )
-    
-    ModernMenuTileCard(
-        tile = tile,
-        enabled = enabled,
-        modifier = Modifier
-            .scale(scale)
-            .graphicsLayer { this.alpha = alpha },
-        onClick = onClick
-    )
+        exit = fadeOut(animationSpec = tween(DURATION_QUICK))
+    ) {
+        ModernMenuTileCard(
+            tile = tile,
+            enabled = enabled,
+            onClick = onClick
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -811,18 +947,16 @@ fun ModernMenuTileCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Premium spring physics for press feedback
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 400f
-        ),
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = BouncySpring,
         label = "tileScale"
     )
     
     val elevation by animateDpAsState(
-        targetValue = if (isPressed) 3.dp else 0.dp,
-        animationSpec = tween(200, easing = EaseOutQuart),
+        targetValue = if (isPressed) 2.dp else 0.dp,
+        animationSpec = tween(DURATION_QUICK, easing = FastOutSlowIn),
         label = "tileElevation"
     )
 
@@ -844,7 +978,7 @@ fun ModernMenuTileCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterHorizontally
         ) {
             // Icon Container with gradient
             Box(
@@ -909,7 +1043,9 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+                enter = slideInVertically() + fadeIn(
+                    animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+                )
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val breathingScale = breathingAnimation()
@@ -952,7 +1088,9 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
             item {
                 AnimatedVisibility(
                     visible = visible,
-                    enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+                    enter = slideInVertically() + fadeIn(
+                        animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+                    )
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1027,9 +1165,14 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     
-    var visible by remember { mutableStateOf(false) }
+    // Staggered entrance animation
+    var headerVisible by remember { mutableStateOf(false) }
+    var inputVisible by remember { mutableStateOf(false) }
+    
     LaunchedEffect(Unit) {
-        visible = true
+        headerVisible = true
+        kotlinx.coroutines.delay(80)
+        inputVisible = true
     }
 
     Column(
@@ -1038,10 +1181,12 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        // Header Card with animation
+        // Header Card with smooth entrance
         AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            visible = headerVisible,
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+            )
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1087,10 +1232,12 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Input Section with animation
+        // Input Section with smooth entrance
         AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            visible = inputVisible,
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+            )
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1160,10 +1307,12 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Results Section with animation
+        // Results Section with smooth entrance
         AnimatedVisibility(
             visible = recentResults.isNotEmpty(),
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_MEDIUM, easing = LinearOutSlowIn)
+            )
         ) {
             Column {
                 Row(
@@ -1177,7 +1326,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Divider(
+                    HorizontalDivider(
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.outlineVariant
                     )
@@ -1209,15 +1358,20 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     
-    var visible by remember { mutableStateOf(false) }
+    // Staggered entrance animation
+    var headerVisible by remember { mutableStateOf(false) }
+    var inputVisible by remember { mutableStateOf(false) }
+    
     LaunchedEffect(Unit) {
-        visible = true
+        headerVisible = true
+        kotlinx.coroutines.delay(80)
+        inputVisible = true
     }
     
-    // Animated progress
+    // Smooth animated progress
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(350, easing = EaseOutQuart),
+        animationSpec = tween(DURATION_MEDIUM, easing = FastOutSlowIn),
         label = "progressAnim"
     )
 
@@ -1226,10 +1380,12 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             .fillMaxSize()
             .padding(20.dp)
     ) {
-        // Header Card with animation
+        // Header Card with smooth entrance
         AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            visible = headerVisible,
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+            )
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1275,10 +1431,12 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Input Card with animation
+        // Input Card with smooth entrance
         AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            visible = inputVisible,
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_ENTER, easing = LinearOutSlowIn)
+            )
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1378,11 +1536,13 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             }
         }
 
-        // Progress indicator with animation
+        // Progress indicator with smooth animation
         AnimatedVisibility(
             visible = isScanning,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
-            exit = fadeOut(animationSpec = tween(200))
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_MEDIUM, easing = LinearOutSlowIn)
+            ),
+            exit = fadeOut(animationSpec = tween(DURATION_QUICK))
         ) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
@@ -1412,7 +1572,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = animatedProgress,
+                        progress = { animatedProgress },
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                         trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)
@@ -1429,11 +1589,13 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Summary Card with animation
+        // Summary Card with smooth animation
         AnimatedVisibility(
             visible = fetchSummary.isNotEmpty(),
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
-            exit = fadeOut(animationSpec = tween(200))
+            enter = slideInVertically() + fadeIn(
+                animationSpec = tween(DURATION_MEDIUM, easing = LinearOutSlowIn)
+            ),
+            exit = fadeOut(animationSpec = tween(DURATION_QUICK))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1464,7 +1626,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Results with animation
+        // Results with smooth animation
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1505,12 +1667,10 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Premium spring physics for press feedback
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 450f
-        ),
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = SnappySpring,
         label = "resultScale"
     )
 

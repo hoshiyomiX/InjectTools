@@ -2,6 +2,24 @@
 
 All notable changes to InjectTools will be documented in this file.
 
+## [1.2.1] - 2026-02-13
+
+### Fixed
+- **Batch Scan Flow**: Network validation now correctly happens AFTER fetching subdomains from crt.sh
+  - Previous: Check injection mode first → blocked fetch from crt.sh
+  - Now: Fetch from crt.sh (needs internet) → Confirm → Check injection mode → Test
+- Added `hasInternetConnection()` helper in NetworkUtils for internet-dependent operations
+
+### Added
+- New `TestConfirmationDialog` component for better UX before testing phase
+- Separate states for `isFetching` and `isScanning` in Batch Scan screen
+
+### Technical
+- Split network validation logic: fetch requires internet, testing requires injection mode
+- Better user feedback with distinct "Fetching..." and "Testing..." states
+
+---
+
 ## [1.2.0] - 2026-02-12
 
 ### Changed

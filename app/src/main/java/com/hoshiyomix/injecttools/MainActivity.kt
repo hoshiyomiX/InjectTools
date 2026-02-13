@@ -884,11 +884,38 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
 fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var domain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
+    var isFetching by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
     var statusText by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
+    var pendingSubdomains by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showTestConfirmDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Helper function to start testing phase
+    fun startTesting(subdomains: List<String>) {
+        isScanning = true
+        progress = 0.2f
+        results = emptyList()
+        statusText = "Found ${subdomains.size} subdomains. Testing..."
+        
+        scope.launch {
+            val scanResults = mutableListOf<ScanResult>()
+            subdomains.forEachIndexed { index, sub ->
+                val result = Scanner.testSingle(targetHost, sub)
+                scanResults.add(result)
+                progress = 0.2f + (0.8f * (index + 1) / subdomains.size)
+                statusText = "Testing ${index + 1}/${subdomains.size}: $sub"
+            }
+            
+            results = scanResults
+            onResults(scanResults)
+            statusText = "Complete! ${scanResults.count { it.isWorking }} working bugs found"
+            progress = 1f
+            isScanning = false
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -934,55 +961,55 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 Button(
                     onClick = {
                         if (domain.isNotBlank()) {
-                            checkNetworkAndConfirm(context, {
-                                isScanning = true
-                                progress = 0f
-                                results = emptyList()
-                                scope.launch {
-                                    statusText = "Fetching subdomains from crt.sh..."
-                                    progress = 0.1f
-                                    
-                                    val subdomains = Crtsh.fetchSubdomains(domain)
-                                    
-                                    if (subdomains.isEmpty()) {
-                                        statusText = "No subdomains found"
-                                        progress = 1f
-                                        isScanning = false
-                                        return@launch
-                                    }
-                                    
-                                    statusText = "Found ${subdomains.size} subdomains. Testing..."
-                                    progress = 0.2f
-                                    
-                                    val scanResults = mutableListOf<ScanResult>()
-                                    subdomains.forEachIndexed { index, sub ->
-                                        val result = Scanner.testSingle(targetHost, sub)
-                                        scanResults.add(result)
-                                        progress = 0.2f + (0.8f * (index + 1) / subdomains.size)
-                                        statusText = "Testing ${index + 1}/${subdomains.size}: $sub"
-                                    }
-                                    
-                                    results = scanResults
-                                    onResults(scanResults)
-                                    statusText = "Complete! ${scanResults.count { it.isWorking }} working bugs found"
+                            // STEP 1: Check if we have internet for fetching from crt.sh
+                            if (!NetworkUtils.hasInternetConnection(context)) {
+                                onShowNetworkWarning("No internet connection. Connect to WiFi/Data to fetch subdomains from crt.sh.")
+                                return@Button
+                            }
+                            
+                            // STEP 2: Fetch from crt.sh (requires internet)
+                            isFetching = true
+                            progress = 0f
+                            results = emptyList()
+                            statusText = "Fetching subdomains from crt.sh..."
+                            
+                            scope.launch {
+                                val subdomains = Crtsh.fetchSubdomains(domain)
+                                isFetching = false
+                                
+                                if (subdomains.isEmpty()) {
+                                    statusText = "No subdomains found for $domain"
                                     progress = 1f
-                                    isScanning = false
+                                } else {
+                                    // STEP 3: Store subdomains and show confirmation dialog
+                                    pendingSubdomains = subdomains
+                                    statusText = "Found ${subdomains.size} subdomains"
+                                    progress = 0.1f
+                                    showTestConfirmDialog = true
                                 }
-                            }, onShowNetworkWarning)
+                            }
                         }
                     },
-                    enabled = !isScanning && domain.isNotBlank(),
+                    enabled = !isFetching && !isScanning && domain.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = ShapeLarge
                 ) {
-                    if (isScanning) {
+                    if (isFetching) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scanning...")
+                        Text("Fetching...")
+                    } else if (isScanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testing...")
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -993,7 +1020,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         }
 
         // Progress
-        if (isScanning || progress > 0f) {
+        if (isFetching || isScanning || progress > 0f) {
             Spacer(modifier = Modifier.height(16.dp))
             LinearProgressIndicator(
                 progress = progress,
@@ -1033,6 +1060,110 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             ) {
                 items(results.filter { it.isWorking }) { res ->
                     ResultItem(res, onTap = {})
+                }
+            }
+        }
+    }
+
+    // Confirmation Dialog - shown after successful fetch
+    if (showTestConfirmDialog) {
+        TestConfirmationDialog(
+            subdomainCount = pendingSubdomains.size,
+            onConfirm = {
+                showTestConfirmDialog = false
+                // STEP 4: Check injection mode conditions before testing
+                checkNetworkAndConfirm(context, {
+                    startTesting(pendingSubdomains)
+                }, onShowNetworkWarning)
+            },
+            onDismiss = {
+                showTestConfirmDialog = false
+                pendingSubdomains = emptyList()
+                statusText = ""
+                progress = 0f
+            }
+        )
+    }
+}
+
+/**
+ * Dialog shown after fetching subdomains to confirm testing phase.
+ * This is where we check injection mode conditions (no VPN, no regular internet).
+ */
+@Composable
+fun TestConfirmationDialog(
+    subdomainCount: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeExtraLarge,
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "Start Testing?",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Found $subdomainCount subdomains ready to test.\n\nMake sure you are in injection mode:\n• Disable WiFi/Data OR\n• Use injection config",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
+                    ) {
+                        Text("Cancel")
+                    }
+                    FilledTonalButton(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = ShapeLarge
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Start Test")
+                    }
                 }
             }
         }

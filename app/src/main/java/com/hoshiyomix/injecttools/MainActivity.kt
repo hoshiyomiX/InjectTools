@@ -212,8 +212,8 @@ fun slideOutToRight(): ExitTransition {
 }
 
 // Scale + fade for dialogs and cards
-fun scaleIn(): EnterTransition {
-    return scaleIn(
+fun scaleInEnter(): EnterTransition {
+    return androidx.compose.animation.scaleIn(
         animationSpec = tween(DURATION_MEDIUM, easing = EaseOutBack),
         initialScale = 0.9f
     ) + fadeIn(
@@ -221,8 +221,8 @@ fun scaleIn(): EnterTransition {
     )
 }
 
-fun scaleOut(): ExitTransition {
-    return scaleOut(
+fun scaleOutExit(): ExitTransition {
+    return androidx.compose.animation.scaleOut(
         animationSpec = tween(DURATION_QUICK, easing = FastOutLinearIn),
         targetScale = 0.95f
     ) + fadeOut(

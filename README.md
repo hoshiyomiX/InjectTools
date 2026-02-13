@@ -32,7 +32,7 @@ High-performance Android app with Material You design for scanning Cloudflare su
 Download the latest APK from [GitHub Releases](https://github.com/hoshiyomiX/InjectTools/releases)
 
 ### Requirements
-- **Android 7.0+** (API 24+)
+- **Android 10+** (API 29+)
 - **ARM64** device (most modern phones)
 - Internet connection
 

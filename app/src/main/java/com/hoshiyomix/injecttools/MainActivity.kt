@@ -263,16 +263,10 @@ fun MainApp() {
         topBar = {
             AnimatedVisibility(
                 visible = currentScreen != Screen.MENU,
-                enter = slideInVertically(
-                    animationSpec = tween(300, easing = IOSDecelerate),
-                    initialOffsetY = { -it }
-                ) + fadeIn(
-                    animationSpec = tween(250, easing = IOSDecelerate)
+                enter = fadeIn(
+                    animationSpec = tween(300, easing = IOSDecelerate)
                 ),
-                exit = slideOutVertically(
-                    animationSpec = tween(250, easing = IOSAccelerate),
-                    targetOffsetY = { -it }
-                ) + fadeOut(
+                exit = fadeOut(
                     animationSpec = tween(200, easing = IOSAccelerate)
                 )
             ) {
@@ -301,39 +295,10 @@ fun MainApp() {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            // Ultra smooth screen transition with slide + fade
-            AnimatedContent(
+            // Ultra smooth screen transition with crossfade
+            Crossfade(
                 targetState = currentScreen,
-                transitionSpec = {
-                    // Slide + fade for forward navigation
-                    if (targetState != Screen.MENU && initialState == Screen.MENU) {
-                        // Going into a screen
-                        slideInHorizontally(
-                            animationSpec = tween(400, easing = MaterialEmphasized),
-                            initialOffsetX = { it / 3 }
-                        ) + fadeIn(
-                            animationSpec = tween(350, easing = IOSDecelerate)
-                        ) with slideOutHorizontally(
-                            animationSpec = tween(350, easing = MaterialEmphasizedAccelerate),
-                            targetOffsetX = { -it / 4 }
-                        ) + fadeOut(
-                            animationSpec = tween(200, easing = IOSAccelerate)
-                        )
-                    } else {
-                        // Going back to menu
-                        slideInHorizontally(
-                            animationSpec = tween(350, easing = MaterialEmphasized),
-                            initialOffsetX = { -it / 4 }
-                        ) + fadeIn(
-                            animationSpec = tween(300, easing = IOSDecelerate)
-                        ) with slideOutHorizontally(
-                            animationSpec = tween(400, easing = MaterialEmphasizedAccelerate),
-                            targetOffsetX = { it / 3 }
-                        ) + fadeOut(
-                            animationSpec = tween(250, easing = IOSAccelerate)
-                        )
-                    }
-                },
+                animationSpec = tween(400, easing = MaterialEmphasized),
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {

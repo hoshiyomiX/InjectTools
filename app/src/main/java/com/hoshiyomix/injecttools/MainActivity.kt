@@ -111,9 +111,16 @@ fun MainApp() {
     LaunchedEffect(Unit) {
         // Show toast regardless of history content
         val fileInfo = HistoryStorage.getFileInfo(context)
-        Toast.makeText(context, "App Start: ${loadedHistory.size} bugs | $fileInfo", Toast.LENGTH_LONG).show()
-        android.util.Log.d("InjectTools", "Loaded ${loadedHistory.size} history items on start")
-        android.util.Log.d("InjectTools", fileInfo)
+        val filePath = HistoryStorage.getFilePath(context)
+        val statusMsg = if (loadedHistory.isNotEmpty()) {
+            "LOADED ${loadedHistory.size} bugs | $fileInfo"
+        } else {
+            "NO HISTORY | $fileInfo"
+        }
+        Toast.makeText(context, statusMsg, Toast.LENGTH_LONG).show()
+        android.util.Log.d("InjectTools", "=== APP START ===")
+        android.util.Log.d("InjectTools", "Path: $filePath")
+        android.util.Log.d("InjectTools", statusMsg)
     }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
@@ -138,11 +145,14 @@ fun MainApp() {
         // Persist history to file storage (reliable across force-close)
         val saved = HistoryStorage.saveHistory(context, combined)
         val fileInfo = HistoryStorage.getFileInfo(context)
-        android.util.Log.d("InjectTools", "Saved ${combined.size} items to history: $saved")
-        android.util.Log.d("InjectTools", fileInfo)
+        val filePath = HistoryStorage.getFilePath(context)
+        
+        android.util.Log.d("InjectTools", "=== SAVE ===")
+        android.util.Log.d("InjectTools", "Path: $filePath")
+        android.util.Log.d("InjectTools", "Saved ${combined.size} items: $saved | $fileInfo")
         
         // Debug toast with file info
-        Toast.makeText(context, "Saved ${combined.size} bugs: $saved | $fileInfo", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "SAVED ${combined.size} bugs: $saved | $fileInfo", Toast.LENGTH_LONG).show()
     }
 
     fun navigateTo(screen: Screen) {

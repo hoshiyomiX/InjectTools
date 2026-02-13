@@ -60,15 +60,15 @@ object HistoryStorage {
     }
 
     /**
-     * Load history from internal storage file.
+     * Load history from internal storage file with debug info.
      */
-    fun loadHistory(context: Context): List<Scanner.ScanResult> {
+    fun loadHistoryDebug(context: Context): Pair<List<Scanner.ScanResult>, String> {
         return try {
             val file = File(context.filesDir, FILE_NAME)
 
             if (!file.exists()) {
                 Log.d(TAG, "No history file found at ${file.absolutePath}")
-                return emptyList()
+                return Pair(emptyList(), "FILE NOT FOUND")
             }
 
             Log.d(TAG, "Loading from ${file.absolutePath}, size: ${file.length()} bytes")
@@ -77,20 +77,32 @@ object HistoryStorage {
 
             if (json.isBlank()) {
                 Log.d(TAG, "History file is empty")
-                return emptyList()
+                return Pair(emptyList(), "FILE EMPTY")
             }
 
-            Log.d(TAG, "JSON content: ${json.take(200)}...")
+            Log.d(TAG, "=== JSON CONTENT ===")
+            Log.d(TAG, json)
+            Log.d(TAG, "=== END JSON ===")
 
             val type = object : TypeToken<List<Scanner.ScanResult>>() {}.type
             val result: List<Scanner.ScanResult> = gson.fromJson(json, type) ?: emptyList()
 
-            Log.d(TAG, "Loaded ${result.size} history items")
-            result
+            Log.d(TAG, "Parsed ${result.size} items successfully")
+            Pair(result, "OK: ${result.size} items")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load history: ${e.message}", e)
-            emptyList()
+            Log.e(TAG, "=== PARSE ERROR ===")
+            Log.e(TAG, "Error: ${e.message}")
+            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+            e.printStackTrace()
+            Pair(emptyList(), "ERROR: ${e.message}")
         }
+    }
+
+    /**
+     * Load history from internal storage file.
+     */
+    fun loadHistory(context: Context): List<Scanner.ScanResult> {
+        return loadHistoryDebug(context).first
     }
 
     /**
@@ -119,6 +131,19 @@ object HistoryStorage {
             "EXISTS: ${file.length()} bytes"
         } else {
             "NO FILE"
+        }
+    }
+    
+    /**
+     * Debug: Get raw JSON content (for debugging)
+     */
+    fun getRawJson(context: Context): String {
+        return try {
+            val file = File(context.filesDir, FILE_NAME)
+            if (!file.exists()) return "NO FILE"
+            FileInputStream(file).use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (e: Exception) {
+            "ERROR: ${e.message}"
         }
     }
     

@@ -104,23 +104,22 @@ fun MainApp() {
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
     
     // Load history from file storage on app start (persists across app restarts)
-    val loadedHistory = remember { HistoryStorage.loadHistory(context) }
+    val (loadedHistory, loadStatus) = remember { HistoryStorage.loadHistoryDebug(context) }
     var scanHistory by remember { mutableStateOf(loadedHistory) }
     
     // Debug: ALWAYS show toast on load to verify persistence
     LaunchedEffect(Unit) {
-        // Show toast regardless of history content
+        // Show toast with load status
         val fileInfo = HistoryStorage.getFileInfo(context)
-        val filePath = HistoryStorage.getFilePath(context)
         val statusMsg = if (loadedHistory.isNotEmpty()) {
-            "LOADED ${loadedHistory.size} bugs | $fileInfo"
+            "LOADED ${loadedHistory.size} bugs"
         } else {
-            "NO HISTORY | $fileInfo"
+            "NO HISTORY: $loadStatus"
         }
-        Toast.makeText(context, statusMsg, Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "$statusMsg | $fileInfo", Toast.LENGTH_LONG).show()
         android.util.Log.d("InjectTools", "=== APP START ===")
-        android.util.Log.d("InjectTools", "Path: $filePath")
-        android.util.Log.d("InjectTools", statusMsg)
+        android.util.Log.d("InjectTools", "Status: $loadStatus")
+        android.util.Log.d("InjectTools", "File: $fileInfo")
     }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
@@ -145,14 +144,15 @@ fun MainApp() {
         // Persist history to file storage (reliable across force-close)
         val saved = HistoryStorage.saveHistory(context, combined)
         val fileInfo = HistoryStorage.getFileInfo(context)
-        val filePath = HistoryStorage.getFilePath(context)
+        val rawJson = HistoryStorage.getRawJson(context).take(100)
         
         android.util.Log.d("InjectTools", "=== SAVE ===")
-        android.util.Log.d("InjectTools", "Path: $filePath")
-        android.util.Log.d("InjectTools", "Saved ${combined.size} items: $saved | $fileInfo")
+        android.util.Log.d("InjectTools", "Success: $saved")
+        android.util.Log.d("InjectTools", "File: $fileInfo")
+        android.util.Log.d("InjectTools", "JSON preview: $rawJson")
         
-        // Debug toast with file info
-        Toast.makeText(context, "SAVED ${combined.size} bugs: $saved | $fileInfo", Toast.LENGTH_LONG).show()
+        // Debug toast
+        Toast.makeText(context, "SAVED $saved | $fileInfo | JSON: ${rawJson.take(50)}...", Toast.LENGTH_LONG).show()
     }
 
     fun navigateTo(screen: Screen) {

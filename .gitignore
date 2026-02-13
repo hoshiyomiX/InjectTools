@@ -1,7 +1,36 @@
+# === Gradle ===
 .gradle/
-.idea/
 build/
 app/build/
-local.properties
+*.apk
+*.aab
+
+# === IDE ===
+.idea/
 *.iml
+*.ipr
+*.iws
+.DS_Store
+
+# === Local Config ===
+local.properties
+secrets.properties
+*.keystore
+*.jks
+
+# === Logs ===
 *.log
+
+# === Native ===
+.externalNativeBuild/
+.cxx/
+captures/
+*.hprof
+
+# === Kotlin ===
+*.class
+
+# === Misc ===
+*.swp
+*~
+.env

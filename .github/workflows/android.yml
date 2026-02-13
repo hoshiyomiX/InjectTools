@@ -2,93 +2,132 @@ name: Android Build
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: ["dev"]
   pull_request:
-    branches: [ "dev" ]
+    branches: ["dev"]
 
 permissions:
   contents: write
 
+env:
+  # Gradle settings for CI optimization
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true"
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.11.1'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
 
-    # Fix: Use unique name to avoid "Text file busy" conflict with system swap
-    - name: Configure Swap Space
-      run: |
-        sudo fallocate -l 8G /swapfile_build
-        sudo chmod 600 /swapfile_build
-        sudo mkswap /swapfile_build
-        sudo swapon /swapfile_build
-        echo "Swap created:"
-        free -h
-        
-    - name: Generate Gradle Wrapper
-      run: gradle wrapper --gradle-version=8.11.1
-        
-    - name: Make gradlew executable
-      run: chmod +x ./gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # Enable build scan for debugging
+          add-job-summary: on-failure
+          # Enable caching
+          cache-read-only: ${{ github.ref != 'refs/heads/dev' }}
+          # Validate wrapper for security
+          validate-wrappers: true
+          # Enable configuration cache
+          gradle-home-cache-includes: |
+            caches
+            notifications
+            jdks
 
-    - name: Commit Gradle Wrapper
-      # Only run on push to apk branch, not PRs
-      if: github.event_name == 'push' && github.ref == 'refs/heads/apk'
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # Add wrapper files
-        git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties gradle/wrapper/gradle-wrapper.jar
-        
-        # Commit if changes exist
-        if ! git diff-index --quiet HEAD; then
-          echo "Changes detected. Committing wrapper..."
-          git commit -m "chore: add gradle wrapper files [skip ci]"
-          git push
-        else
-          echo "No changes to commit"
-        fi
-        
-    - name: Create Keystore
-      run: |
-        keytool -genkeypair -v \
-        -keystore app/release.keystore \
-        -keyalg RSA -keysize 2048 -validity 10000 \
-        -alias androiddebugkey \
-        -dname "CN=Android Debug,O=Android,C=US" \
-        -storepass android -keypass android
-        
-    - name: Build Release APK
-      id: build
-      # Added --max-workers=2 to further reduce memory pressure
-      run: |
-        ./gradlew assembleRelease \
-          --max-workers=2 \
-          --no-daemon \
-          -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
-          -Pandroid.injected.signing.store.password=android \
-          -Pandroid.injected.signing.key.alias=androiddebugkey \
-          -Pandroid.injected.signing.key.password=android
-      
-    - name: List Artifacts
-      run: ls -R app/build/outputs/apk/
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
 
-    - name: Upload Release APKs
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: InjectTools-Release
-        path: app/build/outputs/apk/release/*.apk
+      - name: Create debug keystore
+        run: |
+          # Use GitHub Secrets for production, debug keystore for CI
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
+          else
+            # Create debug keystore for CI builds (not for production releases)
+            keytool -genkeypair -v \
+              -keystore app/release.keystore \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias androiddebugkey \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -storepass android -keypass android
+          fi
+
+      - name: Build Release APK
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --build-cache \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD || 'android' }} \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD || 'android' }}
+
+      - name: Get APK info
+        id: apk-info
+        run: |
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          APK_SIZE=$(stat -c%s "$APK_PATH" | numfmt --to=iec-i --suffix=B)
+          APK_NAME=$(basename "$APK_PATH")
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "### 📦 Build Output" >> $GITHUB_STEP_SUMMARY
+          echo "- **APK**: \`$APK_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size**: $APK_SIZE" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Release APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: InjectTools-Release-${{ github.sha }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Cleanup keystore
+        if: always()
+        run: rm -f app/release.keystore
+
+  # Separate job for lint checks (runs in parallel with build)
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Run Lint
+        run: ./gradlew lint --no-daemon --build-cache
+        continue-on-error: true
+
+      - name: Upload Lint Results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: app/build/reports/lint-results-*.html

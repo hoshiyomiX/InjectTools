@@ -741,7 +741,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                     modifier = Modifier.fillMaxWidth(),
                     shape = ShapeLarge,
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
                     Row(
@@ -752,7 +752,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -771,7 +771,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                             Text(
                                 "${history.size} successful scans",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -1462,7 +1462,7 @@ fun ModernAlertDialog(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                FilledTonalButton(
+                Button(
                     onClick = onConfirm,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = ShapeLarge

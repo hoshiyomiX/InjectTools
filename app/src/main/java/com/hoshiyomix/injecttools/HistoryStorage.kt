@@ -116,9 +116,17 @@ object HistoryStorage {
     fun getFileInfo(context: Context): String {
         val file = File(context.filesDir, FILE_NAME)
         return if (file.exists()) {
-            "File exists: ${file.absolutePath}, size: ${file.length()} bytes"
+            "EXISTS: ${file.length()} bytes"
         } else {
-            "File does not exist: ${file.absolutePath}"
+            "NO FILE"
         }
+    }
+    
+    /**
+     * Debug: Get full file path
+     */
+    fun getFilePath(context: Context): String {
+        val file = File(context.filesDir, FILE_NAME)
+        return file.absolutePath
     }
 }

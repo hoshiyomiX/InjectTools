@@ -107,13 +107,13 @@ fun MainApp() {
     val loadedHistory = remember { HistoryStorage.loadHistory(context) }
     var scanHistory by remember { mutableStateOf(loadedHistory) }
     
-    // Debug: Show toast on load
+    // Debug: ALWAYS show toast on load to verify persistence
     LaunchedEffect(Unit) {
-        if (loadedHistory.isNotEmpty()) {
-            Toast.makeText(context, "Loaded ${loadedHistory.size} saved bugs", Toast.LENGTH_SHORT).show()
-        }
+        // Show toast regardless of history content
+        val fileInfo = HistoryStorage.getFileInfo(context)
+        Toast.makeText(context, "App Start: ${loadedHistory.size} bugs | $fileInfo", Toast.LENGTH_LONG).show()
         android.util.Log.d("InjectTools", "Loaded ${loadedHistory.size} history items on start")
-        android.util.Log.d("InjectTools", HistoryStorage.getFileInfo(context))
+        android.util.Log.d("InjectTools", fileInfo)
     }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
@@ -137,10 +137,12 @@ fun MainApp() {
         
         // Persist history to file storage (reliable across force-close)
         val saved = HistoryStorage.saveHistory(context, combined)
+        val fileInfo = HistoryStorage.getFileInfo(context)
         android.util.Log.d("InjectTools", "Saved ${combined.size} items to history: $saved")
+        android.util.Log.d("InjectTools", fileInfo)
         
-        // Debug toast
-        Toast.makeText(context, "Saved ${combined.size} bugs: $saved", Toast.LENGTH_SHORT).show()
+        // Debug toast with file info
+        Toast.makeText(context, "Saved ${combined.size} bugs: $saved | $fileInfo", Toast.LENGTH_LONG).show()
     }
 
     fun navigateTo(screen: Screen) {

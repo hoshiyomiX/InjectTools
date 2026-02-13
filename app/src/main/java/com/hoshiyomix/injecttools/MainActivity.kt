@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalAnimationApi::class)
+
 package com.hoshiyomix.injecttools
 
 import android.content.Context
@@ -713,7 +715,7 @@ fun MenuScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                HorizontalDivider(
+                Divider(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.outlineVariant
                 )
@@ -978,7 +980,7 @@ fun ModernMenuTileCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(20.dp),
-            verticalAlignment = Alignment.CenterHorizontally
+            verticalAlignment = Alignment.CenterVertically
         ) {
             // Icon Container with gradient
             Box(
@@ -1326,7 +1328,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    HorizontalDivider(
+                    Divider(
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.outlineVariant
                     )

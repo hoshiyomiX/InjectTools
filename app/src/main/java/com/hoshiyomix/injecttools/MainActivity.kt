@@ -102,10 +102,11 @@ fun MainApp() {
 
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
-    // Load history from SharedPreferences on app start (persists across app restarts)
+    // Load history from file storage on app start (persists across app restarts)
     var scanHistory by remember { 
-        mutableStateOf(Scanner.loadHistory(prefs).also { 
+        mutableStateOf(HistoryStorage.loadHistory(context).also { 
             android.util.Log.d("InjectTools", "Loaded ${it.size} history items on start")
+            android.util.Log.d("InjectTools", HistoryStorage.getFileInfo(context))
         }) 
     }
 
@@ -120,11 +121,20 @@ fun MainApp() {
 
     fun addResults(newResults: List<ScanResult>) {
         val successResults = newResults.filter { it.isWorking }
+        if (successResults.isEmpty()) {
+            android.util.Log.d("InjectTools", "No working results to save")
+            return // No working results to save
+        }
+        
         val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
         scanHistory = combined
-        // Persist history to SharedPreferences (synchronous save)
-        val saved = Scanner.saveHistory(prefs, combined)
+        
+        // Persist history to file storage (reliable across force-close)
+        val saved = HistoryStorage.saveHistory(context, combined)
         android.util.Log.d("InjectTools", "Saved ${combined.size} items to history: $saved")
+        
+        // Debug toast
+        Toast.makeText(context, "Saved ${combined.size} bugs: $saved", Toast.LENGTH_SHORT).show()
     }
 
     fun navigateTo(screen: Screen) {

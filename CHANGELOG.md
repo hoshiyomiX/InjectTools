@@ -2,6 +2,26 @@
 
 All notable changes to InjectTools will be documented in this file.
 
+## [1.2.3] - 2026-02-13
+
+### Added
+- **Fetch Progress Details**: Real-time progress during crt.sh fetch phase
+  - Phase 1: Connecting to crt.sh (0-5%)
+  - Phase 2: Fetching certificates with retry info (5-10%)
+  - Phase 3: Parsing certificates (showing count)
+  - Phase 4: DNS validation with valid count
+
+### Changed
+- Progress bar now shows detailed status for each fetch phase
+- Test phase progress starts at 10% (after fetch complete)
+
+### Technical
+- Added `FetchProgress` data class in Crtsh.kt
+- Added `onProgress` callback parameter to `fetchSubdomains()`
+- Progress scaling: Fetch 0-10%, Test 10-100%
+
+---
+
 ## [1.2.2] - 2026-02-13
 
 ### Fixed

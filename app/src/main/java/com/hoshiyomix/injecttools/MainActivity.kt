@@ -896,7 +896,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     // Helper function to start testing phase
     fun startTesting(subdomains: List<String>) {
         isScanning = true
-        progress = 0.2f
+        progress = 0.1f // Start from 10% (after fetch phase)
         results = emptyList()
         statusText = "Found ${subdomains.size} subdomains. Testing..."
         
@@ -905,7 +905,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
             subdomains.forEachIndexed { index, sub ->
                 val result = Scanner.testSingle(targetHost, sub)
                 scanResults.add(result)
-                progress = 0.2f + (0.8f * (index + 1) / subdomains.size)
+                // Test phase: 10% - 100%
+                progress = 0.1f + (0.9f * (index + 1) / subdomains.size)
                 statusText = "Testing ${index + 1}/${subdomains.size}: $sub"
             }
             
@@ -973,10 +974,17 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                             isFetching = true
                             progress = 0f
                             results = emptyList()
-                            statusText = "Fetching subdomains from crt.sh..."
+                            statusText = "Connecting to crt.sh..."
                             
                             scope.launch {
-                                val subdomains = Crtsh.fetchSubdomains(domain)
+                                val subdomains = Crtsh.fetchSubdomains(
+                                    domain = domain,
+                                    onProgress = { fetchProgress ->
+                                        // Update UI with fetch progress
+                                        statusText = fetchProgress.phase
+                                        progress = fetchProgress.progress * 0.1f // Scale to 0-10% for fetch phase
+                                    }
+                                )
                                 isFetching = false
                                 
                                 if (subdomains.isEmpty()) {
@@ -985,7 +993,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                                 } else {
                                     // STEP 3: Store subdomains and show confirmation dialog
                                     pendingSubdomains = subdomains
-                                    statusText = "Found ${subdomains.size} subdomains"
+                                    statusText = "Found ${subdomains.size} valid subdomains"
                                     progress = 0.1f
                                     showTestConfirmDialog = true
                                 }

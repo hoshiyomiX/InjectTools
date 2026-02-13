@@ -102,12 +102,18 @@ fun MainApp() {
 
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
+    
     // Load history from file storage on app start (persists across app restarts)
-    var scanHistory by remember { 
-        mutableStateOf(HistoryStorage.loadHistory(context).also { 
-            android.util.Log.d("InjectTools", "Loaded ${it.size} history items on start")
-            android.util.Log.d("InjectTools", HistoryStorage.getFileInfo(context))
-        }) 
+    val loadedHistory = remember { HistoryStorage.loadHistory(context) }
+    var scanHistory by remember { mutableStateOf(loadedHistory) }
+    
+    // Debug: Show toast on load
+    LaunchedEffect(Unit) {
+        if (loadedHistory.isNotEmpty()) {
+            Toast.makeText(context, "Loaded ${loadedHistory.size} saved bugs", Toast.LENGTH_SHORT).show()
+        }
+        android.util.Log.d("InjectTools", "Loaded ${loadedHistory.size} history items on start")
+        android.util.Log.d("InjectTools", HistoryStorage.getFileInfo(context))
     }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }

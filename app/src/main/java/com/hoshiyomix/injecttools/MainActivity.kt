@@ -114,35 +114,77 @@ val ShapeLarge = RoundedCornerShape(24.dp)
 val ShapeMedium = RoundedCornerShape(16.dp)
 val ShapeSmall = RoundedCornerShape(12.dp)
 
-// Custom easing curves for ultra-smooth animations
-val SmoothEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)  // Smooth deceleration
-val EaseOutQuart = CubicBezierEasing(0.25f, 1.0f, 0.5f, 1.0f)   // Quick start, smooth end
-val EaseOutExpo = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)    // Dramatic ease out
-val EaseInOutQuart = CubicBezierEasing(0.76f, 0.0f, 0.24f, 1.0f) // Smooth both ends
+// ============================================
+// ULTRA SMOOTH ANIMATION SYSTEM
+// iOS-inspired with predictive easing
+// ============================================
 
-// Animation specs with smooth interpolation
-val smoothTween = tween<Float>(durationMillis = 350, easing = SmoothEasing)
-val quickTween = tween<Float>(durationMillis = 200, easing = EaseOutQuart)
-val enterTween = tween<Float>(durationMillis = 400, easing = EaseOutExpo)
+// iOS-style easing curves (from Apple Human Interface Guidelines)
+val IOSStandard = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)      // Standard iOS
+val IOSDecelerate = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)      // Slows down
+val IOSAccelerate = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)      // Speeds up
+val IOSSpring = CubicBezierEasing(0.5f, 0.0f, 0.1f, 1.0f)          // Spring-like
 
-// Smooth spring with natural physics
-val naturalSpring = spring<Float>(
-    dampingRatio = 0.8f,
-    stiffness = 300f
+// Premium Material Motion curves
+val MaterialEmphasized = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)  // Emphasized decelerate
+val MaterialEmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+val MaterialStandard = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)    // Material standard
+
+// Natural spring configurations
+val NaturalSpring = spring<Float>(
+    dampingRatio = 0.82f,
+    stiffness = 200f,
+    visibilityThreshold = 0.001f
+)
+val SnappySpring = spring<Float>(
+    dampingRatio = 0.75f,
+    stiffness = 400f,
+    visibilityThreshold = 0.001f
+)
+val GentleSpring = spring<Float>(
+    dampingRatio = 0.9f,
+    stiffness = 150f,
+    visibilityThreshold = 0.001f
+)
+val BouncySpring = spring<Float>(
+    dampingRatio = 0.55f,
+    stiffness = 250f,
+    visibilityThreshold = 0.001f
 )
 
-// Gentle breathing animation for logo with smooth sine wave
+// Tween durations (iOS uses 300-500ms typically)
+val QuickTween = tween<Float>(200, easing = IOSDecelerate)
+val StandardTween = tween<Float>(350, easing = IOSStandard)
+val SmoothTween = tween<Float>(500, easing = MaterialEmphasized)
+val EnterTween = tween<Float>(400, easing = IOSSpring)
+
+// Ultra smooth breathing with micro-movements
 @Composable
 fun breathingAnimation(): Float {
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.025f,
+        targetedValue = 1.015f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = EaseInOutQuart),
+            animation = tween(3500, easing = IOSStandard),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
+    )
+    return scale
+}
+
+// Predictive scale animation with anticipation
+@Composable
+fun predictiveScaleAnimation(isPressed: Boolean): Float {
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = 350f,
+            visibilityThreshold = 0.001f
+        ),
+        label = "predictiveScale"
     )
     return scale
 }
@@ -221,8 +263,18 @@ fun MainApp() {
         topBar = {
             AnimatedVisibility(
                 visible = currentScreen != Screen.MENU,
-                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
-                exit = fadeOut(animationSpec = tween(200, easing = SmoothEasing))
+                enter = slideInVertically(
+                    animationSpec = tween(300, easing = IOSDecelerate),
+                    initialOffsetY = { -it }
+                ) + fadeIn(
+                    animationSpec = tween(250, easing = IOSDecelerate)
+                ),
+                exit = slideOutVertically(
+                    animationSpec = tween(250, easing = IOSAccelerate),
+                    targetOffsetY = { -it }
+                ) + fadeOut(
+                    animationSpec = tween(200, easing = IOSAccelerate)
+                )
             ) {
                 CenterAlignedTopAppBar(
                     title = {
@@ -249,10 +301,39 @@ fun MainApp() {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            // Smooth crossfade for screen transitions
-            Crossfade(
+            // Ultra smooth screen transition with slide + fade
+            AnimatedContent(
                 targetState = currentScreen,
-                animationSpec = tween(300, easing = EaseOutExpo),
+                transitionSpec = {
+                    // Slide + fade for forward navigation
+                    if (targetState != Screen.MENU && initialState == Screen.MENU) {
+                        // Going into a screen
+                        slideInHorizontally(
+                            animationSpec = tween(400, easing = MaterialEmphasized),
+                            initialOffsetX = { it / 3 }
+                        ) + fadeIn(
+                            animationSpec = tween(350, easing = IOSDecelerate)
+                        ) togetherWith slideOutHorizontally(
+                            animationSpec = tween(350, easing = MaterialEmphasizedAccelerate),
+                            targetOffsetX = { -it / 4 }
+                        ) + fadeOut(
+                            animationSpec = tween(200, easing = IOSAccelerate)
+                        )
+                    } else {
+                        // Going back to menu
+                        slideInHorizontally(
+                            animationSpec = tween(350, easing = MaterialEmphasized),
+                            initialOffsetX = { -it / 4 }
+                        ) + fadeIn(
+                            animationSpec = tween(300, easing = IOSDecelerate)
+                        ) togetherWith slideOutHorizontally(
+                            animationSpec = tween(400, easing = MaterialEmphasizedAccelerate),
+                            targetOffsetX = { it / 3 }
+                        ) + fadeOut(
+                            animationSpec = tween(250, easing = IOSAccelerate)
+                        )
+                    }
+                },
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
@@ -404,11 +485,13 @@ fun AnimatedButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Ultra smooth press with snappy spring
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
+        targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 400f
+            dampingRatio = 0.68f,
+            stiffness = 400f,
+            visibilityThreshold = 0.001f
         ),
         label = "buttonScale"
     )
@@ -595,11 +678,12 @@ fun MenuScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Menu Tiles - smooth entrance animation
-        tiles.forEach { tile ->
+        // Menu Tiles - staggered entrance animation
+        tiles.forEachIndexed { index, tile ->
             AnimatedMenuItem(
                 visible = isLoaded,
                 tile = tile,
+                index = index,
                 enabled = !showHostDialog
             ) {
                 if (!showHostDialog) {
@@ -633,13 +717,21 @@ fun AnimatedCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Ultra smooth press animation
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
         animationSpec = spring(
             dampingRatio = 0.7f,
-            stiffness = 500f
+            stiffness = 350f,
+            visibilityThreshold = 0.001f
         ),
         label = "cardScale"
+    )
+    
+    val elevation by animateDpAsState(
+        targetValue = if (isPressed) 4.dp else 0.dp,
+        animationSpec = tween(200, easing = IOSDecelerate),
+        label = "cardElevation"
     )
 
     Card(
@@ -651,6 +743,7 @@ fun AnimatedCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         interactionSource = interactionSource
     ) {
         content()
@@ -772,22 +865,38 @@ fun AnimatedMenuItem(
     visible: Boolean,
     tile: MenuTile,
     enabled: Boolean = true,
+    index: Int = 0,
     onClick: () -> Unit
 ) {
-    // Smooth entrance with spring physics
+    // Staggered entrance animation
     val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.92f,
+        targetValue = if (visible) 1f else 0.85f,
         animationSpec = spring(
-            dampingRatio = 0.65f,
-            stiffness = 250f
+            dampingRatio = 0.75f,
+            stiffness = 200f,
+            visibilityThreshold = 0.001f
         ),
         label = "itemScale"
     )
     
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(300, easing = EaseOutQuart),
+        animationSpec = tween(
+            durationMillis = 400,
+            delayMillis = index * 80, // Staggered delay
+            easing = IOSDecelerate
+        ),
         label = "itemAlpha"
+    )
+    
+    val translationY by animateFloatAsState(
+        targetValue = if (visible) 0f else 30f,
+        animationSpec = spring(
+            dampingRatio = 0.8f,
+            stiffness = 180f,
+            visibilityThreshold = 0.001f
+        ),
+        label = "itemTranslation"
     )
     
     ModernMenuTileCard(
@@ -795,7 +904,10 @@ fun AnimatedMenuItem(
         enabled = enabled,
         modifier = Modifier
             .scale(scale)
-            .graphicsLayer { this.alpha = alpha },
+            .graphicsLayer { 
+                this.alpha = alpha
+                this.translationY = translationY
+            },
         onClick = onClick
     )
 }
@@ -811,19 +923,32 @@ fun ModernMenuTileCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
+    // Ultra smooth press with spring physics
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 400f
+            dampingRatio = 0.72f,
+            stiffness = 400f,
+            visibilityThreshold = 0.001f
         ),
         label = "tileScale"
     )
     
+    // Smooth elevation change
     val elevation by animateDpAsState(
-        targetValue = if (isPressed) 3.dp else 0.dp,
-        animationSpec = tween(200, easing = EaseOutQuart),
+        targetValue = if (isPressed) 6.dp else 0.dp,
+        animationSpec = tween(200, easing = IOSDecelerate),
         label = "tileElevation"
+    )
+    
+    // Subtle shadow scale for depth
+    val shadowScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.7f,
+            stiffness = 300f
+        ),
+        label = "shadowScale"
     )
 
     Card(
@@ -909,7 +1034,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+                enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val breathingScale = breathingAnimation()
@@ -952,7 +1077,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
             item {
                 AnimatedVisibility(
                     visible = visible,
-                    enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+                    enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1041,7 +1166,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1090,7 +1215,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Input Section with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1163,7 +1288,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         // Results Section with animation
         AnimatedVisibility(
             visible = recentResults.isNotEmpty(),
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
         ) {
             Column {
                 Row(
@@ -1217,7 +1342,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     // Animated progress
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(350, easing = EaseOutQuart),
+        animationSpec = tween(350, easing = IOSStandard),
         label = "progressAnim"
     )
 
@@ -1229,7 +1354,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Header Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1278,7 +1403,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Input Card with animation
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart))
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate))
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1381,7 +1506,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Progress indicator with animation
         AnimatedVisibility(
             visible = isScanning,
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -1432,7 +1557,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         // Summary Card with animation
         AnimatedVisibility(
             visible = fetchSummary.isNotEmpty(),
-            enter = fadeIn(animationSpec = tween(300, easing = EaseOutQuart)),
+            enter = fadeIn(animationSpec = tween(350, easing = IOSDecelerate)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
             Card(
@@ -1508,10 +1633,17 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 450f
+            dampingRatio = 0.7f,
+            stiffness = 400f,
+            visibilityThreshold = 0.001f
         ),
         label = "resultScale"
+    )
+    
+    val elevation by animateDpAsState(
+        targetValue = if (isPressed) 4.dp else 0.dp,
+        animationSpec = tween(200, easing = IOSDecelerate),
+        label = "resultElevation"
     )
 
     Card(
@@ -1526,6 +1658,7 @@ fun AnimatedResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
             else 
                 MaterialTheme.colorScheme.surfaceVariant
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         interactionSource = interactionSource
     ) {
         Row(

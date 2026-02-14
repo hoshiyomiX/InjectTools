@@ -372,7 +372,7 @@ fun MenuScreen(
 ) {
     val tiles = listOf(
         MenuTile(1, "Test Bug", "Test bug satu-satu", Icons.Outlined.TravelExplore, Pair(Color(0xFF6750A4), Color(0xFF9A82DB)), Screen.SINGLE_TEST),
-        MenuTile(2, "Scan Massal", "Cari & test bug dari crt.sh", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
+        MenuTile(2, "Scan Massal", "Cari bug dari CT logs & DNS", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
         MenuTile(3, "Riwayat", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
     )
 
@@ -999,13 +999,13 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 modifier = Modifier.padding(20.dp)
             ) {
                 Text(
-                    "Scan Massal via crt.sh",
+                    "Scan Massal Bug",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Ambil bug dari log sertifikat transparansi",
+                    "Ambil bug dari CT logs & DNS records",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1033,36 +1033,38 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 Button(
                     onClick = {
                         if (domain.isNotBlank()) {
-                            // STEP 1: Check if we have internet for fetching from crt.sh
+                            // STEP 1: Check if we have internet for fetching
                             if (!NetworkUtils.hasInternetConnection(context)) {
-                                onShowNetworkWarning("Kagak ada internet. Sambungin WiFi/Data buat ambil bug dari crt.sh.")
+                                onShowNetworkWarning("Kagak ada internet. Sambungin WiFi/Data buat fetch bug.")
                                 return@Button
                             }
                             
-                            // STEP 2: Fetch from crt.sh (requires internet)
+                            // STEP 2: Fetch from multiple sources (requires internet)
                             isFetching = true
                             progress = 0f
                             results = emptyList()
-                            statusText = "Nyambung ke crt.sh..."
+                            statusText = "Nyambung ke certificate logs..."
                             
                             scope.launch {
-                                val subdomains = Crtsh.fetchSubdomains(
+                                val fetchResult = SubdomainFetcher.fetchSubdomains(
                                     domain = domain,
                                     onProgress = { fetchProgress ->
-                                        // Update UI with fetch progress
-                                        statusText = fetchProgress.phase
+                                        // Update UI with fetch progress (show source name)
+                                        val sourceInfo = if (fetchProgress.source.isNotEmpty()) " (${fetchProgress.source})" else ""
+                                        statusText = fetchProgress.phase + sourceInfo
                                         progress = fetchProgress.progress * 0.1f // Scale to 0-10% for fetch phase
                                     }
                                 )
                                 isFetching = false
                                 
-                                if (subdomains.isEmpty()) {
-                                    statusText = "Kagak ketemu bug buat $domain"
+                                if (fetchResult.subdomains.isEmpty()) {
+                                    val errorMsg = fetchResult.error ?: "Kagak ketemu bug buat $domain"
+                                    statusText = errorMsg
                                     progress = 1f
                                 } else {
                                     // STEP 3: Store subdomains and show confirmation dialog
-                                    pendingSubdomains = subdomains
-                                    statusText = "Ketemu ${subdomains.size} bug valid"
+                                    pendingSubdomains = fetchResult.subdomains
+                                    statusText = "Ketemu ${fetchResult.subdomains.size} bug dari ${fetchResult.source}"
                                     progress = 0.1f
                                     showTestConfirmDialog = true
                                 }

@@ -88,7 +88,7 @@ jobs:
 
       - name: Upload Release APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: InjectTools-Release-${{ github.sha }}
           path: app/build/outputs/apk/release/*.apk
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload Lint Results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lint-results
           path: app/build/reports/lint-results-*.html

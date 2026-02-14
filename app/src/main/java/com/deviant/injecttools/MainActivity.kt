@@ -1440,7 +1440,7 @@ fun CrtshScanScreen(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Text(
-                                "No kuota reguler / VPN inject",
+                                "Pastiin gak pake kuota reguler / VPN inject, lalu coba lagi",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                             )

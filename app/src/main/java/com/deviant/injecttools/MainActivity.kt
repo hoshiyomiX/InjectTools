@@ -1,6 +1,8 @@
 package com.deviant.injecttools
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -108,7 +110,7 @@ fun dynamicColorScheme(): ColorScheme {
 }
 
 enum class Screen {
-    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS
+    MENU, SINGLE_TEST, CRTSH_TEST, RESULTS, ABOUT
 }
 
 data class MenuTile(
@@ -257,6 +259,7 @@ fun MainApp() {
                                 Screen.SINGLE_TEST -> "Test Bug"
                                 Screen.CRTSH_TEST -> "Scan & Test Bug"
                                 Screen.RESULTS -> "History"
+                                Screen.ABOUT -> "About"
                                 else -> ""
                             },
                             fontWeight = FontWeight.SemiBold
@@ -312,6 +315,7 @@ fun MainApp() {
                     showNetworkWarningDialog = true
                 })
                 Screen.RESULTS -> ResultHistoryScreen(scanSessions, onDeleteSession = { deleteSession(it) })
+                Screen.ABOUT -> AboutScreen()
             }
         }
     }
@@ -373,7 +377,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Set host target inject dulu baru mulai scanning",
+                    "Masukin host milik provider VPN dulu, baru kita lanjut...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -385,7 +389,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                     value = hostInput,
                     onValueChange = { hostInput = it },
                     label = { Text("Host Target") },
-                    placeholder = { Text("sg.server.web.id") },
+                    placeholder = { Text("Contoh: sg.server.web.id", fontStyle = FontStyle.Italic) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -443,7 +447,8 @@ fun MenuScreen(
     val tiles = listOf(
         MenuTile(1, "Test Bug", "Test bug satu-satu", Icons.Outlined.TravelExplore, Pair(Color(0xFF6750A4), Color(0xFF9A82DB)), Screen.SINGLE_TEST),
         MenuTile(2, "Scan & Test Bug", "Cari bug dari DNS records", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
-        MenuTile(3, "History", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
+        MenuTile(3, "History", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS),
+        MenuTile(4, "About", "Info developer", Icons.Outlined.Info, Pair(Color(0xFF1565C0), Color(0xFF42A5F5)), Screen.ABOUT)
     )
 
     var showHostDialog by remember { mutableStateOf(false) }
@@ -669,8 +674,8 @@ fun HostEditDialog(
                 OutlinedTextField(
                     value = currentHost,
                     onValueChange = onHostChange,
-                    label = { Text("Contoh: sg.domain.web.id", fontStyle = FontStyle.Italic) },
-                    placeholder = { Text("sg.server.web.id") },
+                    label = { Text("Contoh: sg.server.web.id", fontStyle = FontStyle.Italic) },
+                    placeholder = { Text("Masukin host provider VPN") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -1791,5 +1796,180 @@ fun ModernAlertDialog(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AboutScreen() {
+    val context = LocalContext.current
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Avatar/Logo with gradient background
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF1565C0),
+                            Color(0xFF42A5F5)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Code,
+                contentDescription = null,
+                modifier = Modifier.size(60.dp),
+                tint = Color.White
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Developer Name
+        Text(
+            text = "Hoshiyomi",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Role/Description
+        Text(
+            text = "Developer",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Contact Card - Telegram
+        Card(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/hoshiyomi_id"))
+                context.startActivity(intent)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Telegram Icon
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(ShapeMedium)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF0088CC),
+                                    Color(0xFF229ED9)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.White
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Telegram",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "@hoshiyomi_id",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Icon(
+                    Icons.Default.OpenInNew,
+                    contentDescription = "Open",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // App Info Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "InjectTools",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Version 1.0",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Tool untuk scanning dan testing bug host inject",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Footer
+        Text(
+            text = "Made with ❤️ in Indonesia",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+        
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }

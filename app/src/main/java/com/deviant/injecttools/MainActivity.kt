@@ -1600,7 +1600,7 @@ fun TestConfirmationDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Ketemu $subdomainCount bug siap dites.\n\nPastikan mode inject aktif:\n• Matiin WiFi/Data ATAU\n• Pake config inject",
+                    "Ketemu $subdomainCount bug siap dites.\n\n• Matiin WiFi/Kuota Reguler",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center

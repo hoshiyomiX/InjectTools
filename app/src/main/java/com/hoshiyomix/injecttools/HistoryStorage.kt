@@ -3,7 +3,6 @@ package com.hoshiyomix.injecttools
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -84,11 +83,12 @@ object HistoryStorage {
             Log.d(TAG, json)
             Log.d(TAG, "=== END JSON ===")
 
-            val type = object : TypeToken<List<Scanner.ScanResult>>() {}.type
-            val result: List<Scanner.ScanResult> = gson.fromJson(json, type) ?: emptyList()
+            // Use Array instead of List - more reliable with ProGuard/R8
+            val result: Array<Scanner.ScanResult> = gson.fromJson(json, Array<Scanner.ScanResult>::class.java)
+                ?: return Pair(emptyList(), "NULL RESULT")
 
             Log.d(TAG, "Parsed ${result.size} items successfully")
-            Pair(result, "OK: ${result.size} items")
+            Pair(result.toList(), "OK: ${result.size} items")
         } catch (e: Exception) {
             Log.e(TAG, "=== PARSE ERROR ===")
             Log.e(TAG, "Error: ${e.message}")

@@ -2,6 +2,7 @@ package com.hoshiyomix.injecttools
 
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -20,12 +21,12 @@ import java.io.PrintWriter
 object Scanner {
 
     data class ScanResult(
-        val subdomain: String,
-        val ip: String,
-        val isWorking: Boolean,
-        val isCloudflare: Boolean,
-        val errorMsg: String? = null,
-        val targetHost: String = "" // Target host yang digunakan saat scan
+        @SerializedName("subdomain") val subdomain: String,
+        @SerializedName("ip") val ip: String,
+        @SerializedName("isWorking") val isWorking: Boolean,
+        @SerializedName("isCloudflare") val isCloudflare: Boolean,
+        @SerializedName("errorMsg") val errorMsg: String? = null,
+        @SerializedName("targetHost") val targetHost: String = "" // Target host yang digunakan saat scan
     )
 
     // Gson instance for serialization

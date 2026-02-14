@@ -1,9 +1,6 @@
 package com.hoshiyomix.injecttools
 
-import android.content.SharedPreferences
-import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
-import com.google.gson.reflect.TypeToken
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -28,78 +25,6 @@ object Scanner {
         @SerializedName("errorMsg") val errorMsg: String? = null,
         @SerializedName("targetHost") val targetHost: String = "" // Target host yang digunakan saat scan
     )
-
-    // Gson instance for serialization
-    private val gson = Gson()
-    private const val PREFS_KEY_HISTORY = "scan_history"
-
-    /**
-     * Save scan history to SharedPreferences
-     * Uses commit() for synchronous save to ensure data persists even if app is closed quickly
-     * @param prefs SharedPreferences instance
-     * @param history List of ScanResult to save (max 20 items)
-     * @return Pair of (success: Boolean, debugMessage: String)
-     */
-    fun saveHistoryDebug(prefs: SharedPreferences, history: List<ScanResult>): Pair<Boolean, String> {
-        return try {
-            val json = gson.toJson(history)
-            android.util.Log.d("Scanner", "Saving JSON: ${json.take(200)}...")
-            val success = prefs.edit().putString(PREFS_KEY_HISTORY, json).commit()
-            android.util.Log.d("Scanner", "Save result: $success, items: ${history.size}")
-            Pair(success, "Saved ${history.size} items: $success")
-        } catch (e: Exception) {
-            android.util.Log.e("Scanner", "Failed to save history: ${e.message}")
-            Pair(false, "Save failed: ${e.message}")
-        }
-    }
-
-    /**
-     * Save scan history to SharedPreferences (silent version)
-     */
-    fun saveHistory(prefs: SharedPreferences, history: List<ScanResult>): Boolean {
-        return saveHistoryDebug(prefs, history).first
-    }
-
-    /**
-     * Load scan history from SharedPreferences with debug info
-     * @param prefs SharedPreferences instance
-     * @return Pair of (results, debugMessage)
-     */
-    fun loadHistoryDebug(prefs: SharedPreferences): Pair<List<ScanResult>, String> {
-        return try {
-            val json = prefs.getString(PREFS_KEY_HISTORY, null)
-            android.util.Log.d("Scanner", "Loaded JSON: ${json?.take(200) ?: "null"}...")
-            if (json == null) {
-                android.util.Log.d("Scanner", "No saved history found")
-                Pair(emptyList(), "No saved history")
-            } else {
-                val type = object : TypeToken<List<ScanResult>>() {}.type
-                val result: List<ScanResult> = gson.fromJson(json, type) ?: emptyList()
-                android.util.Log.d("Scanner", "Loaded ${result.size} history items")
-                Pair(result, "Loaded ${result.size} items")
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("Scanner", "Failed to load history: ${e.message}")
-            Pair(emptyList(), "Load failed: ${e.message}")
-        }
-    }
-
-    /**
-     * Load scan history from SharedPreferences
-     * @param prefs SharedPreferences instance
-     * @return List of ScanResult (empty if not found or error)
-     */
-    fun loadHistory(prefs: SharedPreferences): List<ScanResult> {
-        return loadHistoryDebug(prefs).first
-    }
-
-    /**
-     * Clear scan history from SharedPreferences
-     * @param prefs SharedPreferences instance
-     */
-    fun clearHistory(prefs: SharedPreferences) {
-        prefs.edit().remove(PREFS_KEY_HISTORY).apply()
-    }
 
     private val CLOUDFLARE_RANGES = listOf(
         "173.245.48.0/20",

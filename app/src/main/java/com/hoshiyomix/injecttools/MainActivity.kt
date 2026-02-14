@@ -104,23 +104,7 @@ fun MainApp() {
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
     
     // Load history from file storage on app start (persists across app restarts)
-    val (loadedHistory, loadStatus) = remember { HistoryStorage.loadHistoryDebug(context) }
-    var scanHistory by remember { mutableStateOf(loadedHistory) }
-    
-    // Debug: ALWAYS show toast on load to verify persistence
-    LaunchedEffect(Unit) {
-        // Show toast with load status
-        val fileInfo = HistoryStorage.getFileInfo(context)
-        val statusMsg = if (loadedHistory.isNotEmpty()) {
-            "LOADED ${loadedHistory.size} bugs"
-        } else {
-            "NO HISTORY: $loadStatus"
-        }
-        Toast.makeText(context, "$statusMsg | $fileInfo", Toast.LENGTH_LONG).show()
-        android.util.Log.d("InjectTools", "=== APP START ===")
-        android.util.Log.d("InjectTools", "Status: $loadStatus")
-        android.util.Log.d("InjectTools", "File: $fileInfo")
-    }
+    var scanHistory by remember { mutableStateOf(HistoryStorage.loadHistory(context)) }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
     var showNetworkWarningDialog by remember { mutableStateOf(false) }
@@ -133,26 +117,13 @@ fun MainApp() {
 
     fun addResults(newResults: List<ScanResult>) {
         val successResults = newResults.filter { it.isWorking }
-        if (successResults.isEmpty()) {
-            android.util.Log.d("InjectTools", "No working results to save")
-            return // No working results to save
-        }
+        if (successResults.isEmpty()) return
         
         val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
         scanHistory = combined
         
-        // Persist history to file storage (reliable across force-close)
-        val saved = HistoryStorage.saveHistory(context, combined)
-        val fileInfo = HistoryStorage.getFileInfo(context)
-        val rawJson = HistoryStorage.getRawJson(context).take(100)
-        
-        android.util.Log.d("InjectTools", "=== SAVE ===")
-        android.util.Log.d("InjectTools", "Success: $saved")
-        android.util.Log.d("InjectTools", "File: $fileInfo")
-        android.util.Log.d("InjectTools", "JSON preview: $rawJson")
-        
-        // Debug toast
-        Toast.makeText(context, "SAVED $saved | $fileInfo | JSON: ${rawJson.take(50)}...", Toast.LENGTH_LONG).show()
+        // Persist history to file storage
+        HistoryStorage.saveHistory(context, combined)
     }
 
     fun navigateTo(screen: Screen) {

@@ -254,7 +254,7 @@ fun MainApp() {
                         Text(
                             text = when (currentScreen) {
                                 Screen.SINGLE_TEST -> "Test Bug"
-                                Screen.CRTSH_TEST -> "Scan Massal"
+                                Screen.CRTSH_TEST -> "Scan & Test Bug"
                                 Screen.RESULTS -> "History"
                                 else -> ""
                             },
@@ -441,7 +441,7 @@ fun MenuScreen(
 ) {
     val tiles = listOf(
         MenuTile(1, "Test Bug", "Test bug satu-satu", Icons.Outlined.TravelExplore, Pair(Color(0xFF6750A4), Color(0xFF9A82DB)), Screen.SINGLE_TEST),
-        MenuTile(2, "Scan Massal", "Cari bug dari DNS records", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
+        MenuTile(2, "Scan & Test Bug", "Cari bug dari DNS records", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
         MenuTile(3, "History", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
     )
 
@@ -947,9 +947,9 @@ fun SessionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    // Domain
+                    // Domain (show subdomain if mass scan only found 1 result)
                     Text(
-                        session.domain,
+                        if (session.results.size == 1 && !session.id.startsWith("single_")) session.results.first().subdomain else session.domain,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -1288,7 +1288,7 @@ fun CrtshScanScreen(
                 modifier = Modifier.padding(20.dp)
             ) {
                 Text(
-                    "Scan Massal Bug",
+                    "Scan & Test Bug",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1440,7 +1440,7 @@ fun CrtshScanScreen(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Text(
-                                "Ganti ke mode inject, terus coba lagi",
+                                "No kuota reguler / VPN inject",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                             )
@@ -1600,7 +1600,7 @@ fun TestConfirmationDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Ketemu $subdomainCount bug siap dites.\n\n• Matiin WiFi/Kuota Reguler",
+                    "Ketemu $subdomainCount bug siap dites.\n\n⚠️ Pastiin gak lagi pake kuota reguler / VPN inject",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center

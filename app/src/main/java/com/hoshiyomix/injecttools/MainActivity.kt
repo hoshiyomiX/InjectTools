@@ -147,7 +147,7 @@ fun MainApp() {
         val successResults = newResults.filter { it.isWorking }
         if (successResults.isEmpty()) return
         
-        val combined = (successResults + scanHistory.filter { it.isWorking }).take(20)
+        val combined = (successResults + scanHistory.filter { it.isWorking }).take(50)
         scanHistory = combined
         
         // Persist history to file storage
@@ -420,7 +420,7 @@ fun MenuScreen(
                     )
 
                     Text(
-                        text = "v1.2.6",
+                        text = "v1.2.7",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -434,7 +434,7 @@ fun MenuScreen(
                             showHostDialog = true
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = ShapeLarge,
+                        shape = ShapeMedium,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surface
                         )
@@ -442,12 +442,12 @@ fun MenuScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.secondaryContainer),
                                 contentAlignment = Alignment.Center
@@ -455,11 +455,12 @@ fun MenuScreen(
                                 Icon(
                                     Icons.Outlined.Dns,
                                     contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -467,7 +468,7 @@ fun MenuScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = targetHost.ifBlank { "Tap buat set host" },
                                     style = MaterialTheme.typography.bodyLarge,
@@ -482,7 +483,7 @@ fun MenuScreen(
                             Icon(
                                 Icons.Default.Edit, 
                                 contentDescription = "Edit", 
-                                modifier = Modifier.size(20.dp), 
+                                modifier = Modifier.size(16.dp), 
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -814,7 +815,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                 }
             }
 
-            items(history.take(20)) { res ->
+            items(history.take(50)) { res ->
                 ResultItem(res, onTap = {})
             }
         }

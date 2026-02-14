@@ -12,36 +12,39 @@ android {
         applicationId "com.hoshiyomix.injecttools"
         minSdk 29  // Android 10+
         targetSdk 35
-        versionCode 10
-        versionName "1.2.6"
+        versionCode 11
+        versionName "1.2.7"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary true
         }
         
-        // Removed conflicting ndk.abiFilters block
-        // Splits block below handles the ABI filtering now
+        // Single ABI for smallest APK
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
         
-        // Retaining this for build stability/size
+        // Only English resources, xxhdpi density
         resConfigs "en", "xxhdpi"
     }
 
     buildTypes {
         release {
-            shrinkResources false 
+            // Maximum compression
+            shrinkResources true
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            // Enable app bundle optimization
+            crunchPngs true
         }
     }
     
-    // Split APKs by ABI for smaller file sizes
+    // Remove ABI splits - use single ABI filter instead
     splits {
         abi {
-            enable true
-            reset()
-            include 'arm64-v8a'
-            universalApk false
+            enable false
         }
     }
     
@@ -51,15 +54,45 @@ android {
     }
     kotlinOptions {
         jvmTarget = '17'
+        freeCompilerArgs += [
+            '-opt-in=androidx.compose.material3.ExperimentalMaterial3Api'
+        ]
     }
     buildFeatures {
         compose true
+        buildConfig false
+        aidl false
+        renderScript false
+        resValues false
+        shaders false
     }
-    // kotlinCompilerExtensionVersion no longer needed with Kotlin 2.0+ Compose plugin
+    
     packagingOptions {
         resources {
-            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += [
+                '/META-INF/{AL2.0,LGPL2.1,LGPL3.0}',
+                '/META-INF/DEPENDENCIES',
+                '/META-INF/LICENSE',
+                '/META-INF/LICENSE.txt',
+                '/META-INF/NOTICE',
+                '/META-INF/NOTICE.txt',
+                '/META-INF/*.kotlin_module',
+                '/META-INF/*.version',
+                '/kotlin/**',
+                '/kotlinx/**',
+                '**/*.properties',
+                '**/*.pro'
+            ]
         }
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+    
+    // Optimize resources
+    androidResources {
+        noCompress ''
+        ignoreAssetsPattern "!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~"
     }
 }
 
@@ -75,15 +108,14 @@ dependencies {
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
     
+    // Network - only what's needed
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'org.jsoup:jsoup:1.18.1'
+    implementation 'com.google.code.gson:gson:2.11.0'
+    
+    // Testing (only for debug builds)
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
-    androidTestImplementation platform('androidx.compose:compose-bom:2024.12.01')
-    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }

@@ -58,19 +58,47 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Red Rose fallback colors for SDK < Android 12 (S)
+private val RedRosePrimary = Color(0xFFE91E63)      // Material Pink 500
+private val RedRosePrimaryDark = Color(0xFFC2185B)  // Pink 700
+private val RedRosePrimaryContainer = Color(0xFFFCE4EC)  // Pink 50
+private val RedRoseOnPrimaryContainer = Color(0xFF880E4F) // Pink 900
+private val RedRoseSecondary = Color(0xFFF06292)    // Pink 300
+private val RedRoseSecondaryContainer = Color(0xFFFFF0F5) // Lavender Blush
+private val RedRoseTertiary = Color(0xFFFF4081)     // Pink A200
+private val RedRoseTertiaryContainer = Color(0xFFF8BBD0) // Pink 100
+
 @Composable
 fun dynamicColorScheme(): ColorScheme {
     return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        // Use system accent (Material You) on Android 12+
         if (isSystemInDarkTheme()) {
             dynamicDarkColorScheme(LocalContext.current)
         } else {
             dynamicLightColorScheme(LocalContext.current)
         }
     } else {
+        // Fallback to Red Rose color scheme for older Android versions
         if (isSystemInDarkTheme()) {
-            darkColorScheme()
+            darkColorScheme(
+                primary = RedRosePrimaryDark,
+                primaryContainer = RedRoseOnPrimaryContainer,
+                onPrimaryContainer = RedRosePrimaryContainer,
+                secondary = RedRoseSecondary,
+                secondaryContainer = RedRoseOnPrimaryContainer,
+                tertiary = RedRoseTertiary,
+                tertiaryContainer = RedRoseTertiaryContainer
+            )
         } else {
-            lightColorScheme()
+            lightColorScheme(
+                primary = RedRosePrimary,
+                primaryContainer = RedRosePrimaryContainer,
+                onPrimaryContainer = RedRoseOnPrimaryContainer,
+                secondary = RedRoseSecondary,
+                secondaryContainer = RedRoseSecondaryContainer,
+                tertiary = RedRoseTertiary,
+                tertiaryContainer = RedRoseTertiaryContainer
+            )
         }
     }
 }
@@ -1318,15 +1346,13 @@ fun TestConfirmationDialog(
                     ) {
                         Text("Batal")
                     }
-                    FilledTonalButton(
+                    Button(
                         onClick = onConfirm,
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp),
                         shape = ShapeLarge
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("Mulai Test")
                     }
                 }

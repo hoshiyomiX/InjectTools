@@ -903,8 +903,11 @@ fun SessionCard(
     session: ScanSession,
     onDelete: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    
+    // Check if this is a single test result (no dropdown needed)
+    val isSingleTest = session.results.size == 1 || session.id.startsWith("single_")
+    var expanded by remember { mutableStateOf(isSingleTest) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -919,8 +922,10 @@ fun SessionCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(16.dp),
+                    .then(
+                        if (isSingleTest) Modifier.padding(16.dp)
+                        else Modifier.clickable { expanded = !expanded }.padding(16.dp)
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Domain icon
@@ -966,45 +971,50 @@ fun SessionCard(
                     )
                 }
 
-                // Working count badge
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (session.workingCount > 0)
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Text(
-                        "${session.workingCount} konek",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
+                // Working count badge - only show for mass scan
+                if (!isSingleTest) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
                         color = if (session.workingCount > 0)
-                            MaterialTheme.colorScheme.onPrimaryContainer
+                            MaterialTheme.colorScheme.primaryContainer
                         else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                            MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            "${session.workingCount} konek",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = if (session.workingCount > 0)
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Expand/collapse icon
-                Icon(
-                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Expand/collapse icon - only for mass scan
+                if (!isSingleTest) {
+                    Icon(
+                        if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // Expanded content - show results
             if (expanded && session.results.isNotEmpty()) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
+                if (!isSingleTest) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
 
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = if (isSingleTest) 0.dp else 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     session.results.forEach { result ->
@@ -1125,10 +1135,10 @@ fun checkNetworkAndConfirm(
     val status = NetworkUtils.checkNetworkStatus(context)
     when (status) {
         NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> onProceed()
-        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("Ada internet! Matiin WiFi/Data atau pake mode inject.")
+        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("Kuota reguler aktif! Matiin WiFi/Data atau pake config inject.")
         NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> showWarningDialog("VPN nyala! Matiin dulu VPN nya.")
-        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("VPN + Internet aktif! Matiin keduanya.")
-        NetworkUtils.NetworkStatus.DISCONNECTED -> showWarningDialog("Gak ada koneksi. Nyambungin WiFi/Data dulu.")
+        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("Kuota reguler + VPN aktif! Matiin keduanya.")
+        NetworkUtils.NetworkStatus.DISCONNECTED -> showWarningDialog("Gak ada sinyal. Nyambungin WiFi/Data dulu.")
     }
 }
 
@@ -1344,7 +1354,7 @@ fun CrtshScanScreen(
                         if (domain.isNotBlank()) {
                             // STEP 1: Check if we have internet for fetching
                             if (!NetworkUtils.hasInternetConnection(context)) {
-                                onShowNetworkWarning("Gak ada internet. Sambungin WiFi/Data dulu.")
+                                onShowNetworkWarning("Gak ada sinyal. Sambungin WiFi/Data dulu.")
                                 return@Button
                             }
                             

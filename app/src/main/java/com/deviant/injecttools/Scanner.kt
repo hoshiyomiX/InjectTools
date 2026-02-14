@@ -1,4 +1,4 @@
-package com.hoshiyomix.injecttools
+package com.deviant.injecttools
 
 import com.google.gson.annotations.SerializedName
 import java.net.Inet4Address

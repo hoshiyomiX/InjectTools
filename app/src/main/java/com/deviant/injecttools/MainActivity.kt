@@ -1,4 +1,4 @@
-package com.hoshiyomix.injecttools
+package com.deviant.injecttools
 
 import android.content.Context
 import android.os.Bundle
@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
-import com.hoshiyomix.injecttools.Scanner.ScanResult
+import com.deviant.injecttools.Scanner.ScanResult
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -286,7 +286,16 @@ fun MainApp() {
                     }
                 )
                 Screen.SINGLE_TEST -> ManualScanScreen(targetHost, onResult = { result ->
-                    // Single test: tidak perlu simpan ke history, cukup tampilin hasil
+                    // Single test: simpan ke history sebagai session simple
+                    if (result.isWorking) {
+                        val session = ScanSession(
+                            id = "single_${System.currentTimeMillis()}",
+                            domain = result.subdomain,
+                            timestamp = System.currentTimeMillis(),
+                            results = listOf(result)
+                        )
+                        scanSessions = HistoryStorage.addSession(context, session)
+                    }
                 }, onShowNetworkWarning = { message ->
                     networkWarningMessage = message
                     showNetworkWarningDialog = true

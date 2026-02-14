@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace 'com.hoshiyomix.injecttools'
+    namespace 'com.deviant.injecttools'
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.hoshiyomix.injecttools"
+        applicationId "com.deviant.injecttools"
         minSdk 29  // Android 10+
         targetSdk 35
         versionCode 1

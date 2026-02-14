@@ -24,8 +24,8 @@
 # GSON SERIALIZATION - CRITICAL FOR HISTORY
 # ==========================================
 # Keep all data classes used with Gson serialization
--keep class com.hoshiyomix.injecttools.Scanner$ScanResult { *; }
--keep class com.hoshiyomix.injecttools.ScanSession { *; }
+-keep class com.deviant.injecttools.Scanner$ScanResult { *; }
+-keep class com.deviant.injecttools.ScanSession { *; }
 
 # TypeToken preservation
 -keep class * extends com.google.gson.reflect.TypeToken {
@@ -33,7 +33,7 @@
 }
 
 # Keep HistoryStorage class
--keep class com.hoshiyomix.injecttools.HistoryStorage { *; }
+-keep class com.deviant.injecttools.HistoryStorage { *; }
 
 # Gson library
 -keep class com.google.gson.** { *; }
@@ -52,9 +52,9 @@
 # ==========================================
 # CORE CLASSES
 # ==========================================
--keep class com.hoshiyomix.injecttools.Scanner { *; }
--keep class com.hoshiyomix.injecttools.SubdomainFetcher { *; }
--keep class com.hoshiyomix.injecttools.NetworkUtils { *; }
+-keep class com.deviant.injecttools.Scanner { *; }
+-keep class com.deviant.injecttools.SubdomainFetcher { *; }
+-keep class com.deviant.injecttools.NetworkUtils { *; }
 
 # ==========================================
 # RETROFIT & OKHTTP

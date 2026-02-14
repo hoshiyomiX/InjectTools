@@ -1,4 +1,4 @@
-package com.hoshiyomix.injecttools
+package com.deviant.injecttools
 
 import okhttp3.OkHttpClient
 import okhttp3.Request

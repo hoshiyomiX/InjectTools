@@ -1,4 +1,4 @@
-package com.hoshiyomix.injecttools
+package com.deviant.injecttools
 
 import android.content.Context
 import android.net.ConnectivityManager

@@ -2,7 +2,6 @@ package com.hoshiyomix.injecttools
 
 import com.google.gson.annotations.SerializedName
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
@@ -17,15 +16,26 @@ import java.net.InetAddress
 import java.net.Inet4Address
 
 /**
- * Multi-source subdomain fetcher with automatic fallback.
+ * Multi-source subdomain fetcher with user-selectable sources.
  *
- * Sources (in order of reliability):
- * 1. crt.sh - Certificate Transparency logs (original)
- * 2. certspotter.com - Another CT log source
- * 3. hackertarget.com - Free API for subdomain enumeration
- * 4. bufferover.run - Rapid7 Open Data (certificate data)
+ * Available sources:
+ * - CRT_SH: crt.sh - Certificate Transparency logs (most comprehensive)
+ * - CERTSPOTTER: certspotter.com - Another CT log source (reliable API)
+ * - HACKERTARGET: hackertarget.com - Free API for subdomain enumeration
+ * - BUFFEROVER: dns.bufferover.run - Rapid7 Open Data (fast)
  */
 object SubdomainFetcher {
+
+    // =====================================================
+    // Source Definition
+    // =====================================================
+
+    enum class Source(val displayName: String, val description: String) {
+        CRT_SH("crt.sh", "Certificate Transparency - Paling lengkap"),
+        CERTSPOTTER("CertSpotter", "CT Logs - API stabil"),
+        HACKERTARGET("HackerTarget", "DNS Records - Cepat"),
+        BUFFEROVER("BufferOver", "Rapid7 Data - Alternatif")
+    }
 
     data class FetchProgress(
         val phase: String,
@@ -65,8 +75,9 @@ object SubdomainFetcher {
     }
 
     // =====================================================
-    // Source 1: crt.sh (Certificate Transparency)
+    // API Interfaces
     // =====================================================
+
     private data class CrtShEntry(
         @SerializedName("name_value") val nameValue: String?
     )
@@ -88,9 +99,6 @@ object SubdomainFetcher {
             .create(CrtShApi::class.java)
     }
 
-    // =====================================================
-    // Source 2: CertSpotter (Certificate Transparency)
-    // =====================================================
     private data class CertSpotterEntry(
         @SerializedName("dns_names") val dnsNames: List<String>?
     )
@@ -113,9 +121,6 @@ object SubdomainFetcher {
             .create(CertSpotterApi::class.java)
     }
 
-    // =====================================================
-    // Source 3: HackerTarget API
-    // =====================================================
     private interface HackerTargetApi {
         @GET
         suspend fun getSubdomains(@Url url: String): String
@@ -130,9 +135,6 @@ object SubdomainFetcher {
             .create(HackerTargetApi::class.java)
     }
 
-    // =====================================================
-    // Source 4: BufferOver.run (Rapid7 Open Data)
-    // =====================================================
     private data class BufferOverResult(
         @SerializedName("FDNS_A") val fdnsA: List<String>?,
         @SerializedName("RDNS") val rdns: List<String>?
@@ -157,15 +159,15 @@ object SubdomainFetcher {
     }
 
     // =====================================================
-    // Main Fetch Function with Fallback
+    // Main Fetch Function - User Selected Source
     // =====================================================
 
     /**
-     * Fetch subdomains from multiple sources with automatic fallback.
-     * Tries each source in order until one succeeds.
+     * Fetch subdomains from a specific source selected by user.
      */
-    suspend fun fetchSubdomains(
+    suspend fun fetchFromSource(
         domain: String,
+        source: Source,
         onProgress: ((FetchProgress) -> Unit)? = null
     ): FetchResult = withContext(Dispatchers.IO) {
 
@@ -175,47 +177,43 @@ object SubdomainFetcher {
             .removePrefix("www.")
             .split("/").first()
 
-        // Try sources in order
-        val sources = listOf(
-            "crt.sh" to { fetchFromCrtSh(cleanDomain, onProgress) },
-            "certspotter" to { fetchFromCertSpotter(cleanDomain, onProgress) },
-            "hackertarget" to { fetchFromHackerTarget(cleanDomain, onProgress) },
-            "bufferover" to { fetchFromBufferOver(cleanDomain, onProgress) }
-        )
+        onProgress?.invoke(FetchProgress(
+            phase = "Connecting to ${source.displayName}...",
+            progress = 0.05f,
+            source = source.displayName
+        ))
 
-        var lastError: String? = null
-
-        for ((sourceName, fetcher) in sources) {
-            try {
-                onProgress?.invoke(FetchProgress(
-                    phase = "Trying $sourceName...",
-                    progress = 0.05f,
-                    source = sourceName
-                ))
-
-                val result = fetcher()
-
-                if (result.isNotEmpty()) {
-                    // Validate DNS and filter
-                    val validSubdomains = validateSubdomains(result, cleanDomain, onProgress)
-
-                    return@withContext FetchResult(
-                        subdomains = validSubdomains,
-                        source = sourceName
-                    )
-                }
-            } catch (e: Exception) {
-                lastError = "${e.message}"
-                // Continue to next source
+        try {
+            val rawSubdomains = when (source) {
+                Source.CRT_SH -> fetchFromCrtSh(cleanDomain, onProgress)
+                Source.CERTSPOTTER -> fetchFromCertSpotter(cleanDomain, onProgress)
+                Source.HACKERTARGET -> fetchFromHackerTarget(cleanDomain, onProgress)
+                Source.BUFFEROVER -> fetchFromBufferOver(cleanDomain, onProgress)
             }
-        }
 
-        // All sources failed
-        FetchResult(
-            subdomains = emptyList(),
-            source = "failed",
-            error = lastError ?: "All sources failed"
-        )
+            if (rawSubdomains.isEmpty()) {
+                return@withContext FetchResult(
+                    subdomains = emptyList(),
+                    source = source.displayName,
+                    error = "No subdomains found"
+                )
+            }
+
+            // DNS Validation
+            val validSubdomains = validateSubdomains(rawSubdomains, cleanDomain, onProgress, source.displayName)
+
+            FetchResult(
+                subdomains = validSubdomains,
+                source = source.displayName
+            )
+
+        } catch (e: Exception) {
+            FetchResult(
+                subdomains = emptyList(),
+                source = source.displayName,
+                error = e.message ?: "Unknown error"
+            )
+        }
     }
 
     // =====================================================
@@ -227,18 +225,17 @@ object SubdomainFetcher {
         onProgress: ((FetchProgress) -> Unit)?
     ): List<String> {
         onProgress?.invoke(FetchProgress(
-            phase = "Querying crt.sh certificate logs...",
+            phase = "Querying certificate logs...",
             progress = 0.1f,
-            source = "crt.sh"
+            source = Source.CRT_SH.displayName
         ))
 
-        val query = domain
         var attempts = 0
         val maxRetries = 2
 
         while (attempts < maxRetries) {
             try {
-                val entries = crtShApi.search(query = query)
+                val entries = crtShApi.search(query = domain)
 
                 val subdomains = mutableSetOf<String>()
                 for (entry in entries) {
@@ -256,15 +253,26 @@ object SubdomainFetcher {
                     }
                 }
 
+                onProgress?.invoke(FetchProgress(
+                    phase = "Found ${subdomains.size} raw subdomains",
+                    progress = 0.2f,
+                    source = Source.CRT_SH.displayName
+                ))
+
                 return subdomains.toList()
 
             } catch (e: Exception) {
                 attempts++
                 if (e.message?.contains("503") == true || e.message?.contains("504") == true) {
+                    onProgress?.invoke(FetchProgress(
+                        phase = "Server busy, retrying...",
+                        progress = 0.15f,
+                        source = Source.CRT_SH.displayName
+                    ))
                     delay(2000)
                 }
                 if (attempts == maxRetries) {
-                    throw e
+                    throw Exception("crt.sh unavailable: ${e.message}")
                 }
             }
         }
@@ -277,9 +285,9 @@ object SubdomainFetcher {
         onProgress: ((FetchProgress) -> Unit)?
     ): List<String> {
         onProgress?.invoke(FetchProgress(
-            phase = "Querying CertSpotter CT logs...",
+            phase = "Querying CT logs...",
             progress = 0.1f,
-            source = "certspotter"
+            source = Source.CERTSPOTTER.displayName
         ))
 
         val subdomains = mutableSetOf<String>()
@@ -298,8 +306,14 @@ object SubdomainFetcher {
                     }
                 }
             }
+
+            onProgress?.invoke(FetchProgress(
+                phase = "Found ${subdomains.size} raw subdomains",
+                progress = 0.2f,
+                source = Source.CERTSPOTTER.displayName
+            ))
         } catch (e: Exception) {
-            // CertSpotter might fail silently, continue with what we have
+            throw Exception("CertSpotter error: ${e.message}")
         }
 
         return subdomains.toList()
@@ -310,9 +324,9 @@ object SubdomainFetcher {
         onProgress: ((FetchProgress) -> Unit)?
     ): List<String> {
         onProgress?.invoke(FetchProgress(
-            phase = "Querying HackerTarget API...",
+            phase = "Querying DNS records...",
             progress = 0.1f,
-            source = "hackertarget"
+            source = Source.HACKERTARGET.displayName
         ))
 
         val subdomains = mutableSetOf<String>()
@@ -322,7 +336,6 @@ object SubdomainFetcher {
                 "https://api.hackertarget.com/hostsearch/?q=$domain"
             )
 
-            // Response format: "subdomain.domain.com,IP"
             response.lines().forEach { line ->
                 val parts = line.split(",")
                 if (parts.isNotEmpty()) {
@@ -332,8 +345,14 @@ object SubdomainFetcher {
                     }
                 }
             }
+
+            onProgress?.invoke(FetchProgress(
+                phase = "Found ${subdomains.size} raw subdomains",
+                progress = 0.2f,
+                source = Source.HACKERTARGET.displayName
+            ))
         } catch (e: Exception) {
-            // Continue with what we have
+            throw Exception("HackerTarget error: ${e.message}")
         }
 
         return subdomains.toList()
@@ -344,9 +363,9 @@ object SubdomainFetcher {
         onProgress: ((FetchProgress) -> Unit)?
     ): List<String> {
         onProgress?.invoke(FetchProgress(
-            phase = "Querying BufferOver DNS data...",
+            phase = "Querying Rapid7 data...",
             progress = 0.1f,
-            source = "bufferover"
+            source = Source.BUFFEROVER.displayName
         ))
 
         val subdomains = mutableSetOf<String>()
@@ -357,7 +376,6 @@ object SubdomainFetcher {
             )
 
             response.results?.forEach { result ->
-                // FDNS_A format: "subdomain.domain.com,IP"
                 result.fdnsA?.forEach { entry ->
                     val parts = entry.split(",")
                     if (parts.isNotEmpty()) {
@@ -368,7 +386,6 @@ object SubdomainFetcher {
                     }
                 }
 
-                // RDNS format: "IP,subdomain.domain.com"
                 result.rdns?.forEach { entry ->
                     val parts = entry.split(",")
                     if (parts.size > 1) {
@@ -379,8 +396,14 @@ object SubdomainFetcher {
                     }
                 }
             }
+
+            onProgress?.invoke(FetchProgress(
+                phase = "Found ${subdomains.size} raw subdomains",
+                progress = 0.2f,
+                source = Source.BUFFEROVER.displayName
+            ))
         } catch (e: Exception) {
-            // Continue with what we have
+            throw Exception("BufferOver error: ${e.message}")
         }
 
         return subdomains.toList()
@@ -393,7 +416,8 @@ object SubdomainFetcher {
     private suspend fun validateSubdomains(
         subdomains: List<String>,
         targetDomain: String,
-        onProgress: ((FetchProgress) -> Unit)?
+        onProgress: ((FetchProgress) -> Unit)?,
+        sourceName: String
     ): List<String> = withContext(Dispatchers.IO) {
 
         val uniqueSubdomains = TreeSet<String>(subdomains)
@@ -406,14 +430,11 @@ object SubdomainFetcher {
             phase = "Validating DNS for $total subdomains...",
             progress = 0.3f,
             total = total,
-            source = "dns"
+            source = sourceName
         ))
 
         for ((index, sub) in uniqueSubdomains.withIndex()) {
             try {
-                // Only accept subdomains that:
-                // 1. End with target domain (or are the domain itself)
-                // 2. Resolve to IPv4
                 val isValidDomain = sub.equals(targetDomain, ignoreCase = true) ||
                         sub.endsWith(".$targetDomain", ignoreCase = true)
 
@@ -429,24 +450,23 @@ object SubdomainFetcher {
                 // Domain doesn't resolve, skip
             }
 
-            // Report progress every 10 items
             if (index % 10 == 0 || index == total - 1) {
                 onProgress?.invoke(FetchProgress(
-                    phase = "DNS validation: ${index + 1}/$total (${validSubdomains.size} valid)",
+                    phase = "DNS: ${index + 1}/$total (${validSubdomains.size} valid)",
                     progress = 0.3f + (0.7f * (index + 1) / total),
                     current = index + 1,
                     total = total,
-                    source = "dns"
+                    source = sourceName
                 ))
             }
         }
 
         onProgress?.invoke(FetchProgress(
-            phase = "Complete! Found ${validSubdomains.size} valid subdomains",
+            phase = "Complete! ${validSubdomains.size} valid subdomains",
             progress = 1.0f,
             current = validSubdomains.size,
             total = total,
-            source = "complete"
+            source = sourceName
         ))
 
         validSubdomains
@@ -457,14 +477,12 @@ object SubdomainFetcher {
     // =====================================================
 
     /**
-     * Backward compatible function for existing code.
-     * @deprecated Use fetchSubdomains() instead for better error handling.
+     * Backward compatible function - defaults to crt.sh
      */
-    suspend fun fetchSubdomainsLegacy(
+    suspend fun fetchSubdomains(
         domain: String,
         onProgress: ((FetchProgress) -> Unit)? = null
-    ): List<String> {
-        val result = fetchSubdomains(domain, onProgress)
-        return result.subdomains
+    ): FetchResult {
+        return fetchFromSource(domain, Source.CRT_SH, onProgress)
     }
 }

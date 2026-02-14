@@ -951,6 +951,11 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     var results by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
     var pendingSubdomains by remember { mutableStateOf<List<String>>(emptyList()) }
     var showTestConfirmDialog by remember { mutableStateOf(false) }
+    
+    // Source selection state
+    var selectedSource by remember { mutableStateOf(SubdomainFetcher.Source.CRT_SH) }
+    var showSourceDropdown by remember { mutableStateOf(false) }
+    
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -1029,6 +1034,59 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                         }
                     }
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Source Selection Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = showSourceDropdown,
+                    onExpandedChange = { showSourceDropdown = it },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = "${selectedSource.displayName} - ${selectedSource.description}",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sumber Data") },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showSourceDropdown)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        shape = ShapeMedium
+                    )
+                    
+                    ExposedDropdownMenu(
+                        expanded = showSourceDropdown,
+                        onDismissRequest = { showSourceDropdown = false }
+                    ) {
+                        SubdomainFetcher.Source.entries.forEach { source ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            source.displayName,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            source.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedSource = source
+                                    showSourceDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
@@ -1039,20 +1097,19 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                                 return@Button
                             }
                             
-                            // STEP 2: Fetch from multiple sources (requires internet)
+                            // STEP 2: Fetch from selected source (requires internet)
                             isFetching = true
                             progress = 0f
                             results = emptyList()
-                            statusText = "Nyambung ke certificate logs..."
+                            statusText = "Nyambung ke ${selectedSource.displayName}..."
                             
                             scope.launch {
-                                val fetchResult = SubdomainFetcher.fetchSubdomains(
+                                val fetchResult = SubdomainFetcher.fetchFromSource(
                                     domain = domain,
+                                    source = selectedSource,
                                     onProgress = { fetchProgress ->
-                                        // Update UI with fetch progress (show source name)
-                                        val sourceInfo = if (fetchProgress.source.isNotEmpty()) " (${fetchProgress.source})" else ""
-                                        statusText = fetchProgress.phase + sourceInfo
-                                        progress = fetchProgress.progress * 0.1f // Scale to 0-10% for fetch phase
+                                        statusText = fetchProgress.phase
+                                        progress = fetchProgress.progress * 0.1f
                                     }
                                 )
                                 isFetching = false

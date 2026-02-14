@@ -10,11 +10,13 @@ on:
   push:
     tags:
       - 'v*.*.*'
+    branches:
+      - release
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v1.2.7)'
-        required: true
+        description: 'Version tag (e.g., v1.2.7) - leave empty for auto-detect'
+        required: false
         type: string
 
 permissions:
@@ -50,16 +52,37 @@ jobs:
       - name: Grant execute permission
         run: chmod +x ./gradlew
 
+      - name: Download Gradle Wrapper (if missing)
+        run: |
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Downloading gradle-wrapper.jar..."
+            GRADLE_VERSION=$(grep "distributionUrl" gradle/wrapper/gradle-wrapper.properties | sed 's/.*gradle-\(.*\)-bin\.zip/\1/')
+            curl -sL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip
+            unzip -q /tmp/gradle.zip -d /tmp/
+            cp /tmp/gradle-${GRADLE_VERSION}/lib/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar
+            echo "gradle-wrapper.jar downloaded successfully"
+          else
+            echo "gradle-wrapper.jar already exists"
+          fi
+
       - name: Extract version info
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          else
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            # Auto-generate version from app/build.gradle
+            VERSION_NAME=$(grep "versionName" app/build.gradle | sed 's/.*versionName[[:space:]]*["\x27]\([^"\x27]*\)["\x27].*/\1/' | head -1)
+            VERSION_CODE=$(grep "versionCode" app/build.gradle | sed 's/.*versionCode[[:space:]]*\([0-9]*\).*/\1/' | head -1)
+            VERSION="v${VERSION_NAME:-1.0.0}"
+            echo "Auto-detected version: $VERSION (from build.gradle)"
           fi
+          # Remove 'v' prefix if present for version_name
+          VERSION_CLEAN="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_name=${VERSION#v}" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
       - name: Create release keystore
         run: |
@@ -90,17 +113,17 @@ jobs:
         run: |
           APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -1)
           APK_SIZE=$(stat -c%s "$APK_PATH" | numfmt --to=iec-i --suffix=B)
-          
+
           # Create release filename
           VERSION="${{ steps.version.outputs.version_name }}"
           RELEASE_NAME="InjectTools-${VERSION}.apk"
-          
+
           # Copy to release name
           cp "$APK_PATH" "$RELEASE_NAME"
-          
+
           echo "apk_path=$RELEASE_NAME" >> $GITHUB_OUTPUT
           echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
-          
+
           echo "### 📦 Release Build Output" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: $VERSION" >> $GITHUB_STEP_SUMMARY
           echo "- **APK**: \`$RELEASE_NAME\`" >> $GITHUB_STEP_SUMMARY
@@ -111,19 +134,20 @@ jobs:
         run: |
           # Extract changelog from CHANGELOG.md
           VERSION="${{ steps.version.outputs.version_name }}"
-          
+
           # Get the section for this version
           CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | head -n -1 | tail -n +2)
-          
+
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="Release version $VERSION"
           fi
-          
+
           # Save to file for multiline string handling
           echo "$CHANGELOG" > /tmp/changelog.txt
           echo "changelog_file=/tmp/changelog.txt" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
@@ -134,6 +158,14 @@ jobs:
           files: |
             ${{ steps.apk.outputs.apk_path }}
           generate_release_notes: true
+
+      - name: Upload APK as Artifact
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: InjectTools-${{ steps.version.outputs.version_name }}
+          path: ${{ steps.apk.outputs.apk_path }}
+          retention-days: 30
 
       - name: Cleanup keystore
         if: always()
@@ -146,7 +178,7 @@ jobs:
     name: Post-release Notification
     runs-on: ubuntu-latest
     needs: build-release
-    if: success()
+    if: success() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
 
     steps:
       - name: Checkout repository

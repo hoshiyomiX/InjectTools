@@ -17,6 +17,7 @@ import java.util.Locale
 data class ScanSession(
     @SerializedName("id") val id: String,
     @SerializedName("domain") val domain: String,
+    @SerializedName("targetHost") val targetHost: String = "",
     @SerializedName("timestamp") val timestamp: Long,
     @SerializedName("results") val results: List<Scanner.ScanResult>
 ) {
@@ -31,6 +32,12 @@ data class ScanSession(
     
     val workingCount: Int
         get() = results.count { it.isWorking }
+    
+    val avgLatency: Long
+        get() {
+            val workingResults = results.filter { it.isWorking && it.latency > 0 }
+            return if (workingResults.isNotEmpty()) workingResults.map { it.latency }.average().toLong() else 0L
+        }
 }
 
 /**

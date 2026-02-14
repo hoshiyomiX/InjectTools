@@ -193,6 +193,7 @@ fun MainApp() {
         val session = ScanSession(
             id = sessionId,
             domain = currentSessionDomain,
+            targetHost = targetHost,
             timestamp = System.currentTimeMillis(),
             results = successResults
         )
@@ -291,6 +292,7 @@ fun MainApp() {
                         val session = ScanSession(
                             id = "single_${System.currentTimeMillis()}",
                             domain = result.subdomain,
+                            targetHost = targetHost,
                             timestamp = System.currentTimeMillis(),
                             results = listOf(result)
                         )
@@ -903,8 +905,6 @@ fun SessionCard(
     session: ScanSession,
     onDelete: () -> Unit
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    
     // Check if this is a single test result (no dropdown needed)
     val isSingleTest = session.results.size == 1 || session.id.startsWith("single_")
     var expanded by remember { mutableStateOf(isSingleTest) }
@@ -928,34 +928,26 @@ fun SessionCard(
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Domain icon
+                // Status dot - GREEN
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(10.dp)
                         .clip(CircleShape)
-                        .background(
-                            if (session.workingCount > 0)
-                                MaterialTheme.colorScheme.primaryContainer
-                            else
-                                MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Outlined.Public,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = if (session.workingCount > 0)
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                        .background(Color(0xFF4CAF50))
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                // Domain and date
+                // Info: Date, Domain, Target Host, IP, Latency
                 Column(modifier = Modifier.weight(1f)) {
+                    // Date
+                    Text(
+                        session.formattedDate,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    // Domain
                     Text(
                         session.domain,
                         style = MaterialTheme.typography.titleSmall,
@@ -964,31 +956,49 @@ fun SessionCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        session.formattedDate,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    // Target Host
+                    if (session.targetHost.isNotBlank()) {
+                        Text(
+                            "Host: ${session.targetHost}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // IP and Latency (show first result for single test)
+                    if (isSingleTest && session.results.isNotEmpty()) {
+                        val res = session.results.first()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "IP: ${res.ip}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (res.latency > 0) {
+                                Text(
+                                    "  •  ${res.latency}ms",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // Working count badge - only show for mass scan
                 if (!isSingleTest) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (session.workingCount > 0)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else
-                            MaterialTheme.colorScheme.surfaceVariant
+                        color = Color(0xFF4CAF50).copy(alpha = 0.15f)
                     ) {
                         Text(
                             "${session.workingCount} konek",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Medium,
-                            color = if (session.workingCount > 0)
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color(0xFF4CAF50)
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1004,72 +1014,23 @@ fun SessionCard(
                 }
             }
 
-            // Expanded content - show results
-            if (expanded && session.results.isNotEmpty()) {
-                if (!isSingleTest) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-                }
+            // Expanded content - show results (for mass scan)
+            if (expanded && session.results.isNotEmpty() && !isSingleTest) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
 
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = if (isSingleTest) 0.dp else 12.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     session.results.forEach { result ->
                         SessionResultItem(result)
                     }
                 }
-
-                // Delete button
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-                TextButton(
-                    onClick = { showDeleteDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Hapus")
-                }
             }
         }
-    }
-
-    // Delete confirmation dialog
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Hapus?") },
-            text = { Text("Hasil scan ${session.domain} akan dihapus.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDelete()
-                        showDeleteDialog = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Hapus")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Batal")
-                }
-            }
-        )
     }
 }
 
@@ -1081,15 +1042,12 @@ fun SessionResultItem(result: Scanner.ScanResult) {
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Status indicator
+        // Status indicator - GREEN
         Box(
             modifier = Modifier
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(
-                    if (result.isCloudflare) Color(0xFFFF6B35)
-                    else MaterialTheme.colorScheme.primary
-                )
+                .background(Color(0xFF4CAF50))
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -1102,11 +1060,23 @@ fun SessionResultItem(result: Scanner.ScanResult) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
-                result.ip,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    result.ip,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (result.latency > 0) {
+                    Text(
+                        "  •  ${result.latency}ms",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF4CAF50),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
 
         // Cloudflare badge
@@ -1691,7 +1661,7 @@ fun ResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(
-                        if (res.isWorking) MaterialTheme.colorScheme.primary
+                        if (res.isWorking) Color(0xFF4CAF50)
                         else MaterialTheme.colorScheme.outline
                     ),
                 contentAlignment = Alignment.Center
@@ -1722,24 +1692,34 @@ fun ResultItem(res: ScanResult, onTap: (ScanResult) -> Unit) {
                         maxLines = 1
                     )
                 }
-                Text(
-                    if (res.isWorking) "${res.ip} ${if (res.isCloudflare) "CF" else ""}"
-                    else res.errorMsg ?: "Failed",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (res.isWorking) "${res.ip} ${if (res.isCloudflare) "CF" else ""}"
+                        else res.errorMsg ?: "Failed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (res.isWorking && res.latency > 0) {
+                        Text(
+                            "  •  ${res.latency}ms",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
             
             if (res.isCloudflare && res.isWorking) {
                 Surface(
                     shape = ShapeSmall,
-                    color = MaterialTheme.colorScheme.tertiaryContainer
+                    color = Color(0xFFFF6B35).copy(alpha = 0.15f)
                 ) {
                     Text(
                         "CF",
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                        color = Color(0xFFFF6B35)
                     )
                 }
             }

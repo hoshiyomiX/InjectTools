@@ -1,196 +1,208 @@
-# InjectTools
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="InjectTools Logo" width="120">
+</p>
 
-[![Android Build](https://github.com/hoshiyomiX/InjectTools/actions/workflows/android.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/android.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<h1 align="center">InjectTools</h1>
 
-**Bug Inject Scanner for Cloudflare Subdomains** - Android Native App
+<p align="center">
+  <strong>A powerful Android application for scanning and testing host injection vulnerabilities</strong>
+</p>
 
-High-performance Android app with Material You design for scanning Cloudflare subdomains.
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#tech-stack">Tech Stack</a> •
+  <a href="#contributing">Contributing</a> •
+  <a href="#license">License</a>
+</p>
 
-## 🚀 Features
-
-### Core Features
-- ⚡ **Fast Scanning** - Concurrent subdomain testing
-- 🔍 **DNS Resolution** - Multi-resolver with fallback
-- ☁️ **Cloudflare Detection** - Auto-detect CF IP ranges
-- 📊 **Real-time Progress** - Live progress tracking
-- 💾 **Scan History** - View previous scan results
-- 🌐 **crt.sh Integration** - Automatic subdomain discovery
-
-### UI/UX
-- 🎨 **Material You Design** - Modern Android design
-- 🌙 **Dark Theme** - Eye-friendly dark mode
-- ✨ **Smooth Animations** - Fluid transitions
-- 📱 **Native Performance** - Built with Jetpack Compose
-
----
-
-## 📥 Installation
-
-### Download APK
-
-Download the latest APK from [GitHub Releases](https://github.com/hoshiyomiX/InjectTools/releases)
-
-### Requirements
-- **Android 10+** (API 29+)
-- **ARM64** device (most modern phones)
-- Internet connection
-
-### Install
-1. Download APK
-2. Enable "Install from unknown sources" in settings
-3. Open APK and install
-4. Launch app and set your target host
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
+  <img src="https://img.shields.io/badge/Language-Kotlin-purple.svg" alt="Language">
+  <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-blue.svg" alt="UI">
+  <img src="https://img.shields.io/badge/Design-Material%203-pink.svg" alt="Design">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+</p>
 
 ---
 
-## 📱 Usage
+## Overview
 
-### First Run
-1. Open app
-2. Enter your target host (e.g., `tunnel.example.com`)
-3. Click "Get Started"
+**InjectTools** is a specialized Android application designed for network administrators, security researchers, and VPN enthusiasts who need to identify and test host injection vulnerabilities. The application provides an intuitive interface to scan DNS records, test individual hosts, and maintain a comprehensive history of successful connections.
 
-### Test Single Subdomain
-1. Tap "Test Subdomain"
-2. Enter subdomain to test
-3. View results instantly
+## Features
 
-### Batch Scan via crt.sh
-1. Tap "Batch Scan"
-2. Enter domain (e.g., `cloudflare.com`)
-3. App fetches subdomains from crt.sh
-4. Tests all subdomains automatically
-5. View working bugs in History
+### 🔍 Single Bug Testing
+Test individual subdomains or hosts against your target VPN server configuration. Get instant feedback on connection status, IP resolution, and latency metrics.
 
-### View History
-- Tap "History" to see previous scan results
-- Shows working bugs with IP addresses
-- Indicates Cloudflare status
+### 🌐 Mass Scanning via DNS Records
+Leverage Certificate Transparency logs through `crt.sh` to automatically discover and test multiple subdomains. The application efficiently processes DNS records to identify working injection points.
 
----
+### 📊 Session History Management
+- Automatically save successful scan results
+- View detailed connection information including IP addresses and latency
+- Delete individual sessions or clear all history
+- Persistent storage across app sessions
 
-## 🎯 What It Does
+### 🎨 Modern User Interface
+- Built with Jetpack Compose and Material Design 3
+- Dynamic color theming with Material You support (Android 12+)
+- Smooth animations and intuitive navigation
+- Dark and light mode support
 
-InjectTools scans subdomains to find "bug inject" targets that work with your tunnel/proxy host:
+### ⚡ Performance Optimized
+- Concurrent scanning with configurable thread limits
+- Efficient network operations with timeout handling
+- Minimal battery consumption during scans
 
-1. **Resolve DNS** - Get IP address of subdomain
-2. **Test Connection** - Check if subdomain is reachable
-3. **Detect Cloudflare** - Identify CF-protected domains
-4. **Report Results** - Show working bugs with details
+## Screenshots
 
----
+<p align="center">
+  <img src="https://via.placeholder.com/270x540?text=Home+Screen" alt="Home Screen" width="200">
+  <img src="https://via.placeholder.com/270x540?text=Scan+Screen" alt="Scan Screen" width="200">
+  <img src="https://via.placeholder.com/270x540?text=History+Screen" alt="History Screen" width="200">
+</p>
 
-## 🔧 Technical Details
+## Installation
 
-### Built With
-- **Kotlin** - Primary language
-- **Jetpack Compose** - Modern UI toolkit
-- **Material You** - Design system
-- **Retrofit** - HTTP client
-- **Coroutines** - Async operations
+### Prerequisites
+- Android device running **Android 7.0 (Nougat)** or higher
+- Internet connection for scanning operations
 
-### Architecture
-- MVVM pattern
-- Single Activity app
-- Compose Navigation
+### Download
+Download the latest APK from the [Releases](https://github.com/hoshiyomiX/InjectTools/releases) page.
 
-### Permissions
-- `INTERNET` - For network operations
-- `ACCESS_NETWORK_STATE` - Network status
+### Build from Source
 
----
-
-## 📊 Project Structure
-
-```
-InjectTools/
-├── app/
-│   ├── src/main/
-│   │   ├── java/com/hoshiyomix/injecttools/
-│   │   │   ├── MainActivity.kt    # UI & Navigation
-│   │   │   ├── Scanner.kt         # Scan Engine
-│   │   │   ├── NetworkUtils.kt    # Network utilities
-│   │   │   └── Crtsh.kt           # crt.sh API
-│   │   ├── res/                   # Resources
-│   │   └── AndroidManifest.xml
-│   └── build.gradle               # Build config
-├── gradle/                        # Gradle wrapper
-├── build.gradle.kts               # Root config
-└── settings.gradle.kts            # Settings
-```
-
----
-
-## 🔄 Build from Source
-
-### Requirements
-- Android Studio Hedgehog or newer
-- JDK 17
-- Android SDK 34
-
-### Steps
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/hoshiyomiX/InjectTools.git
 cd InjectTools
 
-# Open in Android Studio
-# OR build via command line:
-./gradlew assembleRelease
+# Build debug APK
+./gradlew assembleDebug
 
-# APK location:
-# app/build/outputs/apk/release/
+# Build release APK
+./gradlew assembleRelease
 ```
 
+The compiled APK will be available in `app/build/outputs/apk/`.
+
+## Usage
+
+### Initial Setup
+1. Launch the application
+2. On first run, you'll be prompted to enter your VPN provider's host server
+3. Enter the host address (e.g., `sg.server.web.id`) and tap **Mulai Gas**
+
+### Testing a Single Host
+1. Tap **Test Bug** from the main menu
+2. Enter the subdomain you wish to test
+3. View the results showing connection status, IP, and latency
+
+### Mass Scanning
+1. Tap **Scan & Test Bug** from the main menu
+2. Enter a domain to scan
+3. The app will fetch subdomains from Certificate Transparency logs
+4. Results are automatically saved to history upon completion
+
+### Viewing History
+1. Tap **History** from the main menu
+2. Browse through your previous successful scans
+3. Tap on a session to expand and view detailed results
+4. Delete individual sessions by tapping the delete icon
+
+### Managing Target Host
+- Tap the host card on the main screen to update your target server
+- The host setting persists across app sessions
+
+## Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| Language | Kotlin |
+| UI Framework | Jetpack Compose |
+| Design System | Material Design 3 |
+| Architecture | MVVM |
+| Networking | OkHttp |
+| Async | Kotlin Coroutines |
+| Storage | SharedPreferences |
+
+## Project Structure
+
+```
+app/
+├── src/main/
+│   ├── java/com/deviant/injecttools/
+│   │   ├── MainActivity.kt        # Main UI and navigation
+│   │   ├── Scanner.kt             # Core scanning logic
+│   │   ├── Crtsh.kt               # Certificate Transparency fetcher
+│   │   ├── SubdomainFetcher.kt    # DNS record processing
+│   │   ├── NetworkUtils.kt        # Network utilities
+│   │   └── HistoryStorage.kt      # Session persistence
+│   └── res/
+│       └── mipmap-*/              # App icons
+└── build.gradle                   # Module configuration
+```
+
+## Contributing
+
+Contributions are welcome! Here's how you can help:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+Please make sure to update tests as appropriate and follow the existing code style.
+
+### Code Style
+- Follow [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html)
+- Use meaningful variable and function names
+- Add comments for complex logic
+
+## Security Considerations
+
+This tool is intended for legitimate network testing purposes only. Users are responsible for ensuring they have proper authorization before testing any hosts or networks. The developers are not responsible for misuse of this application.
+
+## Roadmap
+
+- [ ] Export history to CSV/JSON
+- [ ] Multiple target host profiles
+- [ ] Custom scanning presets
+- [ ] Notification on scan completion
+- [ ] Widget for quick testing
+- [ ] IPv6 support
+
+## Known Issues
+
+See the [Issues](https://github.com/hoshiyomiX/InjectTools/issues) page for a list of known issues and feature requests.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Author
+
+<p align="center">
+  <strong>Hoshiyomi</strong>
+</p>
+
+<p align="center">
+  <a href="https://t.me/hoshiyomi_id">
+    <img src="https://img.shields.io/badge/Telegram-@hoshiyomi__id-blue?logo=telegram&logoColor=white" alt="Telegram">
+  </a>
+</p>
+
 ---
 
-## 📝 Changelog
+<p align="center">
+  Made with ❤️ in Indonesia
+</p>
 
-### v1.1.0 (Current)
-- ✨ Material You redesign
-- ✨ Smooth animations with custom easing
-- ✨ New app logo
-- 🐛 Bug fixes and performance improvements
-
-### v1.0.0
-- Initial Android release
-- Single subdomain test
-- crt.sh batch scan
-- Scan history
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Submit a Pull Request.
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE)
-
----
-
-## 👤 Credits
-
-**Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)
-
-**Powered by:**
-- [Kotlin](https://kotlinlang.org/)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose)
-- [Material Design](https://m3.material.io/)
-- [crt.sh](https://crt.sh) - Certificate transparency logs
-
----
-
-## ⚠️ Disclaimer
-
-For **educational purposes** and **authorized testing only**.
-
----
-
-⭐ **Star** this repo if it helps you!
-
-🐛 Report bugs: [Issues](https://github.com/hoshiyomiX/InjectTools/issues)
+<p align="center">
+  <sub>If you find this project useful, please consider giving it a ⭐ star!</sub>
+</p>

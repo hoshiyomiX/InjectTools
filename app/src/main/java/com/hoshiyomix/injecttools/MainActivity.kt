@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -131,8 +133,12 @@ fun MainApp() {
     var currentScreen by remember { mutableStateOf(Screen.MENU) }
     var targetHost by remember { mutableStateOf(prefs.getString("target_host", "") ?: "") }
     
-    // Load history from file storage on app start (persists across app restarts)
-    var scanHistory by remember { mutableStateOf(HistoryStorage.loadHistory(context)) }
+    // Session-based history: each mass scan creates a new session
+    var scanSessions by remember { mutableStateOf(HistoryStorage.loadSessions(context)) }
+    
+    // Track current mass scan session
+    var currentSessionId by remember { mutableStateOf<String?>(null) }
+    var currentSessionDomain by remember { mutableStateOf("") }
 
     var showFirstRunDialog by remember { mutableStateOf(prefs.getBoolean("first_run", true)) }
     var showNetworkWarningDialog by remember { mutableStateOf(false) }
@@ -143,15 +149,60 @@ fun MainApp() {
         prefs.edit().putString("target_host", host).apply()
     }
 
-    fun addResults(newResults: List<ScanResult>) {
+    // Start a new session for mass scan
+    fun startNewSession(domain: String): String {
+        val sessionId = "session_${System.currentTimeMillis()}"
+        currentSessionId = sessionId
+        currentSessionDomain = domain
+        return sessionId
+    }
+
+    // Add results to current session (for mass scan) or as single result
+    fun addResultsToSession(newResults: List<ScanResult>) {
         val successResults = newResults.filter { it.isWorking }
         if (successResults.isEmpty()) return
         
-        val combined = (successResults + scanHistory.filter { it.isWorking }).take(50)
-        scanHistory = combined
+        val sessionId = currentSessionId
+        if (sessionId != null) {
+            // Add to existing session
+            val sessions = scanSessions.toMutableList()
+            val sessionIndex = sessions.indexOfFirst { it.id == sessionId }
+            
+            if (sessionIndex >= 0) {
+                val existing = sessions[sessionIndex]
+                sessions[sessionIndex] = existing.copy(
+                    results = existing.results + successResults
+                )
+            }
+            
+            scanSessions = sessions.sortedByDescending { it.timestamp }
+            HistoryStorage.saveSessions(context, scanSessions)
+        }
+    }
+    
+    // Create final session after mass scan completes
+    fun finalizeSession(results: List<ScanResult>) {
+        val successResults = results.filter { it.isWorking }
+        if (successResults.isEmpty()) {
+            currentSessionId = null
+            return
+        }
         
-        // Persist history to file storage
-        HistoryStorage.saveHistory(context, combined)
+        val sessionId = currentSessionId ?: return
+        val session = ScanSession(
+            id = sessionId,
+            domain = currentSessionDomain,
+            timestamp = System.currentTimeMillis(),
+            results = successResults
+        )
+        
+        scanSessions = HistoryStorage.addSession(context, session)
+        currentSessionId = null
+    }
+
+    // Delete a session
+    fun deleteSession(sessionId: String) {
+        scanSessions = HistoryStorage.deleteSession(context, sessionId)
     }
 
     fun navigateTo(screen: Screen) {
@@ -233,15 +284,30 @@ fun MainApp() {
                         }
                     }
                 )
-                Screen.SINGLE_TEST -> ManualScanScreen(targetHost, onResult = { addResults(listOf(it)) }, onShowNetworkWarning = { message ->
+                Screen.SINGLE_TEST -> ManualScanScreen(targetHost, onResult = { result ->
+                    // Single test: just save as a quick session
+                    if (result.isWorking) {
+                        val session = ScanSession(
+                            id = "single_${System.currentTimeMillis()}",
+                            domain = result.subdomain,
+                            timestamp = System.currentTimeMillis(),
+                            results = listOf(result)
+                        )
+                        scanSessions = HistoryStorage.addSession(context, session)
+                    }
+                }, onShowNetworkWarning = { message ->
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
                 })
-                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) }, onShowNetworkWarning = { message ->
+                Screen.CRTSH_TEST -> CrtshScanScreen(
+                    targetHost = targetHost,
+                    onStartSession = { domain -> startNewSession(domain) },
+                    onResults = { results -> finalizeSession(results) },
+                    onShowNetworkWarning = { message ->
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
                 })
-                Screen.RESULTS -> ResultHistoryScreen(scanHistory)
+                Screen.RESULTS -> ResultHistoryScreen(scanSessions, onDeleteSession = { deleteSession(it) })
             }
         }
     }
@@ -729,8 +795,11 @@ fun MenuTileCard(
 }
 
 @Composable
-fun ResultHistoryScreen(history: List<ScanResult>) {
-    if (history.isEmpty()) {
+fun ResultHistoryScreen(
+    sessions: List<ScanSession>,
+    onDeleteSession: (String) -> Unit
+) {
+    if (sessions.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -769,6 +838,7 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Summary card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -780,12 +850,12 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
+                            .padding(20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -793,20 +863,20 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                             Icon(
                                 Icons.Default.List,
                                 contentDescription = null,
-                                modifier = Modifier.size(28.dp),
+                                modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
-                                "Hasil Terbaru",
+                                "Riwayat Scan",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "${history.size} bug work",
+                                "${sessions.size} sesi • ${sessions.sumOf { it.workingCount }} bug work",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -815,8 +885,232 @@ fun ResultHistoryScreen(history: List<ScanResult>) {
                 }
             }
 
-            items(history.take(50)) { res ->
-                ResultItem(res, onTap = {})
+            // Session items
+            items(sessions.size) { index ->
+                val session = sessions[index]
+                SessionCard(
+                    session = session,
+                    onDelete = { onDeleteSession(session.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SessionCard(
+    session: ScanSession,
+    onDelete: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = ShapeMedium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column {
+            // Header - always visible
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Domain icon
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (session.workingCount > 0)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
+                                MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Public,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = if (session.workingCount > 0)
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Domain and date
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        session.domain,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        session.formattedDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Working count badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (session.workingCount > 0)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        "${session.workingCount} work",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (session.workingCount > 0)
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Expand/collapse icon
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Expanded content - show results
+            if (expanded && session.results.isNotEmpty()) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    session.results.forEach { result ->
+                        SessionResultItem(result)
+                    }
+                }
+
+                // Delete button
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                TextButton(
+                    onClick = { showDeleteDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Hapus Sesi Ini")
+                }
+            }
+        }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Hapus Sesi?") },
+            text = { Text("Hasil scan untuk ${session.domain} akan dihapus permanen.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SessionResultItem(result: Scanner.ScanResult) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Status indicator
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(
+                    if (result.isCloudflare) Color(0xFFFF6B35)
+                    else MaterialTheme.colorScheme.primary
+                )
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                result.subdomain,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                result.ip,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // Cloudflare badge
+        if (result.isCloudflare) {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFFFF6B35).copy(alpha = 0.15f)
+            ) {
+                Text(
+                    "CF",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF6B35)
+                )
             }
         }
     }
@@ -943,7 +1237,12 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onShowNetworkWarning: (String) -> Unit) {
+fun CrtshScanScreen(
+    targetHost: String,
+    onStartSession: (String) -> String,
+    onResults: (List<ScanResult>) -> Unit,
+    onShowNetworkWarning: (String) -> Unit
+) {
     var domain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var isFetching by remember { mutableStateOf(false) }
@@ -955,9 +1254,14 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var currentScanDomain by remember { mutableStateOf("") }
 
     // Helper function to start testing phase
-    fun startTesting(subdomains: List<String>) {
+    fun startTesting(subdomains: List<String>, scanDomain: String) {
+        // Start new session
+        currentScanDomain = scanDomain
+        onStartSession(scanDomain)
+        
         isScanning = true
         progress = 0.1f // Start from 10% (after fetch phase)
         results = emptyList()
@@ -970,11 +1274,13 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 scanResults.add(result)
                 // Real-time update: show results as they come in
                 results = scanResults.toList()
-                onResults(scanResults.toList())
                 // Test phase: 10% - 100%
                 progress = 0.1f + (0.9f * (index + 1) / subdomains.size)
                 statusText = "Test ${index + 1}/${subdomains.size}: $sub (${scanResults.count { it.isWorking }} work)"
             }
+            
+            // Finalize session with all results
+            onResults(scanResults.toList())
             
             statusText = "Selesai! ${scanResults.count { it.isWorking }} bug work ketemu"
             progress = 1f
@@ -1184,7 +1490,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                             onClick = {
                                 // Check injection mode and start testing
                                 checkNetworkAndConfirm(context, {
-                                    startTesting(pendingSubdomains)
+                                    startTesting(pendingSubdomains, domain)
                                 }, onShowNetworkWarning)
                             },
                             modifier = Modifier
@@ -1248,7 +1554,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 // STEP 4: Check injection mode conditions before testing
                 // Note: If network check fails, pendingSubdomains is preserved so user can retry
                 checkNetworkAndConfirm(context, {
-                    startTesting(pendingSubdomains)
+                    startTesting(pendingSubdomains, domain)
                 }, onShowNetworkWarning)
             },
             onCancel = {

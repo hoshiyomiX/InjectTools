@@ -25,6 +25,7 @@
 # ==========================================
 # Keep all data classes used with Gson serialization
 -keep class com.hoshiyomix.injecttools.Scanner$ScanResult { *; }
+-keep class com.hoshiyomix.injecttools.ScanSession { *; }
 
 # TypeToken preservation
 -keep class * extends com.google.gson.reflect.TypeToken {

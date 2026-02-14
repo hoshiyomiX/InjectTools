@@ -1,141 +1,196 @@
-# 🚀 Welcome to Z.ai Code Scaffold
+# InjectTools
 
-A modern, production-ready web application scaffold powered by cutting-edge technologies, designed to accelerate your development with [Z.ai](https://chat.z.ai)'s AI-powered coding assistance.
+[![Android Build](https://github.com/hoshiyomiX/InjectTools/actions/workflows/android.yml/badge.svg)](https://github.com/hoshiyomiX/InjectTools/actions/workflows/android.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## ✨ Technology Stack
+**Bug Inject Scanner for Cloudflare Subdomains** - Android Native App
 
-This scaffold provides a robust foundation built with:
+High-performance Android app with Material You design for scanning Cloudflare subdomains.
 
-### 🎯 Core Framework
-- **⚡ Next.js 16** - The React framework for production with App Router
-- **📘 TypeScript 5** - Type-safe JavaScript for better developer experience
-- **🎨 Tailwind CSS 4** - Utility-first CSS framework for rapid UI development
+## 🚀 Features
 
-### 🧩 UI Components & Styling
-- **🧩 shadcn/ui** - High-quality, accessible components built on Radix UI
-- **🎯 Lucide React** - Beautiful & consistent icon library
-- **🌈 Framer Motion** - Production-ready motion library for React
-- **🎨 Next Themes** - Perfect dark mode in 2 lines of code
+### Core Features
+- ⚡ **Fast Scanning** - Concurrent subdomain testing
+- 🔍 **DNS Resolution** - Multi-resolver with fallback
+- ☁️ **Cloudflare Detection** - Auto-detect CF IP ranges
+- 📊 **Real-time Progress** - Live progress tracking
+- 💾 **Scan History** - View previous scan results
+- 🌐 **crt.sh Integration** - Automatic subdomain discovery
 
-### 📋 Forms & Validation
-- **🎣 React Hook Form** - Performant forms with easy validation
-- **✅ Zod** - TypeScript-first schema validation
-
-### 🔄 State Management & Data Fetching
-- **🐻 Zustand** - Simple, scalable state management
-- **🔄 TanStack Query** - Powerful data synchronization for React
-- **🌐 Fetch** - Promise-based HTTP request
-
-### 🗄️ Database & Backend
-- **🗄️ Prisma** - Next-generation TypeScript ORM
-- **🔐 NextAuth.js** - Complete open-source authentication solution
-
-### 🎨 Advanced UI Features
-- **📊 TanStack Table** - Headless UI for building tables and datagrids
-- **🖱️ DND Kit** - Modern drag and drop toolkit for React
-- **📊 Recharts** - Redefined chart library built with React and D3
-- **🖼️ Sharp** - High performance image processing
-
-### 🌍 Internationalization & Utilities
-- **🌍 Next Intl** - Internationalization library for Next.js
-- **📅 Date-fns** - Modern JavaScript date utility library
-- **🪝 ReactUse** - Collection of essential React hooks for modern development
-
-## 🎯 Why This Scaffold?
-
-- **🏎️ Fast Development** - Pre-configured tooling and best practices
-- **🎨 Beautiful UI** - Complete shadcn/ui component library with advanced interactions
-- **🔒 Type Safety** - Full TypeScript configuration with Zod validation
-- **📱 Responsive** - Mobile-first design principles with smooth animations
-- **🗄️ Database Ready** - Prisma ORM configured for rapid backend development
-- **🔐 Auth Included** - NextAuth.js for secure authentication flows
-- **📊 Data Visualization** - Charts, tables, and drag-and-drop functionality
-- **🌍 i18n Ready** - Multi-language support with Next Intl
-- **🚀 Production Ready** - Optimized build and deployment settings
-- **🤖 AI-Friendly** - Structured codebase perfect for AI assistance
-
-## 🚀 Quick Start
-
-```bash
-# Install dependencies
-bun install
-
-# Start development server
-bun run dev
-
-# Build for production
-bun run build
-
-# Start production server
-bun start
-```
-
-Open [http://localhost:3000](http://localhost:3000) to see your application running.
-
-## 🤖 Powered by Z.ai
-
-This scaffold is optimized for use with [Z.ai](https://chat.z.ai) - your AI assistant for:
-
-- **💻 Code Generation** - Generate components, pages, and features instantly
-- **🎨 UI Development** - Create beautiful interfaces with AI assistance  
-- **🔧 Bug Fixing** - Identify and resolve issues with intelligent suggestions
-- **📝 Documentation** - Auto-generate comprehensive documentation
-- **🚀 Optimization** - Performance improvements and best practices
-
-Ready to build something amazing? Start chatting with Z.ai at [chat.z.ai](https://chat.z.ai) and experience the future of AI-powered development!
-
-## 📁 Project Structure
-
-```
-src/
-├── app/                 # Next.js App Router pages
-├── components/          # Reusable React components
-│   └── ui/             # shadcn/ui components
-├── hooks/              # Custom React hooks
-└── lib/                # Utility functions and configurations
-```
-
-## 🎨 Available Features & Components
-
-This scaffold includes a comprehensive set of modern web development tools:
-
-### 🧩 UI Components (shadcn/ui)
-- **Layout**: Card, Separator, Aspect Ratio, Resizable Panels
-- **Forms**: Input, Textarea, Select, Checkbox, Radio Group, Switch
-- **Feedback**: Alert, Toast (Sonner), Progress, Skeleton
-- **Navigation**: Breadcrumb, Menubar, Navigation Menu, Pagination
-- **Overlay**: Dialog, Sheet, Popover, Tooltip, Hover Card
-- **Data Display**: Badge, Avatar, Calendar
-
-### 📊 Advanced Data Features
-- **Tables**: Powerful data tables with sorting, filtering, pagination (TanStack Table)
-- **Charts**: Beautiful visualizations with Recharts
-- **Forms**: Type-safe forms with React Hook Form + Zod validation
-
-### 🎨 Interactive Features
-- **Animations**: Smooth micro-interactions with Framer Motion
-- **Drag & Drop**: Modern drag-and-drop functionality with DND Kit
-- **Theme Switching**: Built-in dark/light mode support
-
-### 🔐 Backend Integration
-- **Authentication**: Ready-to-use auth flows with NextAuth.js
-- **Database**: Type-safe database operations with Prisma
-- **API Client**: HTTP requests with Fetch + TanStack Query
-- **State Management**: Simple and scalable with Zustand
-
-### 🌍 Production Features
-- **Internationalization**: Multi-language support with Next Intl
-- **Image Optimization**: Automatic image processing with Sharp
-- **Type Safety**: End-to-end TypeScript with Zod validation
-- **Essential Hooks**: 100+ useful React hooks with ReactUse for common patterns
-
-## 🤝 Get Started with Z.ai
-
-1. **Clone this scaffold** to jumpstart your project
-2. **Visit [chat.z.ai](https://chat.z.ai)** to access your AI coding assistant
-3. **Start building** with intelligent code generation and assistance
-4. **Deploy with confidence** using the production-ready setup
+### UI/UX
+- 🎨 **Material You Design** - Modern Android design
+- 🌙 **Dark Theme** - Eye-friendly dark mode
+- ✨ **Smooth Animations** - Fluid transitions
+- 📱 **Native Performance** - Built with Jetpack Compose
 
 ---
 
-Built with ❤️ for the developer community. Supercharged by [Z.ai](https://chat.z.ai) 🚀
+## 📥 Installation
+
+### Download APK
+
+Download the latest APK from [GitHub Releases](https://github.com/hoshiyomiX/InjectTools/releases)
+
+### Requirements
+- **Android 10+** (API 29+)
+- **ARM64** device (most modern phones)
+- Internet connection
+
+### Install
+1. Download APK
+2. Enable "Install from unknown sources" in settings
+3. Open APK and install
+4. Launch app and set your target host
+
+---
+
+## 📱 Usage
+
+### First Run
+1. Open app
+2. Enter your target host (e.g., `tunnel.example.com`)
+3. Click "Get Started"
+
+### Test Single Subdomain
+1. Tap "Test Subdomain"
+2. Enter subdomain to test
+3. View results instantly
+
+### Batch Scan via crt.sh
+1. Tap "Batch Scan"
+2. Enter domain (e.g., `cloudflare.com`)
+3. App fetches subdomains from crt.sh
+4. Tests all subdomains automatically
+5. View working bugs in History
+
+### View History
+- Tap "History" to see previous scan results
+- Shows working bugs with IP addresses
+- Indicates Cloudflare status
+
+---
+
+## 🎯 What It Does
+
+InjectTools scans subdomains to find "bug inject" targets that work with your tunnel/proxy host:
+
+1. **Resolve DNS** - Get IP address of subdomain
+2. **Test Connection** - Check if subdomain is reachable
+3. **Detect Cloudflare** - Identify CF-protected domains
+4. **Report Results** - Show working bugs with details
+
+---
+
+## 🔧 Technical Details
+
+### Built With
+- **Kotlin** - Primary language
+- **Jetpack Compose** - Modern UI toolkit
+- **Material You** - Design system
+- **Retrofit** - HTTP client
+- **Coroutines** - Async operations
+
+### Architecture
+- MVVM pattern
+- Single Activity app
+- Compose Navigation
+
+### Permissions
+- `INTERNET` - For network operations
+- `ACCESS_NETWORK_STATE` - Network status
+
+---
+
+## 📊 Project Structure
+
+```
+InjectTools/
+├── app/
+│   ├── src/main/
+│   │   ├── java/com/hoshiyomix/injecttools/
+│   │   │   ├── MainActivity.kt    # UI & Navigation
+│   │   │   ├── Scanner.kt         # Scan Engine
+│   │   │   ├── NetworkUtils.kt    # Network utilities
+│   │   │   └── Crtsh.kt           # crt.sh API
+│   │   ├── res/                   # Resources
+│   │   └── AndroidManifest.xml
+│   └── build.gradle               # Build config
+├── gradle/                        # Gradle wrapper
+├── build.gradle.kts               # Root config
+└── settings.gradle.kts            # Settings
+```
+
+---
+
+## 🔄 Build from Source
+
+### Requirements
+- Android Studio Hedgehog or newer
+- JDK 17
+- Android SDK 34
+
+### Steps
+```bash
+# Clone repository
+git clone https://github.com/hoshiyomiX/InjectTools.git
+cd InjectTools
+
+# Open in Android Studio
+# OR build via command line:
+./gradlew assembleRelease
+
+# APK location:
+# app/build/outputs/apk/release/
+```
+
+---
+
+## 📝 Changelog
+
+### v1.1.0 (Current)
+- ✨ Material You redesign
+- ✨ Smooth animations with custom easing
+- ✨ New app logo
+- 🐛 Bug fixes and performance improvements
+
+### v1.0.0
+- Initial Android release
+- Single subdomain test
+- crt.sh batch scan
+- Scan history
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Submit a Pull Request.
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+## 👤 Credits
+
+**Created by:** [@hoshiyomi_id](https://t.me/hoshiyomi_id)
+
+**Powered by:**
+- [Kotlin](https://kotlinlang.org/)
+- [Jetpack Compose](https://developer.android.com/jetpack/compose)
+- [Material Design](https://m3.material.io/)
+- [crt.sh](https://crt.sh) - Certificate transparency logs
+
+---
+
+## ⚠️ Disclaimer
+
+For **educational purposes** and **authorized testing only**.
+
+---
+
+⭐ **Star** this repo if it helps you!
+
+🐛 Report bugs: [Issues](https://github.com/hoshiyomiX/InjectTools/issues)

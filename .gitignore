@@ -1,51 +1,79 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ==========================================
+# Gradle Build System
+# ==========================================
+.gradle/
+build/
+app/build/
+*/build/
+*.apk
+*.aab
+*.ap_
+*.dex
 
-# dependencies
-node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
+# ==========================================
+# IDE & Editor
+# ==========================================
+.idea/
+*.iml
+*.ipr
+*.iws
 .DS_Store
-*.pem
+*.swp
+*~
+.project
+.classpath
+.settings/
+.vscode/
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+# ==========================================
+# Local & Sensitive Config
+# ==========================================
+local.properties
+secrets.properties
+*.keystore
+*.jks
+keystore.properties
+api_keys.properties
 
-# env files (can opt-in for committing if needed)
-.env*
+# ==========================================
+# Logs & Build Artifacts
+# ==========================================
+*.log
+logs/
+crashlytics/
+fabric/
 
-# vercel
-.vercel
+# ==========================================
+# Native Build
+# ==========================================
+.externalNativeBuild/
+.cxx/
+captures/
+*.hprof
+obj/
+libs/
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-local-*
-.claude
-.z-ai-config
-dev.log
-test
-prompt
+# ==========================================
+# Kotlin/Java
+# ==========================================
+*.class
+*.jar
+*.war
+*.ear
 
-server.log
-# Skills directory
-/skills/
+# ==========================================
+# Testing
+# ==========================================
+.coverage
+.nyc_output/
+test-results/
+test-reports/
+
+# ==========================================
+# Misc
+# ==========================================
+.env
+*.tmp
+*.temp
+*.bak
+*.orig

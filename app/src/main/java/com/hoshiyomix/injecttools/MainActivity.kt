@@ -230,7 +230,7 @@ fun MainApp() {
         ModernAlertDialog(
             icon = Icons.Default.Warning,
             iconTint = MaterialTheme.colorScheme.error,
-            title = "Peringatan Koneksi",
+            title = "Peringatan",
             message = networkWarningMessage,
             confirmText = "Oke",
             onConfirm = {
@@ -254,7 +254,7 @@ fun MainApp() {
                             text = when (currentScreen) {
                                 Screen.SINGLE_TEST -> "Test Bug"
                                 Screen.CRTSH_TEST -> "Scan Massal"
-                                Screen.RESULTS -> "Riwayat"
+                                Screen.RESULTS -> "History"
                                 else -> ""
                             },
                             fontWeight = FontWeight.SemiBold
@@ -279,23 +279,14 @@ fun MainApp() {
                     onUpdateHost = { saveTargetHost(it) },
                     onNavigate = { s ->
                         if ((s == Screen.SINGLE_TEST || s == Screen.CRTSH_TEST) && targetHost.isBlank()) {
-                            Toast.makeText(context, "Set host dulu bos!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Set host dulu bray!", Toast.LENGTH_SHORT).show()
                         } else {
                             navigateTo(s)
                         }
                     }
                 )
                 Screen.SINGLE_TEST -> ManualScanScreen(targetHost, onResult = { result ->
-                    // Single test: just save as a quick session
-                    if (result.isWorking) {
-                        val session = ScanSession(
-                            id = "single_${System.currentTimeMillis()}",
-                            domain = result.subdomain,
-                            timestamp = System.currentTimeMillis(),
-                            results = listOf(result)
-                        )
-                        scanSessions = HistoryStorage.addSession(context, session)
-                    }
+                    // Single test: tidak perlu simpan ke history, cukup tampilin hasil
                 }, onShowNetworkWarning = { message ->
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
@@ -361,7 +352,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    "Selamat Datang di InjectTools",
+                    "Welcome to InjectTools",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
@@ -370,7 +361,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Set host target inject dulu baru mulai",
+                    "Set host target inject dulu baru mulai scanning",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -381,7 +372,7 @@ fun FirstRunDialog(onConfirm: (String) -> Unit) {
                 OutlinedTextField(
                     value = hostInput,
                     onValueChange = { hostInput = it },
-                    label = { Text("Host Target Inject") },
+                    label = { Text("Host Target") },
                     placeholder = { Text("sg.server.web.id") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -440,7 +431,7 @@ fun MenuScreen(
     val tiles = listOf(
         MenuTile(1, "Test Bug", "Test bug satu-satu", Icons.Outlined.TravelExplore, Pair(Color(0xFF6750A4), Color(0xFF9A82DB)), Screen.SINGLE_TEST),
         MenuTile(2, "Scan Massal", "Cari bug dari DNS records", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
-        MenuTile(3, "Riwayat", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
+        MenuTile(3, "History", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
     )
 
     var showHostDialog by remember { mutableStateOf(false) }
@@ -487,7 +478,7 @@ fun MenuScreen(
                     )
 
                     Text(
-                        text = "v1.2.7",
+                        text = "v1.0",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -531,7 +522,7 @@ fun MenuScreen(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Host Target",
+                                    text = "Host",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -567,7 +558,7 @@ fun MenuScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Fitur",
+                text = "Menu",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -647,7 +638,7 @@ fun HostEditDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    "Set Host Target",
+                    "Set Host",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -655,7 +646,7 @@ fun HostEditDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Masukin host buat target inject",
+                    "Masukin host buat target, misal: indosat.com",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -666,7 +657,7 @@ fun HostEditDialog(
                 OutlinedTextField(
                     value = currentHost,
                     onValueChange = onHostChange,
-                    label = { Text("Host Domain") },
+                    label = { Text("Domain") },
                     placeholder = { Text("sg.server.web.id") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -822,13 +813,13 @@ fun ResultHistoryScreen(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "Belum ada hasil scan",
+                    "Belum ada hasil",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Hasil scan nanti muncul di sini",
+                    "Hasil scan muncul di sini",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -871,13 +862,13 @@ fun ResultHistoryScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
-                                "Riwayat Scan",
+                                "History Scan",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "${sessions.size} sesi • ${sessions.sumOf { it.workingCount }} bug work",
+                                "${sessions.size} sesi • ${sessions.sumOf { it.workingCount }} bug konek",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -975,7 +966,7 @@ fun SessionCard(
                         MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Text(
-                        "${session.workingCount} work",
+                        "${session.workingCount} konek",
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
@@ -1029,7 +1020,7 @@ fun SessionCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Hapus Sesi Ini")
+                    Text("Hapus")
                 }
             }
         }
@@ -1039,8 +1030,8 @@ fun SessionCard(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Hapus Sesi?") },
-            text = { Text("Hasil scan untuk ${session.domain} akan dihapus permanen.") },
+            title = { Text("Hapus?") },
+            text = { Text("Hasil scan ${session.domain} akan dihapus.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1125,10 +1116,10 @@ fun checkNetworkAndConfirm(
     val status = NetworkUtils.checkNetworkStatus(context)
     when (status) {
         NetworkUtils.NetworkStatus.NO_INTERNET_NO_VPN -> onProceed()
-        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("Ketemu internet biasa! Matiin WiFi/Data atau pake mode inject.")
-        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> showWarningDialog("VPN nyala nih! Matiin dulu VPN baru scan.")
-        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("VPN + Internet ke-detek! Matiin keduanya.")
-        NetworkUtils.NetworkStatus.DISCONNECTED -> showWarningDialog("Kagak ada koneksi. Sambungin WiFi/Data dulu.")
+        NetworkUtils.NetworkStatus.INTERNET_NO_VPN -> showWarningDialog("Ada internet! Matiin WiFi/Data atau pake mode inject.")
+        NetworkUtils.NetworkStatus.NO_INTERNET_VPN -> showWarningDialog("VPN nyala! Matiin dulu VPN nya.")
+        NetworkUtils.NetworkStatus.INTERNET_VPN -> showWarningDialog("VPN + Internet aktif! Matiin keduanya.")
+        NetworkUtils.NetworkStatus.DISCONNECTED -> showWarningDialog("Gak ada koneksi. Nyambungin WiFi/Data dulu.")
     }
 }
 
@@ -1158,7 +1149,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                 modifier = Modifier.padding(20.dp)
             ) {
                 Text(
-                    "Masukin Bug",
+                    "Input Bug",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1208,7 +1199,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Lagi scan...")
+                        Text("Scanning...")
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -1221,7 +1212,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
         if (recentResults.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                "Hasil",
+                "Hasil Test",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -1266,7 +1257,7 @@ fun CrtshScanScreen(
         isScanning = true
         progress = 0.1f // Start from 10% (after fetch phase)
         results = emptyList()
-        statusText = "Ketemu ${subdomains.size} bug. Lagi test..."
+        statusText = "Ketemu ${subdomains.size} bug. Testing..."
         
         scope.launch {
             val scanResults = mutableListOf<ScanResult>()
@@ -1283,7 +1274,7 @@ fun CrtshScanScreen(
             // Finalize session with all results
             onResults(scanResults.toList())
             
-            statusText = "Selesai! ${scanResults.count { it.isWorking }} bug work ketemu"
+            statusText = "Done! ${scanResults.count { it.isWorking }} bug konek"
             progress = 1f
             isScanning = false
             // Clear pending after successful test
@@ -1344,7 +1335,7 @@ fun CrtshScanScreen(
                         if (domain.isNotBlank()) {
                             // STEP 1: Check if we have internet for fetching
                             if (!NetworkUtils.hasInternetConnection(context)) {
-                                onShowNetworkWarning("Kagak ada internet. Sambungin WiFi/Data buat fetch bug.")
+                                onShowNetworkWarning("Gak ada internet. Sambungin WiFi/Data dulu.")
                                 return@Button
                             }
                             
@@ -1352,7 +1343,7 @@ fun CrtshScanScreen(
                             isFetching = true
                             progress = 0f
                             results = emptyList()
-                            statusText = "Nyambung ke HackerTarget..."
+                            statusText = "Connecting to HackerTarget..."
                             
                             scope.launch {
                                 val fetchResult = SubdomainFetcher.fetchSubdomains(
@@ -1389,7 +1380,7 @@ fun CrtshScanScreen(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ngambil...")
+                        Text("Fetching...")
                     } else if (isScanning) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
@@ -1401,7 +1392,7 @@ fun CrtshScanScreen(
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Mulai Scan Massal")
+                        Text("Start Scan")
                     }
                 }
             }
@@ -1460,7 +1451,7 @@ fun CrtshScanScreen(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Text(
-                                "Ganti ke mode inject, terus tap coba lagi",
+                                "Ganti ke mode inject, terus coba lagi",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                             )
@@ -1501,7 +1492,7 @@ fun CrtshScanScreen(
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Coba Lagi")
+                            Text("Retry")
                         }
                     }
                 }
@@ -1527,8 +1518,8 @@ fun CrtshScanScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    if (hasMore) "${displayResults.size} dari ${workingResults.size} work" 
-                    else "${workingResults.size} work",
+                    if (hasMore) "${displayResults.size} dari ${workingResults.size} konek" 
+                    else "${workingResults.size} konek",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1612,7 +1603,7 @@ fun TestConfirmationDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    "Mulai Test?",
+                    "Start Test?",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -1620,7 +1611,7 @@ fun TestConfirmationDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Ketemu $subdomainCount bug siap dites.\n\nPastikan udah di mode inject:\n• Matiin WiFi/Data ATAU\n• Pake config inject",
+                    "Ketemu $subdomainCount bug siap dites.\n\nPastikan mode inject aktif:\n• Matiin WiFi/Data ATAU\n• Pake config inject",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -1648,7 +1639,7 @@ fun TestConfirmationDialog(
                             .height(52.dp),
                         shape = ShapeLarge
                     ) {
-                        Text("Mulai Test")
+                        Text("Start")
                     }
                 }
             }

@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -657,7 +658,7 @@ fun HostEditDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Masukin host buat target, misal: indosat.com",
+                    "Masukin host server milik provider VPN",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -668,7 +669,7 @@ fun HostEditDialog(
                 OutlinedTextField(
                     value = currentHost,
                     onValueChange = onHostChange,
-                    label = { Text("Domain") },
+                    label = { Text("Contoh: sg.domain.web.id", fontStyle = FontStyle.Italic) },
                     placeholder = { Text("sg.server.web.id") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1146,7 +1147,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
                 OutlinedTextField(
                     value = subdomain,
                     onValueChange = { subdomain = it },
-                    placeholder = { Text("bug.example.com") },
+                    placeholder = { Text("Contoh: api.ovo.id", fontStyle = FontStyle.Italic) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = ShapeMedium,
@@ -1302,7 +1303,7 @@ fun CrtshScanScreen(
                 OutlinedTextField(
                     value = domain,
                     onValueChange = { domain = it },
-                    placeholder = { Text("cloudflare.com") },
+                    placeholder = { Text("Contoh: byu.id", fontStyle = FontStyle.Italic) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = ShapeMedium,

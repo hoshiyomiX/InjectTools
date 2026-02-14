@@ -237,7 +237,7 @@ fun MainApp() {
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
                 })
-                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) }, onNavigateToHistory = { currentScreen = Screen.RESULTS }, onShowNetworkWarning = { message ->
+                Screen.CRTSH_TEST -> CrtshScanScreen(targetHost, onResults = { addResults(it) }, onShowNetworkWarning = { message ->
                     networkWarningMessage = message
                     showNetworkWarningDialog = true
                 })
@@ -372,7 +372,7 @@ fun MenuScreen(
 ) {
     val tiles = listOf(
         MenuTile(1, "Test Bug", "Test bug satu-satu", Icons.Outlined.TravelExplore, Pair(Color(0xFF6750A4), Color(0xFF9A82DB)), Screen.SINGLE_TEST),
-        MenuTile(2, "Scan Massal", "Cari bug dari CT logs & DNS", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
+        MenuTile(2, "Scan Massal", "Cari bug dari DNS records", Icons.Outlined.Hub, Pair(Color(0xFFD81B60), Color(0xFFFF6F00)), Screen.CRTSH_TEST),
         MenuTile(3, "Riwayat", "Liat hasil scan", Icons.Outlined.History, Pair(Color(0xFF00695C), Color(0xFF4DB6AC)), Screen.RESULTS)
     )
 
@@ -942,7 +942,7 @@ fun ManualScanScreen(targetHost: String, onResult: (ScanResult) -> Unit, onShowN
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onNavigateToHistory: () -> Unit, onShowNetworkWarning: (String) -> Unit) {
+fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, onShowNetworkWarning: (String) -> Unit) {
     var domain by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var isFetching by remember { mutableStateOf(false) }
@@ -951,10 +951,6 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
     var results by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
     var pendingSubdomains by remember { mutableStateOf<List<String>>(emptyList()) }
     var showTestConfirmDialog by remember { mutableStateOf(false) }
-    
-    // Source selection state
-    var selectedSource by remember { mutableStateOf(SubdomainFetcher.Source.CRT_SH) }
-    var showSourceDropdown by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1010,7 +1006,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Ambil bug dari CT logs & DNS records",
+                    "Ambil bug dari HackerTarget DNS",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1034,59 +1030,6 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                         }
                     }
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Source Selection Dropdown
-                ExposedDropdownMenuBox(
-                    expanded = showSourceDropdown,
-                    onExpandedChange = { showSourceDropdown = it },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = "${selectedSource.displayName} - ${selectedSource.description}",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Sumber Data") },
-                        leadingIcon = {
-                            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
-                        },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showSourceDropdown)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        shape = ShapeMedium
-                    )
-                    
-                    ExposedDropdownMenu(
-                        expanded = showSourceDropdown,
-                        onDismissRequest = { showSourceDropdown = false }
-                    ) {
-                        SubdomainFetcher.Source.entries.forEach { source ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            source.displayName,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            source.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    selectedSource = source
-                                    showSourceDropdown = false
-                                }
-                            )
-                        }
-                    }
-                }
-                
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
@@ -1097,16 +1040,15 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                                 return@Button
                             }
                             
-                            // STEP 2: Fetch from selected source (requires internet)
+                            // STEP 2: Fetch subdomains from HackerTarget
                             isFetching = true
                             progress = 0f
                             results = emptyList()
-                            statusText = "Nyambung ke ${selectedSource.displayName}..."
+                            statusText = "Nyambung ke HackerTarget..."
                             
                             scope.launch {
-                                val fetchResult = SubdomainFetcher.fetchFromSource(
+                                val fetchResult = SubdomainFetcher.fetchSubdomains(
                                     domain = domain,
-                                    source = selectedSource,
                                     onProgress = { fetchProgress ->
                                         statusText = fetchProgress.phase
                                         progress = fetchProgress.progress * 0.1f
@@ -1121,7 +1063,7 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                                 } else {
                                     // STEP 3: Store subdomains and show confirmation dialog
                                     pendingSubdomains = fetchResult.subdomains
-                                    statusText = "Ketemu ${fetchResult.subdomains.size} bug dari ${fetchResult.source}"
+                                    statusText = "Ketemu ${fetchResult.subdomains.size} bug"
                                     progress = 0.1f
                                     showTestConfirmDialog = true
                                 }
@@ -1262,7 +1204,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
         if (results.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
             val workingResults = results.filter { it.isWorking }
-            val maxDisplay = 5
+            val maxDisplay = 20
+            val displayResults = workingResults.take(maxDisplay)
             val hasMore = workingResults.size > maxDisplay
             
             Row(
@@ -1276,7 +1219,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "${workingResults.size} work",
+                    if (hasMore) "${displayResults.size} dari ${workingResults.size} work" 
+                    else "${workingResults.size} work",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1287,24 +1231,8 @@ fun CrtshScanScreen(targetHost: String, onResults: (List<ScanResult>) -> Unit, o
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f, fill = false)
             ) {
-                items(workingResults.take(maxDisplay)) { res ->
+                items(displayResults) { res ->
                     ResultItem(res, onTap = {})
-                }
-                
-                // Show "View All in History" button if more than maxDisplay
-                if (hasMore) {
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onNavigateToHistory,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = ShapeMedium
-                        ) {
-                            Icon(Icons.Default.History, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Liat Semua ${workingResults.size} Hasil di Riwayat")
-                        }
-                    }
                 }
             }
         }

@@ -55,12 +55,10 @@ jobs:
       - name: Download Gradle Wrapper (if missing)
         run: |
           if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "Downloading gradle-wrapper.jar..."
-            GRADLE_VERSION=$(grep "distributionUrl" gradle/wrapper/gradle-wrapper.properties | sed 's/.*gradle-\(.*\)-bin\.zip/\1/')
-            curl -sL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip
-            unzip -q /tmp/gradle.zip -d /tmp/
-            cp /tmp/gradle-${GRADLE_VERSION}/lib/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar
+            echo "Downloading gradle-wrapper.jar from Gradle GitHub..."
+            curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
             echo "gradle-wrapper.jar downloaded successfully"
+            ls -la gradle/wrapper/
           else
             echo "gradle-wrapper.jar already exists"
           fi

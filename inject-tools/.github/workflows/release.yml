@@ -1,0 +1,173 @@
+# ==========================================
+# Release Automation Workflow
+# ==========================================
+# Automatically creates GitHub releases when version tags are pushed
+# Generates signed APK and attaches to release
+
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.2.7)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true"
+
+jobs:
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: on-failure
+          cache-read-only: false
+
+      - name: Grant execute permission
+        run: chmod +x ./gradlew
+
+      - name: Extract version info
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_name=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Create release keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
+          else
+            echo "::warning::Using debug keystore for release build"
+            keytool -genkeypair -v \
+              -keystore app/release.keystore \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias androiddebugkey \
+              -dname "CN=InjectTools Release,O=Hoshiyomi,C=ID" \
+              -storepass android -keypass android
+          fi
+
+      - name: Build Release APK
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --build-cache \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD || 'android' }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS || 'androiddebugkey' }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD || 'android' }}
+
+      - name: Prepare APK for release
+        id: apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          APK_SIZE=$(stat -c%s "$APK_PATH" | numfmt --to=iec-i --suffix=B)
+          
+          # Create release filename
+          VERSION="${{ steps.version.outputs.version_name }}"
+          RELEASE_NAME="InjectTools-${VERSION}.apk"
+          
+          # Copy to release name
+          cp "$APK_PATH" "$RELEASE_NAME"
+          
+          echo "apk_path=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          
+          echo "### 📦 Release Build Output" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **APK**: \`$RELEASE_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size**: $APK_SIZE" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog from CHANGELOG.md
+          VERSION="${{ steps.version.outputs.version_name }}"
+          
+          # Get the section for this version
+          CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | head -n -1 | tail -n +2)
+          
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="Release version $VERSION"
+          fi
+          
+          # Save to file for multiline string handling
+          echo "$CHANGELOG" > /tmp/changelog.txt
+          echo "changelog_file=/tmp/changelog.txt" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: InjectTools ${{ steps.version.outputs.version_name }}
+          body_path: /tmp/changelog.txt
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-rc') || contains(steps.version.outputs.version, '-beta') || contains(steps.version.outputs.version, '-alpha') }}
+          files: |
+            ${{ steps.apk.outputs.apk_path }}
+          generate_release_notes: true
+
+      - name: Cleanup keystore
+        if: always()
+        run: rm -f app/release.keystore
+
+  # ==========================================
+  # Post-release notification
+  # ==========================================
+  notify:
+    name: Post-release Notification
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: success()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get release info
+        id: info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "release_url=https://github.com/${{ github.repository }}/releases/tag/$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release summary
+        run: |
+          echo "### 🎉 Release Published Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.info.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release URL**: [View Release](${{ steps.info.outputs.release_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Release is now available for download." >> $GITHUB_STEP_SUMMARY

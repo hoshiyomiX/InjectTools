@@ -1,0 +1,3 @@
+# This directory stores build logs from CI/CD
+# Logs are auto-committed after each build
+# Last 10 logs per architecture are kept

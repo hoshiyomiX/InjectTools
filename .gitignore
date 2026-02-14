@@ -1,36 +1,79 @@
-# === Gradle ===
+# ==========================================
+# Gradle Build System
+# ==========================================
 .gradle/
 build/
 app/build/
+*/build/
 *.apk
 *.aab
+*.ap_
+*.dex
 
-# === IDE ===
+# ==========================================
+# IDE & Editor
+# ==========================================
 .idea/
 *.iml
 *.ipr
 *.iws
 .DS_Store
+*.swp
+*~
+.project
+.classpath
+.settings/
+.vscode/
 
-# === Local Config ===
+# ==========================================
+# Local & Sensitive Config
+# ==========================================
 local.properties
 secrets.properties
 *.keystore
 *.jks
+keystore.properties
+api_keys.properties
 
-# === Logs ===
+# ==========================================
+# Logs & Build Artifacts
+# ==========================================
 *.log
+logs/
+crashlytics/
+fabric/
 
-# === Native ===
+# ==========================================
+# Native Build
+# ==========================================
 .externalNativeBuild/
 .cxx/
 captures/
 *.hprof
+obj/
+libs/
 
-# === Kotlin ===
+# ==========================================
+# Kotlin/Java
+# ==========================================
 *.class
+*.jar
+*.war
+*.ear
 
-# === Misc ===
-*.swp
-*~
+# ==========================================
+# Testing
+# ==========================================
+.coverage
+.nyc_output/
+test-results/
+test-reports/
+
+# ==========================================
+# Misc
+# ==========================================
 .env
+*.tmp
+*.temp
+*.bak
+*.orig

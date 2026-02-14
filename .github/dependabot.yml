@@ -1,0 +1,68 @@
+# ==========================================
+# Dependabot Configuration
+# ==========================================
+# Automatically creates PRs for dependency updates
+# - Weekly checks for Gradle dependencies
+# - Monthly checks for GitHub Actions
+
+version: 2
+
+updates:
+  # Gradle dependencies
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 5
+    target-branch: "dev"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "gradle"
+    reviewers:
+      - "hoshiyomiX"
+    groups:
+      androidx-compose:
+        patterns:
+          - "androidx.compose.*"
+          - "androidx.activity:activity-compose"
+        update-types:
+          - "minor"
+          - "patch"
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin:*"
+          - "org.jetbrains.kotlinx:*"
+        update-types:
+          - "minor"
+          - "patch"
+      retrofit-okhttp:
+        patterns:
+          - "com.squareup.retrofit2:*"
+          - "com.squareup.okhttp3:*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      time: "06:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 3
+    target-branch: "dev"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    reviewers:
+      - "hoshiyomiX"
